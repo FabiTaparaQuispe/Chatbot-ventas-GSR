@@ -1,0 +1,107 @@
+{
+    "columnas": [
+        "id",
+        "FechaCont",
+        "CodCoorporativo",
+        "NombreCoorporativo",
+        "CodCliente",
+        "NombreCliente",
+        "TDoc",
+        "Serie",
+        "Numero",
+        "NumeroDoc",
+        "CodItem",
+        "Glosa",
+        "Cantidad",
+        "Peso",
+        "Valor",
+        "CodDescuento",
+        "DescriDescuento",
+        "Placa",
+        "CodZonaDistribucion",
+        "DescriZonaDistribucion",
+        "CodZonaPrecio",
+        "DescriZonaPrecio",
+        "CodMotivoDevolucion",
+        "DescriDevolucion",
+        "ZonaComercial",
+        "RutaComercial",
+        "nom_db",
+        "rutaFile",
+        "usuarioRegistro",
+        "fechaHoraRegistro",
+        "usuarioTransferencia",
+        "fechaHoraTransferencia",
+        "usuarioModificacion",
+        "fechaHoraModificacion"
+    ],
+    "tarea1_AQP_marzo_FechaCont_DescriZonaPrecio": {
+        "lineas": "37932",
+        "sum_peso": "2761350.8699999973",
+        "sum_valor": "21067945.7302651",
+        "sum_cant": "1002047"
+    },
+    "pareto_nc_por_zona_TDoc07": [
+        {
+            "zona": "AQPMERCADO",
+            "peso_nc_abs": 94507.37999999967,
+            "pct_peso": 87.85,
+            "pct_acum": 87.85
+        },
+        {
+            "zona": "CAMANA",
+            "peso_nc_abs": 3590.4999999999973,
+            "pct_peso": 3.34,
+            "pct_acum": 91.19
+        },
+        {
+            "zona": "PEDREGAL",
+            "peso_nc_abs": 3405.2000000000003,
+            "pct_peso": 3.17,
+            "pct_acum": 94.36
+        },
+        {
+            "zona": "ILO",
+            "peso_nc_abs": 1814.1999999999998,
+            "pct_peso": 1.69,
+            "pct_acum": 96.04
+        },
+        {
+            "zona": "TACNA",
+            "peso_nc_abs": 1583.1999999999996,
+            "pct_peso": 1.47,
+            "pct_acum": 97.52
+        },
+        {
+            "zona": "MOQUEGUA",
+            "peso_nc_abs": 1293.5000000000011,
+            "pct_peso": 1.2,
+            "pct_acum": 98.72
+        },
+        {
+            "zona": "LAJOYA",
+            "peso_nc_abs": 1008.0000000000001,
+            "pct_peso": 0.94,
+            "pct_acum": 99.66
+        },
+        {
+            "zona": "MOLLENDO",
+            "peso_nc_abs": 356.09999999999997,
+            "pct_peso": 0.33,
+            "pct_acum": 99.99
+        },
+        {
+            "zona": "CUZCO",
+            "peso_nc_abs": 15,
+            "pct_peso": 0.01,
+            "pct_acum": 100
+        }
+    ],
+    "tabla_zona_ventas_vs_nc_AQP": [
+        {
+            "zona": "AQPMERCADO",
+            "ventas_peso": "2855858.2499999925",
+            "nc_peso": "-94507.37999999967"
+        }
+    ]
+}

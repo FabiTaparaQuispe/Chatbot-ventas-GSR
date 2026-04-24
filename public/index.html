@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chat ventas avícolas</title>
+  <link rel="stylesheet" href="/public/styles.css" />
+</head>
+<body>
+  <main class="wrap">
+    <header class="head">
+      <h1>Ventas — asistente</h1>
+      <p class="sub">Consultas agregadas solo sobre <code>ventasgeneral</code> (Groq). Las herramientas usan fechas <code>YYYY-MM-DD</code>.</p>
+    </header>
+    <details class="shortcuts">
+      <summary>Atajos y palabras clave</summary>
+      <ul>
+        <li><strong>Fechas</strong>: escribí dos fechas ISO (2026-03-01) o un mes (“marzo 2026”); sin rango claro el asistente debe pedirte fechas antes de consultar.</li>
+        <li><strong>Zona / mercado</strong>: no hay ciudad; usá prefijos sobre <code>DescriZonaPrecio</code> (AQP, TACNA, MOQUEGUA, LAJOYA…).</li>
+        <li><strong>NC</strong> o <strong>TDoc 07</strong>: nota de crédito (rankings NC solo si lo pedís así).</li>
+        <li><strong>Cliente / documento</strong>: nombre en texto o número de documento para búsquedas puntuales.</li>
+      </ul>
+    </details>
+    <div class="chips-wrap">
+      <span class="chips-label">Preguntas frecuentes (rellenan el mensaje con el mes anterior completo; revisá fechas y pulsá Enviar)</span>
+      <div id="chips" class="chips" aria-label="Preguntas frecuentes"></div>
+    </div>
+    <div id="log" class="log" aria-live="polite"></div>
+    <form id="form" class="form">
+      <label class="sr-only" for="msg">Mensaje</label>
+      <textarea id="msg" rows="2" placeholder="Ej: Top 10 clientes por ventas en enero 2026 usando ventasgeneral" required></textarea>
+      <button type="submit" id="send">Enviar</button>
+    </form>
+  </main>
+  <script src="/public/app.js" type="module"></script>
+</body>
+</html>

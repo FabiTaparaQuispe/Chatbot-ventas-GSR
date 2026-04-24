@@ -1,0 +1,76 @@
+:root {
+    --bg: #0f1419;
+    --surface: #1a2332;
+    --border: #2d3a4d;
+    --text: #e7edf4;
+    --muted: #8b9cb3;
+    --accent: #3b82f6;
+}
+* { box-sizing: border-box; }
+body {
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    line-height: 1.5;
+}
+.wrap { max-width: 1100px; margin: 0 auto; padding: 1.25rem; }
+.top {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+}
+h1 { font-size: 1.2rem; margin: 0; }
+nav a { color: var(--accent); text-decoration: none; font-size: 0.9rem; }
+nav a:hover { text-decoration: underline; }
+.card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+.card h2 { font-size: 1rem; margin: 0 0 0.5rem; }
+.grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.stats { margin: 0; padding-left: 1.1rem; }
+form.card label { margin-right: 1rem; display: inline-block; margin-bottom: 0.5rem; }
+form.card input[type="date"], form.card input[type="text"], form.card select {
+    margin-left: 0.35rem;
+    padding: 0.35rem 0.5rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+}
+button, .btn {
+    padding: 0.45rem 0.9rem;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    font: inherit;
+}
+button:hover { filter: brightness(1.08); }
+.error { color: #f87171; }
+table.data {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+table.data th, table.data td {
+    border: 1px solid var(--border);
+    padding: 0.4rem 0.5rem;
+    text-align: left;
+    vertical-align: top;
+}
+table.data th { background: #243044; }
+.pager { margin-top: 0.75rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.muted { color: var(--muted); font-size: 0.85rem; }
+.chart-wrap { position: relative; height: 320px; margin-top: 1rem; }
