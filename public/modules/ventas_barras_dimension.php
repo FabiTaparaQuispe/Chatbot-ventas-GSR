@@ -56,7 +56,7 @@ $pageTitle = 'Ventas por ' . $dimLabel;
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js" crossorigin="anonymous"></script>
     <style>
         body { font-family: system-ui, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
         header { padding: 1rem 1.25rem; background: linear-gradient(135deg, #1d4ed8, #6d28d9); }
@@ -123,20 +123,57 @@ $pageTitle = 'Ventas por ' . $dimLabel;
             if (done || !window.Chart) return;
             var ctx = document.getElementById('ch');
             if (!ctx || !payload.labels) return;
+            // Estilo y animación alineados al proyecto de referencia (app-charts.js)
+            var LAB = [
+                { f: 0.8, b: 1, rgb: [54, 162, 235] },
+                { f: 0.8, b: 1, rgb: [75, 192, 192] },
+                { f: 0.8, b: 1, rgb: [153, 102, 255] },
+                { f: 0.8, b: 1, rgb: [255, 99, 132] },
+                { f: 0.8, b: 1, rgb: [255, 159, 64] },
+                { f: 0.8, b: 1, rgb: [255, 205, 86] },
+                { f: 0.8, b: 1, rgb: [201, 203, 207] },
+            ];
+            function rgba(c, a) { return 'rgba(' + c.rgb[0] + ', ' + c.rgb[1] + ', ' + c.rgb[2] + ', ' + a + ')'; }
+            var bg = payload.labels.map(function (_, i) { return rgba(LAB[i % LAB.length], 0.8); });
+            var br = payload.labels.map(function (_, i) { return rgba(LAB[i % LAB.length], 1); });
+
+            Chart.defaults.color = '#94a3b8';
+            Chart.defaults.borderColor = 'rgba(148,163,184,0.15)';
+
             new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: payload.labels,
-                    datasets: [{ label: payload.titulo || 'Valor', data: payload.valores, backgroundColor: 'rgba(59,130,246,0.7)' }],
+                    datasets: [{
+                        label: payload.titulo || 'Valor',
+                        data: payload.valores,
+                        backgroundColor: bg,
+                        borderColor: br,
+                        borderWidth: 1,
+                        maxBarThickness: 48
+                    }],
                 },
                 options: {
                     indexAxis: 'y',
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { labels: { color: '#cbd5e1' } } },
+                    animation: {
+                        duration: 1500,
+                        easing: 'easeOutCubic',
+                        delay: function (context) {
+                            if (context.type === 'data' && context.mode === 'default') {
+                                return (context.dataIndex || 0) * 125;
+                            }
+                            return 0;
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.92)', padding: 12, cornerRadius: 8 }
+                    },
                     scales: {
-                        x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' } },
-                        y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                        x: { beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                        y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } },
                     },
                 },
             });

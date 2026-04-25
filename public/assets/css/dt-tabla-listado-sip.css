@@ -199,3 +199,45 @@ html[data-theme="dark"] .dataTables_wrapper .dataTables_paginate .paginate_butto
     color: var(--text, #e4e4e7) !important;
 }
 
+/* Ventas: toggle Lista/Iconos con el mismo azul del header de tabla */
+#tablaVentasWrapper .view-toggle-group {
+    margin-bottom: 0;
+    align-items: center;
+}
+#tablaVentasWrapper .view-toggle-btn {
+    min-height: 2.25rem;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border-radius: 0.625rem;
+    border: 1px solid #d1d5db;
+    background: #fff;
+    color: #111827;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+#tablaVentasWrapper .view-toggle-btn i {
+    font-size: 1.125rem;
+    line-height: 1;
+    margin-right: 0.4rem;
+}
+#tablaVentasWrapper .view-toggle-btn:hover:not(.active) {
+    background: #f3f4f6;
+    color: #111827;
+}
+#tablaVentasWrapper .view-toggle-btn.active {
+    background: #2563eb !important;
+    color: #fff !important;
+    border-color: #2563eb !important;
+    background-image: none !important;
+}
+#tablaVentasWrapper .view-toggle-btn.active:hover {
+    background: #1d4ed8 !important;
+    border-color: #1d4ed8 !important;
+    color: #fff !important;
+}
+

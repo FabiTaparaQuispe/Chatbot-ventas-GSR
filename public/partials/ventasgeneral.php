@@ -9,6 +9,7 @@ declare(strict_types=1);
 <div class="card-filtros-demo">
     <button type="button" class="card-filtros-demo__head" id="btnToggleFiltrosDemo" aria-expanded="false" aria-controls="contenidoFiltrosDemo">
         <div class="card-filtros-demo__head-left">
+            <span class="card-filtros-demo__emoji" aria-hidden="true">🔎</span>
             <span class="card-filtros-demo__title">Filtros de búsqueda</span>
         </div>
         <svg id="iconoFiltrosDemo" class="card-filtros-demo__chev" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">

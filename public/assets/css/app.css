@@ -122,8 +122,14 @@ a:hover {
 
 @media (min-width: 901px) {
     .app-sidebar-col {
-        padding: 0.65rem 0 0.65rem 0.65rem;
+        padding: 0.65rem 0 0.65rem 0;
         box-sizing: border-box;
+    }
+
+    /* Al expandir (hover/pin), recupera separación lateral del card */
+    .app-sidebar-col:hover,
+    .app-sidebar-col.app-sidebar-pin-open {
+        padding-left: 0.65rem;
     }
 
     .app-sidebar-card--ix2 {
@@ -455,6 +461,10 @@ body.app-sidebar-open .app-sidebar-backdrop {
     align-items: center;
     gap: 0.5rem;
     min-width: 0;
+}
+.card-filtros-demo__emoji {
+    font-size: 1.15rem;
+    line-height: 1;
 }
 .card-filtros-demo__title {
     font-size: 1rem;
