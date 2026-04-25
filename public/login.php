@@ -56,13 +56,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="login-hero-shapes" aria-hidden="true"></div>
         <div class="login-hero-content">
             <div class="login-hero-card" aria-hidden="true">
-                <svg width="140" height="140" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Logo">
-                    <rect x="10" y="10" width="108" height="108" rx="18" fill="#0ea5e9" opacity="0.18"/>
-                    <path d="M64 20l34 14v26c0 25-15 44-34 48C45 104 30 85 30 60V34l34-14z" fill="#93c5fd"/>
-                    <path d="M64 33l23 10v17c0 17-9 30-23 34-14-4-23-17-23-34V43l23-10z" fill="#1d4ed8" opacity="0.95"/>
-                </svg>
+                <span style="font-size:86px; line-height:1;" role="img" aria-label="Chatbot">🤖</span>
             </div>
-            <h2 class="login-hero-title">SIP</h2>
+            <h2 class="login-hero-title">Chatbot</h2>
             <p class="login-hero-sub">Sistema Integrado Productivo</p>
             <p class="login-hero-co"><?= htmlspecialchars(APP_COMPANY, ENT_QUOTES, 'UTF-8') ?></p>
         </div>

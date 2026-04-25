@@ -11,8 +11,8 @@ $currentPage = $currentPage ?? 'ventas';
             <div class="app-sidebar-top">
                 <div class="app-sidebar-top-row">
                     <span class="app-sidebar-brand">
-                        <i class="fas fa-shield-alt app-brand-icon" aria-hidden="true"></i>
-                        <span class="app-brand-text">SIP</span>
+                        <span class="app-brand-icon" aria-hidden="true">🤖</span>
+                        <span class="app-brand-text">Chatbot</span>
                     </span>
                     <div class="app-sidebar-actions">
                         <div class="app-sidebar-theme-pin">
