@@ -13,6 +13,15 @@ final class ChatReplyEnricher
         $reply = trim($reply);
         $payload = self::lastToolPayload($groqMessages);
         if ($payload === null) {
+            // El LLM respondió sin llamar ninguna herramienta (probablemente desde el historial de
+            // conversación). Si además usó etiquetas genéricas "Cliente N", los datos son inventados:
+            // se reemplaza la respuesta con un aviso para que el usuario repita la consulta.
+            if (self::replyUsesGenericClienteLabels($reply)) {
+                $url = self::extractReportePhpUrlFromReply($reply);
+                $note = 'Los nombres de cliente no están disponibles porque el asistente respondió desde el historial sin consultar la base de datos. '
+                    . 'Hacé la misma pregunta de nuevo para obtener los datos actualizados.';
+                return $url !== '' ? trim($note . "\n\n" . $url) : $note;
+            }
             return $reply;
         }
 

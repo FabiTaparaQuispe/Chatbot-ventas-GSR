@@ -329,6 +329,10 @@ if ($baseDir !== '' && str_ends_with($baseDir, '/modules')) {
             .replace(/"/g, '&quot;');
     }
 
+    function hasGenericClienteLabels(text) {
+        return /^\d+\.\s*Cliente\s+\d+/mi.test(String(text));
+    }
+
     function stripTrailingUrlJunk(url) {
         return String(url).replace(/[),.;'\]}>*`]+$/g, '');
     }
@@ -487,6 +491,15 @@ if ($baseDir !== '' && str_ends_with($baseDir, '/modules')) {
             if (!raw) return;
             const arr = JSON.parse(raw);
             if (!Array.isArray(arr)) return;
+            // Si algún mensaje del asistente tiene etiquetas genéricas "Cliente N:" es historial
+            // contaminado: el LLM respondió sin llamar a la herramienta y los nombres son ficticios.
+            // Limpiarlo evita que el modelo siga repitiendo ese patrón en la próxima consulta.
+            const stale = arr.some(m => m && m.role === 'assistant' && hasGenericClienteLabels(m.content || ''));
+            if (stale) {
+                localStorage.removeItem(LS_HISTORY);
+                localStorage.removeItem(LS_DRAFT);
+                return;
+            }
             history.length = 0;
             log.innerHTML = '';
             for (const m of arr) {
