@@ -2,20 +2,24 @@
 
 declare(strict_types=1);
 
-$ventasChatApiUrl = '../api/chat.php';
+$ventasChatApiUrl = 'api/chat.php';
 
-$d = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? ''));
-$baseDir = rtrim($d, '/');
-// Si la portada se sirve desde /<proyecto>/index.php (sin /public/ en la URL), SCRIPT_NAME apunta al
-// directorio del proyecto: hay que enlazar a public/modules/ o los .php del chat rompen en el servidor.
-if ($baseDir !== '' && str_ends_with($baseDir, '/modules')) {
-    $ventasWebModulesBase = $baseDir . '/';
-} elseif ($baseDir !== '' && str_ends_with($baseDir, '/public')) {
-    $ventasWebModulesBase = $baseDir . '/modules/';
-} elseif ($baseDir !== '') {
-    $ventasWebModulesBase = $baseDir . '/public/modules/';
-} else {
-    $ventasWebModulesBase = '/public/modules/';
+$ventasWebModulesBase = null;
+if (function_exists('app_public_base')) {
+    $ventasWebModulesBase = app_public_base() . 'modules/';
+}
+if ($ventasWebModulesBase === null) {
+    $d = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? ''));
+    $baseDir = rtrim($d, '/');
+    if ($baseDir !== '' && str_ends_with($baseDir, '/modules')) {
+        $ventasWebModulesBase = $baseDir . '/';
+    } elseif ($baseDir !== '' && str_ends_with($baseDir, '/public')) {
+        $ventasWebModulesBase = $baseDir . '/modules/';
+    } elseif ($baseDir !== '') {
+        $ventasWebModulesBase = $baseDir . '/public/modules/';
+    } else {
+        $ventasWebModulesBase = '/public/modules/';
+    }
 }
 
 ?>
@@ -63,8 +67,8 @@ if ($baseDir !== '' && str_ends_with($baseDir, '/modules')) {
         bottom: 1.25rem;
         right: 1.25rem;
         z-index: 9999;
-        width: min(100vw - 1.5rem, 400px);
-        max-height: min(600px, calc(100vh - 1.5rem));
+        width: min(100vw - 1.5rem, 460px);
+        max-height: min(690px, calc(100vh - 1.5rem));
         display: flex;
         flex-direction: column;
         background: var(--ventas-chat-surface);
