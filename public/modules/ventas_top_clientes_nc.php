@@ -36,9 +36,27 @@ $pdfName = 'top_clientes_nc_' . $desde . '_' . $hasta . '.pdf';
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Top clientes — notas de crédito (TDoc 07)</title>
+    <script>
+    (function () {
+        function readCookieTheme() {
+            try {
+                var m = document.cookie.match(/(?:^|; )ix2-theme=([^;]*)/);
+                return m ? decodeURIComponent(m[1]).toLowerCase().trim() : '';
+            } catch (e) { return ''; }
+        }
+        var mode = readCookieTheme() || (function () { try { return localStorage.getItem('ix2-theme'); } catch (e) { return null; } })();
+        if (mode !== 'dark' && mode !== 'light') {
+            mode = (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+        }
+        var d = document.documentElement;
+        d.setAttribute('data-theme', mode);
+        d.style.colorScheme = mode === 'dark' ? 'dark' : 'light';
+    })();
+    </script>
+    <link rel="stylesheet" href="../assets/css/app.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
     <style>
-        body { font-family: system-ui, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+        body { font-family: system-ui, sans-serif; margin: 0; background: var(--bg, #0f172a); color: var(--text, #e2e8f0); }
         header { padding: 1rem 1.25rem; background: linear-gradient(135deg, #b45309, #7c3aed); }
         h1 { margin: 0; font-size: 1.1rem; }
         .meta { margin: 0.35rem 0 0; font-size: 0.85rem; opacity: 0.9; }
@@ -90,33 +108,127 @@ $pdfName = 'top_clientes_nc_' . $desde . '_' . $hasta . '.pdf';
     (function () {
         var payload = <?= $chartJson !== false ? $chartJson : '{}' ?>;
         var root = document.querySelector('[data-ventas-tabs]');
-        var done = false;
+        var chart = null;
+
+        var PALETTE = [
+            [251, 146, 60],
+            [59, 130, 246],
+            [168, 85, 247],
+            [34, 197, 94],
+            [236, 72, 153],
+            [20, 184, 166],
+            [234, 179, 8],
+            [100, 116, 139],
+        ];
+        function rgba(rgb, a) {
+            return 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + a + ')';
+        }
+        function isDark() {
+            return document.documentElement.getAttribute('data-theme') === 'dark';
+        }
+        function applyThemeDefaults() {
+            var dark = isDark();
+            Chart.defaults.color = dark ? '#a1a1aa' : '#64748b';
+            Chart.defaults.borderColor = dark ? '#3f3f46' : '#e5e7eb';
+        }
+        function colorsForBars(n) {
+            var bg = [];
+            var br = [];
+            for (var i = 0; i < n; i++) {
+                var c = PALETTE[i % PALETTE.length];
+                bg.push(rgba(c, 0.78));
+                br.push(rgba(c, 1));
+            }
+            return { bg: bg, br: br };
+        }
         function build() {
-            if (done || !window.Chart) return;
+            if (!window.Chart || !payload.labels) return;
             var ctx = document.getElementById('ch');
             if (!ctx || !payload.labels) return;
-            new Chart(ctx, {
+            if (chart) {
+                try { chart.destroy(); } catch (e0) {}
+                chart = null;
+            }
+            applyThemeDefaults();
+            var cols = colorsForBars(payload.valores ? payload.valores.length : 0);
+            chart = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: payload.labels,
                     datasets: [
-                        { label: 'Cantidad NC (líneas)', data: payload.valores, backgroundColor: 'rgba(251,146,60,0.75)', yAxisID: 'y', order: 2 },
-                        { type: 'line', label: '% acum. líneas', data: payload.pctAcum, borderColor: 'rgba(248,113,113,1)', yAxisID: 'y1', order: 1, tension: 0.15 },
+                        {
+                            label: 'Cantidad NC (líneas)',
+                            data: payload.valores,
+                            backgroundColor: cols.bg,
+                            borderColor: cols.br,
+                            borderWidth: 1,
+                            yAxisID: 'y',
+                            order: 2,
+                        },
+                        {
+                            type: 'line',
+                            label: '% acum. líneas',
+                            data: payload.pctAcum,
+                            borderColor: rgba([248, 113, 113], 1),
+                            backgroundColor: rgba([248, 113, 113], 0.14),
+                            borderWidth: 2,
+                            yAxisID: 'y1',
+                            order: 1,
+                            tension: 0.22,
+                            pointRadius: 2,
+                        },
                     ],
                 },
                 options: {
-                    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { labels: { color: '#cbd5e1' } } },
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    animation: {
+                        duration: 1200,
+                        easing: 'easeOutCubic',
+                        delay: function (context) {
+                            if (context.type === 'data' && context.mode === 'default') return (context.dataIndex || 0) * 55;
+                            return 0;
+                        },
+                    },
+                    plugins: { legend: { labels: { color: Chart.defaults.color } } },
                     scales: {
-                        x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' } },
-                        y: { ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
-                        y1: { type: 'linear', position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false }, ticks: { color: '#fca5a5', callback: function (v) { return v + '%'; } } },
+                        x: {
+                            ticks: { color: Chart.defaults.color, maxRotation: 60, minRotation: 35, autoSkip: true, maxTicksLimit: 20 },
+                            grid: { color: Chart.defaults.borderColor },
+                        },
+                        y: {
+                            ticks: { color: Chart.defaults.color },
+                            grid: { color: Chart.defaults.borderColor },
+                            title: { display: true, text: 'Líneas NC', color: Chart.defaults.color },
+                        },
+                        y1: {
+                            type: 'linear',
+                            position: 'right',
+                            min: 0,
+                            max: 100,
+                            grid: { drawOnChartArea: false },
+                            ticks: { color: isDark() ? '#fca5a5' : '#ef4444', callback: function (v) { return v + '%'; } },
+                            title: { display: true, text: '% acumulado', color: isDark() ? '#fecaca' : '#ef4444' },
+                        },
                     },
                 },
             });
-            done = true;
+        }
+        function setTheme(mode) {
+            try {
+                document.documentElement.setAttribute('data-theme', mode);
+                document.documentElement.style.colorScheme = mode === 'dark' ? 'dark' : 'light';
+            } catch (e) {}
         }
         if (root) root.addEventListener('ventas-reporte-tab', function (ev) { if (ev.detail && ev.detail.index === 1) build(); });
+        window.addEventListener('storage', function (ev) {
+            if (!ev || ev.key !== 'ix2-theme') return;
+            var mode = (ev.newValue === 'dark' || ev.newValue === 'light') ? ev.newValue : null;
+            if (!mode) return;
+            setTheme(mode);
+            if (chart) build();
+        });
     })();
     </script>
     <?php ventas_reporte_tabs_script(); ?>

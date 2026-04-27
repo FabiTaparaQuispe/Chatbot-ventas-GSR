@@ -32,6 +32,15 @@
         });
     }
 
+    /** Réplica del tema en nodos marcados (p. ej. tarjetas Iconos) para CSS con máxima fiabilidad */
+    function syncThemeNodes(mode) {
+        try {
+            document.querySelectorAll('[data-sync-app-theme]').forEach(function (el) {
+                el.setAttribute('data-app-theme', mode);
+            });
+        } catch (e) {}
+    }
+
     window.appSetTheme = function (mode) {
         if (mode !== 'dark' && mode !== 'light') return;
         var d = document.documentElement;
@@ -42,6 +51,7 @@
         } catch (e) {}
         writeCookieTheme(mode);
         syncIcons(mode);
+        syncThemeNodes(mode);
         window.dispatchEvent(new CustomEvent('app-theme-change', { detail: { theme: mode } }));
     };
 
@@ -52,5 +62,6 @@
 
     var initial = document.documentElement.getAttribute('data-theme') || 'light';
     syncIcons(initial);
+    syncThemeNodes(initial);
 })();
 

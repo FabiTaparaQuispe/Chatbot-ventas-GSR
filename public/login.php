@@ -59,7 +59,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <span style="font-size:86px; line-height:1;" role="img" aria-label="Chatbot">🤖</span>
             </div>
             <h2 class="login-hero-title">Chatbot</h2>
-            <p class="login-hero-sub">Sistema Integrado Productivo</p>
             <p class="login-hero-co"><?= htmlspecialchars(APP_COMPANY, ENT_QUOTES, 'UTF-8') ?></p>
         </div>
     </div>

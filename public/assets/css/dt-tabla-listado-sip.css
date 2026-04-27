@@ -241,3 +241,24 @@ html[data-theme="dark"] .dataTables_wrapper .dataTables_paginate .paginate_butto
     color: #fff !important;
 }
 
+html[data-theme="dark"] #tablaVentasWrapper .view-toggle-btn {
+    background: var(--surface, #18181b) !important;
+    border-color: var(--border, #3f3f46) !important;
+    color: var(--text, #f4f4f5) !important;
+    background-image: none !important;
+}
+html[data-theme="dark"] #tablaVentasWrapper .view-toggle-btn:hover:not(.active) {
+    background: var(--surface-2, #27272a) !important;
+    color: var(--text, #f4f4f5) !important;
+}
+html[data-theme="dark"] #tablaVentasWrapper .view-toggle-btn.active {
+    background: #2563eb !important;
+    color: #fff !important;
+    border-color: #2563eb !important;
+}
+html[data-theme="dark"] #tablaVentasWrapper .view-toggle-btn.active:hover {
+    background: #1d4ed8 !important;
+    border-color: #1d4ed8 !important;
+    color: #fff !important;
+}
+

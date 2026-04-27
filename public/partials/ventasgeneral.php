@@ -18,15 +18,39 @@ declare(strict_types=1);
     </button>
     <div id="contenidoFiltrosDemo" class="card-filtros-demo__body hidden">
         <div class="filters-block filters-block--inner">
-            <div class="filter-row">
+            <div class="filter-row filter-row--periodo">
                 <div class="filter-field">
-                    <label for="vgDesde">Desde</label>
+                    <label for="vgPeriodo">Período</label>
+                    <select id="vgPeriodo">
+                        <option value="todos" selected>Todos</option>
+                        <option value="por_fecha">Por fecha</option>
+                        <option value="entre_fechas">Entre fechas</option>
+                        <option value="por_mes">Por mes</option>
+                        <option value="entre_meses">Entre meses</option>
+                    </select>
+                </div>
+                <div class="filter-field hidden" id="vgWrapDesde">
+                    <label for="vgDesde" id="lblVgDesde">Desde</label>
                     <input type="date" id="vgDesde" />
                 </div>
-                <div class="filter-field">
+                <div class="filter-field hidden" id="vgWrapHasta">
                     <label for="vgHasta">Hasta</label>
                     <input type="date" id="vgHasta" />
                 </div>
+                <div class="filter-field hidden" id="vgWrapMes">
+                    <label for="vgMes">Mes</label>
+                    <input type="month" id="vgMes" />
+                </div>
+                <div class="filter-field hidden" id="vgWrapMesDesde">
+                    <label for="vgMesDesde">Mes desde</label>
+                    <input type="month" id="vgMesDesde" />
+                </div>
+                <div class="filter-field hidden" id="vgWrapMesHasta">
+                    <label for="vgMesHasta">Mes hasta</label>
+                    <input type="month" id="vgMesHasta" />
+                </div>
+            </div>
+            <div class="filter-row">
                 <div class="filter-field">
                     <label for="vgNombre">Nombre cliente</label>
                     <input type="text" id="vgNombre" placeholder="Ingrese su nombre" />
@@ -44,7 +68,7 @@ declare(strict_types=1);
     </div>
 </div>
 
-<div class="tabla-listado-wrapper" id="tablaVentasWrapper" data-vista-tabla-iconos data-vista="lista">
+<div class="tabla-listado-wrapper" id="tablaVentasWrapper" data-vista-tabla-iconos data-vista="lista" data-sync-app-theme>
     <div class="reportes-toolbar-row" id="ventasToolbarRow">
         <div class="view-toggle-group" id="viewToggleGroupVentas">
             <button type="button" class="view-toggle-btn active" id="btnViewLista" title="Lista">
@@ -69,16 +93,16 @@ declare(strict_types=1);
             <table id="tablaVentasGeneral" class="data-table config-table display stripe nowrap" style="width:100%">
                 <thead>
                     <tr>
-                        <th>id</th>
-                        <th>Fecha</th>
-                        <th>CodCliente</th>
-                        <th>Cliente</th>
-                        <th>Doc</th>
-                        <th>Ítem</th>
-                        <th>Glosa</th>
-                        <th>Cant</th>
-                        <th>Valor</th>
-                        <th>Zona</th>
+                        <th>N°</th>
+                        <th>Fecha contable</th>
+                        <th>Código cliente</th>
+                        <th>Nombre cliente</th>
+                        <th>Nº documento</th>
+                        <th>Código ítem</th>
+                        <th>Descripción</th>
+                        <th>Cantidad</th>
+                        <th>Importe</th>
+                        <th>Zona comercial</th>
                     </tr>
                 </thead>
                 <tbody></tbody>

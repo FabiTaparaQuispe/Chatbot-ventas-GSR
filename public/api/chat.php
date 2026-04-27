@@ -123,9 +123,20 @@ try {
     });
 
     $reply = ChatReplyEnricher::enrichReply((string) ($result['reply'] ?? ''), $result['messages'] ?? []);
-    $sqlLines = SqlTextoHttpLink::formatAppendLines($executor->pullSqlBloquesParaEnlace());
+    $bloquesSql = $executor->pullSqlBloquesParaEnlace();
+    $bloquesSql = array_values(array_filter($bloquesSql, static function ($s) {
+        return is_string($s) && trim($s) !== '';
+    }));
+    $sqlLines = SqlTextoHttpLink::formatAppendLines($bloquesSql);
+    $suffix = '';
+    if ($bloquesSql !== []) {
+        $suffix .= "\n\n" . implode("\n\n", $bloquesSql);
+    }
     if ($sqlLines !== []) {
-        $reply = trim($reply . "\n\n" . implode("\n", $sqlLines));
+        $suffix .= "\n\n" . implode("\n", $sqlLines);
+    }
+    if ($suffix !== '') {
+        $reply = trim($reply . $suffix);
     }
 
     echo json_encode([

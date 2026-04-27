@@ -99,26 +99,27 @@ try {
     $stc->execute($params);
     $recordsFiltered = (int) $stc->fetchColumn();
 
-    $sql = 'SELECT id, FechaCont, CodCliente, NombreCliente, NumeroDoc, CodItem, Glosa, Cantidad, Valor, ZonaComercial
+    $sql = 'SELECT FechaCont, CodCliente, NombreCliente, NumeroDoc, CodItem, Glosa, Cantidad, Valor, ZonaComercial
             FROM ventasgeneral' . $where . ' ORDER BY FechaCont DESC, id DESC LIMIT ' . (int) $length . ' OFFSET ' . (int) $start;
     $st = $pdo->prepare($sql);
     $st->execute($params);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
-    $data = array_map(static function (array $r): array {
-        return [
-            (string) ($r['id'] ?? ''),
-            (string) ($r['FechaCont'] ?? ''),
-            (string) ($r['CodCliente'] ?? ''),
-            (string) ($r['NombreCliente'] ?? ''),
-            (string) ($r['NumeroDoc'] ?? ''),
-            (string) ($r['CodItem'] ?? ''),
-            (string) ($r['Glosa'] ?? ''),
-            (string) ($r['Cantidad'] ?? ''),
-            (string) ($r['Valor'] ?? ''),
-            (string) ($r['ZonaComercial'] ?? ''),
+    $data = [];
+    foreach ($rows as $i => $r) {
+        $data[] = [
+            (string) ($start + $i + 1),
+            ventas_utf8_string($r['FechaCont'] ?? ''),
+            ventas_utf8_string($r['CodCliente'] ?? ''),
+            ventas_utf8_string($r['NombreCliente'] ?? ''),
+            ventas_utf8_string($r['NumeroDoc'] ?? ''),
+            ventas_utf8_string($r['CodItem'] ?? ''),
+            ventas_utf8_string($r['Glosa'] ?? ''),
+            ventas_utf8_string($r['Cantidad'] ?? ''),
+            ventas_utf8_string($r['Valor'] ?? ''),
+            ventas_utf8_string($r['ZonaComercial'] ?? ''),
         ];
-    }, $rows);
+    }
 
     json_out([
         'draw' => $draw,

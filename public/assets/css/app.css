@@ -757,3 +757,57 @@ html[data-theme="dark"] .login-panel {
     background: var(--bg);
 }
 
+/*
+ * Ventas general — vista Iconos en modo oscuro.
+ * Va al final de la cascada; usa #tablaVentasWrapper + data-app-theme (sincronizado en theme.js)
+ * y literales con !important para vencer cualquier hoja intermedia (p. ej. DataTables CDN).
+ */
+html[data-theme="dark"] #tablaVentasWrapper .view-tarjetas-wrap .cards-grid.cards-grid-iconos article.card-item,
+#tablaVentasWrapper[data-app-theme="dark"] .view-tarjetas-wrap .cards-grid.cards-grid-iconos article.card-item {
+    background-color: #18181b !important;
+    border-color: #3f3f46 !important;
+    color: #fafafa !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45) !important;
+}
+html[data-theme="dark"] #tablaVentasWrapper .view-tarjetas-wrap .cards-grid.cards-grid-iconos article.card-item:hover,
+html[data-theme="dark"] #tablaVentasWrapper .view-tarjetas-wrap .cards-grid.cards-grid-iconos article.card-item:focus-within,
+#tablaVentasWrapper[data-app-theme="dark"] .view-tarjetas-wrap .cards-grid.cards-grid-iconos article.card-item:hover,
+#tablaVentasWrapper[data-app-theme="dark"] .view-tarjetas-wrap .cards-grid.cards-grid-iconos article.card-item:focus-within {
+    background-color: #27272a !important;
+    border-color: #60a5fa !important;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(96, 165, 250, 0.28) !important;
+}
+html[data-theme="dark"] #tablaVentasWrapper .cards-grid.cards-grid-iconos .card-numero-row,
+#tablaVentasWrapper[data-app-theme="dark"] .cards-grid.cards-grid-iconos .card-numero-row {
+    color: #fafafa !important;
+    border-bottom-color: #3f3f46 !important;
+}
+html[data-theme="dark"] #tablaVentasWrapper .cards-grid.cards-grid-iconos .card-codigo,
+#tablaVentasWrapper[data-app-theme="dark"] .cards-grid.cards-grid-iconos .card-codigo {
+    color: #fafafa !important;
+}
+html[data-theme="dark"] #tablaVentasWrapper .cards-grid.cards-grid-iconos .card-campos,
+#tablaVentasWrapper[data-app-theme="dark"] .cards-grid.cards-grid-iconos .card-campos {
+    background-color: #27272a !important;
+}
+html[data-theme="dark"] #tablaVentasWrapper .cards-grid.cards-grid-iconos .card-item:hover .card-campos,
+html[data-theme="dark"] #tablaVentasWrapper .cards-grid.cards-grid-iconos .card-item:focus-within .card-campos,
+#tablaVentasWrapper[data-app-theme="dark"] .cards-grid.cards-grid-iconos .card-item:hover .card-campos,
+#tablaVentasWrapper[data-app-theme="dark"] .cards-grid.cards-grid-iconos .card-item:focus-within .card-campos {
+    background-color: rgba(96, 165, 250, 0.12) !important;
+    box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.22) !important;
+}
+html[data-theme="dark"] #tablaVentasWrapper .cards-grid.cards-grid-iconos .card-row .label,
+#tablaVentasWrapper[data-app-theme="dark"] .cards-grid.cards-grid-iconos .card-row .label {
+    color: #a1a1aa !important;
+}
+html[data-theme="dark"] #tablaVentasWrapper .cards-grid.cards-grid-iconos .card-row span:not(.label),
+#tablaVentasWrapper[data-app-theme="dark"] .cards-grid.cards-grid-iconos .card-row span:not(.label) {
+    color: #fafafa !important;
+}
+html[data-theme="dark"] #tablaVentasWrapper .cards-grid.cards-grid-iconos .prod-card-meta,
+#tablaVentasWrapper[data-app-theme="dark"] .cards-grid.cards-grid-iconos .prod-card-meta {
+    color: #a1a1aa !important;
+    border-top-color: #3f3f46 !important;
+}
+

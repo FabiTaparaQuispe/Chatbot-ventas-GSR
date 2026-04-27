@@ -105,14 +105,13 @@ function ventasBindPdfDownload(buttonId, rootId, filename, opts) {
 
     // Logo simple (SVG embebido) ya que el proyecto de referencia no trae PNG en disco.
     var LOGO_SVG = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(
-        '<svg xmlns="http://www.w3.org/2000/svg" width="180" height="60" viewBox="0 0 180 60">' +
-        '<rect x="0" y="0" width="180" height="60" rx="10" fill="#ffffff"/>' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60" viewBox="0 0 120 60">' +
+        '<rect x="0" y="0" width="120" height="60" rx="10" fill="#ffffff"/>' +
         '<rect x="10" y="10" width="40" height="40" rx="10" fill="#2563eb" opacity="0.12"/>' +
         '<path d="M30 14l14 6v10c0 10-6 18-14 20-8-2-14-10-14-20V20l14-6z" fill="#2563eb"/>' +
-        '<text x="62" y="26" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#0f172a">GRANJA RINCONADA DEL SUR S.A.</text>' +
-        '<text x="62" y="42" font-family="Helvetica, Arial, sans-serif" font-size="9" fill="#475569">Reporte</text>' +
         '</svg>'
     )));
+    var COMPANY_NAME = (opts && opts.company) ? String(opts.company) : 'GRANJA RINCONADA DEL SUR S.A.';
 
     function collectTable() {
         var h2 = root.querySelector('h2');
@@ -129,6 +128,19 @@ function ventasBindPdfDownload(buttonId, rootId, filename, opts) {
             tr.querySelectorAll('td').forEach(function(td){ r.push(safeText(td.textContent)); });
             if (r.length) rows.push(r);
         });
+        // Columna contador N° (si no existe ya)
+        if (head.length > 0) {
+            var h0 = String(head[0] || '').toLowerCase().replace(/\./g, '').trim();
+            var hasN = h0 === 'n°' || h0 === 'nº' || h0 === 'no' || h0 === 'nro' || h0 === 'numero' || h0 === 'n';
+            if (!hasN) {
+                head.unshift('N°');
+                rows = rows.map(function (r, i) {
+                    var rr = r.slice(0);
+                    rr.unshift(String(i + 1));
+                    return rr;
+                });
+            }
+        }
         return { title: title, meta: metaText, head: head, rows: rows };
     }
 
@@ -167,20 +179,32 @@ function ventasBindPdfDownload(buttonId, rootId, filename, opts) {
             doc.line(mL + w1, y, mL + w1, y + hCab);
             doc.line(mL + w1 + w2, y, mL + w1 + w2, y + hCab);
 
+            // Izquierda: logo + empresa
             try {
-                doc.addImage(LOGO_SVG, 'PNG', mL + 0.6, y + 2.2, 34, 9.6);
+                doc.addImage(LOGO_SVG, 'PNG', mL + 1.2, y + 2.2, 16.5, 9.6);
             } catch (e) {}
+            try {
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(8.2);
+                doc.setTextColor(15, 23, 42);
+                var txtW = Math.max(10, w1 - 20);
+                var lines = doc.splitTextToSize(COMPANY_NAME, txtW);
+                if (lines.length > 2) lines = lines.slice(0, 2);
+                doc.text(lines, mL + 18.6, y + 5.2);
+            } catch (e2) {}
 
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(12);
             doc.setTextColor(255, 255, 255);
-            var tit = ('REPORTE ' + String(data.title || ''));
+            var rawT = String(data.title || 'REPORTE').trim();
+            var tit = (/^reporte\b/i.test(rawT) ? rawT : ('REPORTE: ' + rawT));
             doc.text(tit, mL + w1 + w2 / 2, y + 8.2, { align: 'center' });
 
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(9);
             doc.setTextColor(71, 85, 105);
-            doc.text(nowStamp(), mL + contentW - 1.5, y + 5.2, { align: 'right' });
+            // Derecha: fecha/hora centrada
+            doc.text(nowStamp(), mL + w1 + w2 + w3 / 2, y + 7.2, { align: 'center' });
 
             y = y + hCab + 3;
         }

@@ -22,16 +22,14 @@ if ($ventasWebModulesBase === null) {
     }
 }
 
+$ventasPublicWebBase = '/';
+if (function_exists('app_public_base')) {
+    $ventasPublicWebBase = app_public_base();
+}
+
 ?>
 <style>
-    :root {
-        --ventas-chat-surface: #1a2332;
-        --ventas-chat-border: #2d3a4d;
-        --ventas-chat-text: #e7edf4;
-        --ventas-chat-muted: #8b9cb3;
-        --ventas-chat-accent: #3b82f6;
-        --ventas-chat-accent-dim: #2563eb;
-    }
+    /* Tema: mismos tokens que `app.css` en `html[data-theme]` (sidebar). Fallbacks si la página no carga app.css. */
     body { padding-bottom: 5rem; }
 
     .chat-fab {
@@ -44,20 +42,26 @@ if ($ventasWebModulesBase === null) {
         border-radius: 50%;
         border: none;
         cursor: pointer;
-        background: linear-gradient(135deg, var(--ventas-chat-accent) 0%, #6366f1 100%);
+        background: linear-gradient(135deg, var(--accent, #2563eb) 0%, #6366f1 100%);
         color: #fff;
-        box-shadow: 0 6px 24px rgba(37, 99, 235, 0.45);
+        box-shadow: 0 6px 24px rgba(37, 99, 235, 0.35);
         display: flex;
         align-items: center;
         justify-content: center;
         transition: transform 0.15s ease, box-shadow 0.15s ease;
     }
+    html[data-theme="dark"] .chat-fab {
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+    }
     .chat-fab:hover {
         transform: scale(1.05);
-        box-shadow: 0 8px 28px rgba(37, 99, 235, 0.55);
+        box-shadow: 0 8px 28px rgba(37, 99, 235, 0.45);
+    }
+    html[data-theme="dark"] .chat-fab:hover {
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
     }
     .chat-fab:focus-visible {
-        outline: 2px solid #93c5fd;
+        outline: 2px solid var(--accent, #2563eb);
         outline-offset: 3px;
     }
     .chat-fab[hidden] { display: none !important; }
@@ -71,11 +75,15 @@ if ($ventasWebModulesBase === null) {
         max-height: min(690px, calc(100vh - 1.5rem));
         display: flex;
         flex-direction: column;
-        background: var(--ventas-chat-surface);
-        border: 1px solid var(--ventas-chat-border);
+        background: var(--surface, #ffffff);
+        border: 1px solid var(--border, #e2e8f0);
+        color: var(--text, #0f172a);
         border-radius: 16px;
-        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+        box-shadow: var(--shadow-soft, 0 16px 48px rgba(15, 23, 42, 0.12));
         overflow: hidden;
+    }
+    html[data-theme="dark"] .chat-panel {
+        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
     }
     .chat-panel[hidden] { display: none !important; }
 
@@ -88,6 +96,9 @@ if ($ventasWebModulesBase === null) {
         background: linear-gradient(135deg, #1d4ed8 0%, #6d28d9 100%);
         color: #fff;
         flex-shrink: 0;
+    }
+    html[data-theme="dark"] .chat-panel-head {
+        background: linear-gradient(135deg, #1e40af 0%, #5b21b6 100%);
     }
     .chat-panel-head h2 {
         margin: 0;
@@ -118,31 +129,59 @@ if ($ventasWebModulesBase === null) {
         max-height: 42vh;
         overflow-y: auto;
         padding: 0.85rem 1rem;
-        background: #141c28;
+        background: var(--surface-2, #f8fafc);
+        color: var(--text, #0f172a);
+    }
+    html[data-theme="dark"] #ventasChatLog {
+        background: var(--surface-2, #27272a);
+        color: var(--text, #f4f4f5);
     }
     .ventas-chat-msg { margin-bottom: 1rem; font-size: 0.9rem; }
-    .ventas-chat-msg.user { color: #93c5fd; }
-    .ventas-chat-msg.assistant { color: var(--ventas-chat-text); white-space: pre-wrap; }
+    .ventas-chat-msg.user { color: var(--accent, #2563eb); }
+    html[data-theme="dark"] .ventas-chat-msg.user {
+        color: var(--accent, #60a5fa);
+    }
+    .ventas-chat-msg.assistant { color: var(--text, #0f172a); white-space: pre-wrap; }
+    .ventas-chat-msg--streaming .ventas-chat-msg-body {
+        min-height: 1.35em;
+    }
+    html[data-theme="dark"] .ventas-chat-msg.assistant {
+        color: var(--text, #f4f4f5);
+    }
     .ventas-chat-msg.assistant a,
     .ventas-chat-msg.assistant a.ventas-chat-link {
-        color: #60a5fa;
+        color: var(--accent, #2563eb);
         text-decoration: underline;
         word-break: break-all;
     }
-    .ventas-chat-msg.assistant a:hover { color: #93c5fd; }
+    html[data-theme="dark"] .ventas-chat-msg.assistant a,
+    html[data-theme="dark"] .ventas-chat-msg.assistant a.ventas-chat-link {
+        color: var(--accent, #60a5fa);
+    }
+    .ventas-chat-msg.assistant a:hover { color: var(--accent-hover, #1d4ed8); }
+    html[data-theme="dark"] .ventas-chat-msg.assistant a:hover {
+        color: var(--accent-hover, #93c5fd);
+    }
     .ventas-chat-msg .ventas-chat-label {
         font-size: 0.65rem;
         text-transform: uppercase;
         letter-spacing: 0.06em;
-        color: var(--ventas-chat-muted);
+        color: var(--muted, #64748b);
         margin-bottom: 0.2rem;
+    }
+    html[data-theme="dark"] .ventas-chat-msg .ventas-chat-label {
+        color: var(--muted, #a1a1aa);
     }
 
     .chat-panel-foot {
         padding: 0.65rem 0.75rem 0.85rem;
-        border-top: 1px solid var(--ventas-chat-border);
-        background: var(--ventas-chat-surface);
+        border-top: 1px solid var(--border, #e2e8f0);
+        background: var(--surface, #ffffff);
         flex-shrink: 0;
+    }
+    html[data-theme="dark"] .chat-panel-foot {
+        border-top-color: var(--border, #3f3f46);
+        background: var(--surface, #18181b);
     }
     .chat-panel-foot .row { display: flex; gap: 0.45rem; align-items: flex-end; }
     .chat-panel-foot textarea {
@@ -151,18 +190,30 @@ if ($ventasWebModulesBase === null) {
         max-height: 120px;
         padding: 0.55rem 0.7rem;
         border-radius: 10px;
-        border: 1px solid var(--ventas-chat-border);
-        background: #141c28;
-        color: var(--ventas-chat-text);
-        resize: vertical;
+        border: 1px solid var(--input-border, #cbd5e1);
+        background: var(--input-bg, #f8fafc);
+        color: var(--text, #0f172a);
+        resize: none;
         font: inherit;
         font-size: 0.9rem;
+        overflow: hidden;
+    }
+    html[data-theme="dark"] .chat-panel-foot textarea {
+        border-color: var(--input-border, #52525b);
+        background: var(--input-bg, #27272a);
+        color: var(--text, #f4f4f5);
+    }
+    .chat-panel-foot textarea::placeholder {
+        color: var(--muted, #64748b);
+    }
+    html[data-theme="dark"] .chat-panel-foot textarea::placeholder {
+        color: var(--muted, #a1a1aa);
     }
     .chat-panel-foot button#ventasChatSend {
         padding: 0.55rem 0.9rem;
         border-radius: 10px;
         border: none;
-        background: var(--ventas-chat-accent);
+        background: var(--accent, #2563eb);
         color: #fff;
         font-weight: 600;
         cursor: pointer;
@@ -170,54 +221,81 @@ if ($ventasWebModulesBase === null) {
         font-size: 0.85rem;
         flex-shrink: 0;
     }
-    .chat-panel-foot button#ventasChatSend:hover { background: var(--ventas-chat-accent-dim); }
+    .chat-panel-foot button#ventasChatSend:hover { background: var(--accent-hover, #1d4ed8); }
     .chat-panel-foot button#ventasChatSend:disabled { opacity: 0.5; cursor: not-allowed; }
 
     .ventas-chat-shortcuts {
         margin: 0 0.75rem;
         font-size: 0.72rem;
-        color: var(--ventas-chat-muted);
+        color: var(--muted, #64748b);
         max-height: 7.5rem;
         overflow-y: auto;
     }
+    html[data-theme="dark"] .ventas-chat-shortcuts {
+        color: var(--muted, #a1a1aa);
+    }
     .ventas-chat-shortcuts summary {
         cursor: pointer;
-        color: #93c5fd;
+        color: var(--accent, #2563eb);
         font-weight: 600;
+    }
+    html[data-theme="dark"] .ventas-chat-shortcuts summary {
+        color: var(--accent, #60a5fa);
     }
     .ventas-chat-shortcuts ul { margin: 0.35rem 0 0; padding-left: 1.1rem; }
     .ventas-chat-chips-wrap {
         padding: 0.45rem 0.75rem 0.35rem;
-        border-top: 1px solid var(--ventas-chat-border);
-        background: #141c28;
+        border-top: 1px solid var(--border, #e2e8f0);
+        background: var(--surface-2, #f8fafc);
         flex-shrink: 0;
     }
-    .ventas-chat-chips-label {
+    html[data-theme="dark"] .ventas-chat-chips-wrap {
+        border-top-color: var(--border, #3f3f46);
+        background: var(--surface-2, #27272a);
+    }
+    .ventas-chat-faq-label {
         display: block;
-        font-size: 0.62rem;
-        color: var(--ventas-chat-muted);
+        font-size: 0.68rem;
+        font-weight: 600;
+        color: var(--muted, #64748b);
         margin-bottom: 0.35rem;
         line-height: 1.35;
     }
-    .ventas-chat-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-    .ventas-chat-chip {
-        border: 1px solid var(--ventas-chat-accent);
-        color: #93c5fd;
-        background: transparent;
-        border-radius: 999px;
-        padding: 0.28rem 0.55rem;
-        font-size: 0.68rem;
-        cursor: pointer;
-        font: inherit;
-        line-height: 1.2;
+    html[data-theme="dark"] .ventas-chat-faq-label {
+        color: var(--muted, #a1a1aa);
     }
-    .ventas-chat-chip:hover { background: rgba(59, 130, 246, 0.15); }
+    .ventas-chat-faq-select {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0.45rem 0.65rem;
+        border-radius: 10px;
+        border: 1px solid var(--input-border, #cbd5e1);
+        background: var(--input-bg, #f8fafc);
+        color: var(--text, #0f172a);
+        font: inherit;
+        font-size: 0.82rem;
+        line-height: 1.35;
+        cursor: pointer;
+    }
+    html[data-theme="dark"] .ventas-chat-faq-select {
+        border-color: var(--input-border, #52525b);
+        background: var(--input-bg, #27272a);
+        color: var(--text, #f4f4f5);
+    }
+    .ventas-chat-faq-select:focus {
+        outline: none;
+        border-color: var(--accent, #2563eb);
+        box-shadow: 0 0 0 2px var(--accent-soft, rgba(37, 99, 235, 0.2));
+    }
 
     .chat-panel .ventas-chat-err {
-        color: #f87171;
+        color: #dc2626;
         font-size: 0.8rem;
         margin: 0 0.75rem 0.65rem;
         padding: 0 0.25rem;
+    }
+    html[data-theme="dark"] .chat-panel .ventas-chat-err {
+        color: #f87171;
     }
 </style>
 
@@ -246,8 +324,8 @@ if ($ventasWebModulesBase === null) {
         </ul>
     </details>
     <div class="ventas-chat-chips-wrap">
-        <span class="ventas-chat-chips-label">Preguntas frecuentes — mes calendario anterior completo. Tocá un chip, revisá o editá fechas en el cuadro y pulsá Enviar.</span>
-        <div id="ventasChatChips" class="ventas-chat-chips" aria-label="Preguntas frecuentes"></div>
+        <label for="ventasChatFaqSelect" class="ventas-chat-faq-label">Preguntas frecuentes</label>
+        <select id="ventasChatFaqSelect" class="ventas-chat-faq-select" aria-label="Elegir pregunta frecuente"></select>
     </div>
     <div class="chat-panel-foot">
         <div class="row">
@@ -261,11 +339,13 @@ if ($ventasWebModulesBase === null) {
 <script>
 (function () {
     const CHAT_API = <?= json_encode($ventasChatApiUrl, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    /** Base pública (misma que `<base href>`) para `sql_texto.php` y assets. */
+    const VENTAS_PUBLIC_BASE = <?= json_encode($ventasPublicWebBase, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     /** Ruta absoluta desde la raíz del sitio (p. ej. /Ventas-Chatbot/public/modules/) para enlaces del asistente. */
     const VENTAS_MODULES_WEB_BASE = <?= json_encode($ventasWebModulesBase, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const LS_HISTORY = 'ventasChatbot_history_v1';
     const LS_DRAFT = 'ventasChatbot_draft_v1';
-    const MAX_LOCAL_MESSAGES = 40;
+    const MAX_LOCAL_MESSAGES = 120;
 
     const log = document.getElementById('ventasChatLog');
     const input = document.getElementById('ventasChatInput');
@@ -275,7 +355,9 @@ if ($ventasWebModulesBase === null) {
     const panel = document.getElementById('ventasChatPanel');
     const closeBtn = document.getElementById('ventasChatClose');
     const clearBtn = document.getElementById('ventasChatClear');
-    const chipsMount = document.getElementById('ventasChatChips');
+    const faqSelect = document.getElementById('ventasChatFaqSelect');
+    /** Plantillas FAQ vigentes (índice = value de cada option) */
+    let faqTemplatesCache = [];
     const history = [];
 
     function pad2(n) {
@@ -297,31 +379,45 @@ if ($ventasWebModulesBase === null) {
         const c1 = toYmd(new Date(y, 1, 1));
         const c2 = toYmd(new Date(y, 2, 0));
         return [
-            { label: 'Totales del período', text: 'Del ' + desde + ' al ' + hasta + ': totales en ventasgeneral (filas y sumas Valor, Cantidad, Peso). Usá ventasgeneral_resumen y una línea reporte_url ventasgeneral_resumen_tabla.php con los mismos parámetros.' },
-            { label: 'Top clientes (valor)', text: 'Del ' + desde + ' al ' + hasta + ': top 10 clientes globales por suma Valor. Usá ventasgeneral_top_clientes_globales y reporte_url ventas_top_clientes_global.php.' },
-            { label: 'Top productos', text: 'Del ' + desde + ' al ' + hasta + ': top 15 productos por suma Valor. Usá ventasgeneral_top_productos y reporte_url ventas_top_productos.php.' },
-            { label: 'Serie mensual', text: 'Del ' + desde + ' al ' + hasta + ': serie mensual de suma Valor. Usá ventasgeneral_serie_mensual_valor y reporte_url ventas_serie_mensual.php.' },
-            { label: 'Mix por TDoc', text: 'Del ' + desde + ' al ' + hasta + ': mix de suma Valor por TDoc. Usá ventasgeneral_mix_tdoc y reporte_url ventas_mix_tdoc.php.' },
-            { label: 'NC por zona precio', text: 'Del ' + desde + ' al ' + hasta + ': pareto NC (TDoc 07) por DescriZonaPrecio. Usá ventasgeneral_pareto_nc_zonaprecio y reporte_url pareto_nc_zona.php.' },
-            { label: 'Top en zona TACNA', text: 'Del ' + desde + ' al ' + hasta + ': top 10 clientes por Valor con prefijo_descri_zona_precio TACNA. Usá ventasgeneral_top_clientes_zona_precio y reporte_url pareto_clientes_zona.php.' },
-            { label: 'Barras (precio)', text: 'Del ' + desde + ' al ' + hasta + ': barras suma Valor con dimension precio. Usá ventasgeneral_barras_ventas_dimension y reporte_url ventas_barras_dimension.php.' },
-            { label: 'Comparar 2 meses', text: 'Comparativo: período A del ' + b1 + ' al ' + b2 + ' vs período B del ' + c1 + ' al ' + c2 + ', dimensión precio, top 10. Usá ventasgeneral_comparativo_periodos y reporte_url ventas_comparativo.php.' },
+            { label: 'Totales del período', text: 'Del ' + desde + ' al ' + hasta + ', ¿cuáles son los totales de ventas (filas, suma de Valor, suma de Cantidad y suma de Peso)?' },
+            { label: 'Top clientes (valor)', text: 'Del ' + desde + ' al ' + hasta + ', dame el top 10 de clientes (global) por suma de Valor.' },
+            { label: 'Top productos', text: 'Del ' + desde + ' al ' + hasta + ', dame el top 15 de productos por suma de Valor.' },
+            { label: 'Serie mensual', text: 'Del ' + desde + ' al ' + hasta + ', dame la serie mensual de la suma de Valor.' },
+            { label: 'Mix por TDoc', text: 'Del ' + desde + ' al ' + hasta + ', dame el mix de suma de Valor por TDoc.' },
+            { label: 'NC por zona precio', text: 'Del ' + desde + ' al ' + hasta + ', dame el pareto de notas de crédito (TDoc 07) por zona de precio (DescriZonaPrecio).' },
+            { label: 'Top en zona TACNA', text: 'Del ' + desde + ' al ' + hasta + ', dame el top 10 de clientes por suma de Valor dentro de la zona de precio con prefijo TACNA.' },
+            { label: 'Barras (precio)', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame un gráfico de barras de suma de Valor por zona de precio (DescriZonaPrecio).' },
+            { label: 'Comparar 2 meses', text: 'Compará la suma de Valor por zona de precio (DescriZonaPrecio): período A del ' + b1 + ' al ' + b2 + ' vs período B del ' + c1 + ' al ' + c2 + ' (top 10).' },
         ];
     }
-    function renderVentasChips() {
-        if (!chipsMount) return;
-        chipsMount.innerHTML = '';
+    function renderVentasFaqSelect() {
+        if (!faqSelect) return;
         const r = defaultReportRange();
-        faqChipTemplates(r.desde, r.hasta).forEach(function (item) {
-            const b = document.createElement('button');
-            b.type = 'button';
-            b.className = 'ventas-chat-chip';
-            b.textContent = item.label;
-            b.addEventListener('click', function () {
-                input.value = item.text;
+        faqTemplatesCache = faqChipTemplates(r.desde, r.hasta);
+        faqSelect.innerHTML = '';
+        const ph = document.createElement('option');
+        ph.value = '';
+        ph.textContent = '— Elegí una consulta —';
+        faqSelect.appendChild(ph);
+        faqTemplatesCache.forEach(function (item, i) {
+            const o = document.createElement('option');
+            o.value = String(i);
+            o.textContent = item.label;
+            faqSelect.appendChild(o);
+        });
+        faqSelect.selectedIndex = 0;
+    }
+
+    if (faqSelect) {
+        faqSelect.addEventListener('change', function () {
+            const v = faqSelect.value;
+            if (v === '') return;
+            const idx = parseInt(v, 10);
+            if (!isNaN(idx) && faqTemplatesCache[idx]) {
+                input.value = faqTemplatesCache[idx].text;
                 input.focus();
-            });
-            chipsMount.appendChild(b);
+            }
+            faqSelect.selectedIndex = 0;
         });
     }
 
@@ -377,6 +473,7 @@ if ($ventasWebModulesBase === null) {
             /((?:pareto_nc_zona|pareto_clientes_zona)(?:_tabla)?\.php\?[^\n\r]*)\r?\n\s*&/gi,
             /(ventasgeneral_(?:buscar|resumen)(?:_tabla)?\.php\?[^\n\r]*)\r?\n\s*&/gi,
             /(ventasgeneral_top_clientes_zona_precio\.php\?[^\n\r]*)\r?\n\s*&/gi,
+            /(sql_texto\.php\?[^\n\r]*)\r?\n\s*&/gi,
             /((?:https?:)\/\/[^\s\n<]+\?[^\n\r]*)\r?\n\s*&/gi,
         ];
         do {
@@ -407,6 +504,13 @@ if ($ventasWebModulesBase === null) {
         if (/^https?:\/\//i.test(path)) {
             return path;
         }
+        if (/^sql_texto\.php\?/i.test(path)) {
+            let b = String(typeof VENTAS_PUBLIC_BASE !== 'undefined' ? VENTAS_PUBLIC_BASE : '').trim();
+            if (b !== '' && !b.endsWith('/')) {
+                b += '/';
+            }
+            return (b === '' ? '/' : b) + path.replace(/^\//, '');
+        }
         if (path.startsWith('/')) {
             return path;
         }
@@ -428,7 +532,7 @@ if ($ventasWebModulesBase === null) {
         t = collapseDateLineBreaks(t);
         t = collapseMultilineQueryUrls(t);
         // Incluye nombre erróneo ventasgeneral_top_clientes_nc.php / ventasgeneral_top_clientes_zona_precio.php que usa el LLM
-        const re = /(https?:\/\/[^\s<]+|(?:pareto_nc_zona|pareto_clientes_zona)(?:_tabla)?\.php\?[^\s<]+|ventasgeneral_top_clientes_nc\.php\?[^\s<]+|ventasgeneral_top_clientes_zona_precio\.php\?[^\s<]+|ventas_(?:barras_dimension|comparativo|top_productos|top_clientes_global|top_clientes_nc|mix_tdoc|barras_ruta|barras_corporativo|serie_mensual)\.php\?[^\s<]+|ventasgeneral_(?:buscar|resumen)(?:_tabla)?\.php\?[^\s<]+)/gi;
+        const re = /(https?:\/\/[^\s<]+|sql_texto\.php\?[^\s<]+|(?:pareto_nc_zona|pareto_clientes_zona)(?:_tabla)?\.php\?[^\s<]+|ventasgeneral_top_clientes_nc\.php\?[^\s<]+|ventasgeneral_top_clientes_zona_precio\.php\?[^\s<]+|ventas_(?:barras_dimension|comparativo|top_productos|top_clientes_global|top_clientes_nc|mix_tdoc|barras_ruta|barras_corporativo|serie_mensual)\.php\?[^\s<]+|ventasgeneral_(?:buscar|resumen)(?:_tabla)?\.php\?[^\s<]+)/gi;
         const out = [];
         let last = 0;
         let m;
@@ -446,21 +550,79 @@ if ($ventasWebModulesBase === null) {
         return out.join('');
     }
 
-    function append(role, text) {
+    /** Cancela animaciones de escritura del asistente al iniciar otra o limpiar chat */
+    let assistantStreamGen = 0;
+
+    /**
+     * Efecto máquina de escribir: texto plano y al final linkify (evita href rotos a medias).
+     */
+    function streamAssistantIntoBody(bodyEl, fullText, gen, outerDiv) {
+        const full = String(fullText);
+        const len = full.length;
+        let pos = 0;
+        let charsPerStep = 1;
+        if (len > 1200) charsPerStep = 2;
+        if (len > 2800) charsPerStep = 3;
+        if (len > 5500) charsPerStep = 5;
+        const stepMs = 26;
+
+        function tick() {
+            if (!bodyEl.isConnected || gen !== assistantStreamGen) return;
+            pos = Math.min(len, pos + charsPerStep);
+            bodyEl.textContent = full.slice(0, pos);
+            log.scrollTop = log.scrollHeight;
+            if (pos < len) {
+                window.setTimeout(tick, stepMs);
+            } else {
+                if (!bodyEl.isConnected || gen !== assistantStreamGen) return;
+                bodyEl.innerHTML = linkifyAssistant(full);
+                if (outerDiv) outerDiv.classList.remove('ventas-chat-msg--streaming');
+                log.scrollTop = log.scrollHeight;
+            }
+        }
+        /* Primer frame asíncrono: el panel pinta la burbuja vacía y se nota el tipeo desde el primer carácter */
+        window.setTimeout(tick, 0);
+    }
+
+    /** Si había una respuesta a medio animar, la completa (p. ej. el usuario envía otra consulta). */
+    function finalizeStreamingAssistantIfAny() {
+        const el = log.querySelector('.ventas-chat-msg.assistant.ventas-chat-msg--streaming');
+        if (!el) return;
+        assistantStreamGen += 1;
+        const body = el.querySelector('.ventas-chat-msg-body');
+        const last = history.length ? history[history.length - 1] : null;
+        if (body && last && last.role === 'assistant' && typeof last.content === 'string') {
+            body.innerHTML = linkifyAssistant(last.content);
+        }
+        el.classList.remove('ventas-chat-msg--streaming');
+        log.scrollTop = log.scrollHeight;
+    }
+
+    function append(role, text, options) {
+        options = options || {};
         const div = document.createElement('div');
         div.className = 'ventas-chat-msg ' + role;
         const label = document.createElement('div');
         label.className = 'ventas-chat-label';
         label.textContent = role === 'user' ? 'Tú' : 'Asistente';
         const body = document.createElement('div');
-        if (role === 'assistant') {
-            body.innerHTML = linkifyAssistant(text);
-        } else {
-            body.textContent = text;
-        }
+        body.className = 'ventas-chat-msg-body';
         div.appendChild(label);
         div.appendChild(body);
         log.appendChild(div);
+
+        if (role === 'assistant') {
+            if (options && options.streamAssistant === true) {
+                assistantStreamGen += 1;
+                const gen = assistantStreamGen;
+                div.classList.add('ventas-chat-msg--streaming');
+                streamAssistantIntoBody(body, text, gen, div);
+            } else {
+                body.innerHTML = linkifyAssistant(text);
+            }
+        } else {
+            body.textContent = text;
+        }
         log.scrollTop = log.scrollHeight;
     }
 
@@ -533,13 +695,26 @@ if ($ventasWebModulesBase === null) {
         draftTimer = setTimeout(saveDraft, 400);
     });
 
+    function autosizeInput() {
+        try {
+            input.style.height = 'auto';
+            const minH = 44;
+            const maxH = 120;
+            const next = Math.max(minH, Math.min(maxH, input.scrollHeight || minH));
+            input.style.height = next + 'px';
+        } catch (e) { /* ignore */ }
+    }
+
+    input.addEventListener('input', autosizeInput);
+
     function openPanel() {
         panel.hidden = false;
         fab.hidden = true;
         fab.setAttribute('aria-expanded', 'true');
         errEl.hidden = true;
-        renderVentasChips();
+        renderVentasFaqSelect();
         loadDraft();
+        autosizeInput();
         input.focus();
     }
 
@@ -554,9 +729,11 @@ if ($ventasWebModulesBase === null) {
     fab.addEventListener('click', openPanel);
     closeBtn.addEventListener('click', closePanel);
     clearBtn.addEventListener('click', function () {
+        assistantStreamGen += 1;
         history.length = 0;
         log.innerHTML = '';
         input.value = '';
+        autosizeInput();
         try {
             localStorage.removeItem(LS_HISTORY);
             localStorage.removeItem(LS_DRAFT);
@@ -572,14 +749,16 @@ if ($ventasWebModulesBase === null) {
     });
 
     loadHistory();
-    renderVentasChips();
+    renderVentasFaqSelect();
 
     let sendInFlight = false;
     async function sendMessage() {
         const text = input.value.trim();
         if (!text || sendInFlight) return;
+        finalizeStreamingAssistantIfAny();
         errEl.hidden = true;
         input.value = '';
+        autosizeInput();
         try { localStorage.removeItem(LS_DRAFT); } catch (e) { /* ignore */ }
         append('user', text);
         history.push({ role: 'user', content: text });
@@ -602,7 +781,7 @@ if ($ventasWebModulesBase === null) {
             history.push({ role: 'assistant', content: reply });
             saveHistory();
             if (!trimHistory()) {
-                append('assistant', reply);
+                append('assistant', reply, { streamAssistant: true });
             }
         } catch (e) {
             const errMsg = String(e.message || e).toLowerCase();

@@ -61,21 +61,33 @@ $pdfName = 'resumen_ventasgeneral_' . $d1 . '_' . $d2 . '.pdf';
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Tabla · Resumen ventasgeneral</title>
+    <script>
+    (function () {
+        function readCookieTheme() {
+            try {
+                var m = document.cookie.match(/(?:^|; )ix2-theme=([^;]*)/);
+                return m ? decodeURIComponent(m[1]).toLowerCase().trim() : '';
+            } catch (e) { return ''; }
+        }
+        var mode = readCookieTheme() || (function () { try { return localStorage.getItem('ix2-theme'); } catch (e) { return null; } })();
+        if (mode !== 'dark' && mode !== 'light') {
+            mode = (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+        }
+        var d = document.documentElement;
+        d.setAttribute('data-theme', mode);
+        d.style.colorScheme = mode === 'dark' ? 'dark' : 'light';
+    })();
+    </script>
+    <link rel="stylesheet" href="../assets/css/app.css">
     <style>
-        body { font-family: system-ui, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
-        header { padding: 1rem 1.25rem; background: linear-gradient(135deg, #1d4ed8, #6d28d9); }
-        h1 { margin: 0; font-size: 1.1rem; font-weight: 600; }
-        .meta { margin: 0.35rem 0 0; font-size: 0.85rem; opacity: 0.9; }
-        main { padding: 1rem; max-width: 900px; margin: 0 auto; }
-        .wrap-dark { background: #1e293b; border-radius: 12px; padding: 1rem; border: 1px solid #334155; }
+        body { margin: 0; background: var(--bg, #0f172a); color: var(--text, #e2e8f0); }
+        main { padding: 1rem; max-width: 980px; margin: 0 auto; }
+        .wrap-dark { background: var(--surface, #1e293b); border-radius: 12px; padding: 1rem; border: 1px solid var(--border, #334155); }
+        .wrap-dark .pdf-meta { color: var(--muted, #a1a1aa); }
     </style>
     <?php ventas_reporte_tabla_styles(); ?>
 </head>
 <body>
-    <header>
-        <h1>Reporte tabular — Resumen agregado ventasgeneral</h1>
-        <p class="meta"><?= htmlspecialchars($d1, ENT_QUOTES, 'UTF-8') ?> a <?= htmlspecialchars($d2, ENT_QUOTES, 'UTF-8') ?></p>
-    </header>
     <main>
         <div class="wrap-dark">
             <div class="reporte-toolbar">
@@ -87,6 +99,7 @@ $pdfName = 'resumen_ventasgeneral_' . $d1 . '_' . $d2 . '.pdf';
                 <table>
                     <thead>
                         <tr>
+                            <th>N°</th>
                             <th>Filas</th>
                             <th>Suma Valor</th>
                             <th>Suma Cantidad</th>
@@ -95,6 +108,7 @@ $pdfName = 'resumen_ventasgeneral_' . $d1 . '_' . $d2 . '.pdf';
                     </thead>
                     <tbody>
                         <tr>
+                            <td>1</td>
                             <td><?= htmlspecialchars((string) ($row['filas'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= number_format((float) ($row['suma_valor'] ?? 0), 2, '.', ',') ?></td>
                             <td><?= htmlspecialchars((string) ($row['suma_cantidad'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>

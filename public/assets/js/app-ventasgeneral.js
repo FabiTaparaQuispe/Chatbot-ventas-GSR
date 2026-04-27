@@ -26,6 +26,82 @@
         return { desde: '', hasta: '' };
     }
 
+    /** YYYY-MM → último día del mes (YYYY-MM-DD) */
+    function lastDayOfCalendarMonth(ym) {
+        var s = String(ym || '').trim();
+        if (!/^\d{4}-\d{2}$/.test(s)) return '';
+        var parts = s.split('-');
+        var y = parseInt(parts[0], 10);
+        var mo = parseInt(parts[1], 10);
+        var last = new Date(y, mo, 0).getDate();
+        return s + '-' + String(last).padStart(2, '0');
+    }
+
+    function syncPeriodoUI() {
+        var mode = String($('#vgPeriodo').val() || 'todos').trim();
+        $('#vgWrapDesde, #vgWrapHasta, #vgWrapMes, #vgWrapMesDesde, #vgWrapMesHasta').addClass('hidden');
+        if (mode === 'todos') {
+            return;
+        }
+        if (mode === 'por_fecha') {
+            $('#vgWrapDesde').removeClass('hidden');
+            $('#lblVgDesde').text('Fecha');
+            return;
+        }
+        if (mode === 'entre_fechas') {
+            $('#vgWrapDesde, #vgWrapHasta').removeClass('hidden');
+            $('#lblVgDesde').text('Desde');
+            return;
+        }
+        if (mode === 'por_mes') {
+            $('#vgWrapMes').removeClass('hidden');
+            return;
+        }
+        if (mode === 'entre_meses') {
+            $('#vgWrapMesDesde, #vgWrapMesHasta').removeClass('hidden');
+        }
+    }
+
+    /** Convierte el modo Período + inputs visibles en desde/hasta para la API */
+    function resolvedDateFilter() {
+        var mode = String($('#vgPeriodo').val() || 'todos').trim();
+        var dDesde = String($('#vgDesde').val() || '').trim();
+        var dHasta = String($('#vgHasta').val() || '').trim();
+        var mes = String($('#vgMes').val() || '').trim();
+        var mesDesde = String($('#vgMesDesde').val() || '').trim();
+        var mesHasta = String($('#vgMesHasta').val() || '').trim();
+
+        if (mode === 'todos') {
+            return { desde: '', hasta: '' };
+        }
+        if (mode === 'por_fecha') {
+            if (!dDesde) return { desde: '', hasta: '' };
+            return { desde: dDesde, hasta: dDesde };
+        }
+        if (mode === 'entre_fechas') {
+            if (dDesde && dHasta && dDesde > dHasta) {
+                return { desde: dHasta, hasta: dDesde };
+            }
+            return { desde: dDesde, hasta: dHasta };
+        }
+        if (mode === 'por_mes') {
+            if (!mes) return { desde: '', hasta: '' };
+            return { desde: mes + '-01', hasta: lastDayOfCalendarMonth(mes) };
+        }
+        if (mode === 'entre_meses') {
+            if (!mesDesde || !mesHasta) return { desde: '', hasta: '' };
+            var a = mesDesde;
+            var b = mesHasta;
+            if (a > b) {
+                var t = a;
+                a = b;
+                b = t;
+            }
+            return { desde: a + '-01', hasta: lastDayOfCalendarMonth(b) };
+        }
+        return { desde: dDesde, hasta: dHasta };
+    }
+
     function toggleFiltros() {
         var contenido = document.getElementById('contenidoFiltrosDemo');
         var icono = document.getElementById('iconoFiltrosDemo');
@@ -47,9 +123,10 @@
     var iconosBound = false;
 
     function currentFiltros() {
+        var dr = resolvedDateFilter();
         return {
-            desde: ($('#vgDesde').val() || '').trim(),
-            hasta: ($('#vgHasta').val() || '').trim(),
+            desde: dr.desde,
+            hasta: dr.hasta,
             nombre: ($('#vgNombre').val() || '').trim(),
             numero_doc: ($('#vgDoc').val() || '').trim(),
         };
@@ -71,7 +148,7 @@
         var rows = table.rows({ page: 'current' }).data().toArray();
         rows.forEach(function (row, idx) {
             var num = info.start + idx + 1;
-            var id = row[0] != null ? String(row[0]) : '';
+            var nro = row[0] != null ? String(row[0]) : '';
             var fecha = row[1] != null ? String(row[1]) : '';
             var codCliente = row[2] != null ? String(row[2]) : '';
             var cliente = row[3] != null ? String(row[3]) : '';
@@ -88,31 +165,31 @@
                 num +
                 '</div>' +
                 '<div class="card-campos">' +
-                '<div class="card-row"><span class="label">id</span><span>' +
-                escapeHtml(id) +
+                '<div class="card-row"><span class="label">N°</span><span>' +
+                escapeHtml(nro) +
                 '</span></div>' +
-                '<div class="card-row"><span class="label">Fecha</span><span>' +
+                '<div class="card-row"><span class="label">Fecha contable</span><span>' +
                 escapeHtml(fecha) +
                 '</span></div>' +
-                '<div class="card-row"><span class="label">CodCliente</span><span>' +
+                '<div class="card-row"><span class="label">Código cliente</span><span>' +
                 escapeHtml(codCliente) +
                 '</span></div>' +
-                '<div class="card-row"><span class="label">Cliente</span><span>' +
+                '<div class="card-row"><span class="label">Nombre cliente</span><span>' +
                 escapeHtml(cliente) +
                 '</span></div>' +
-                '<div class="card-row"><span class="label">Doc</span><span>' +
+                '<div class="card-row"><span class="label">Nº documento</span><span>' +
                 escapeHtml(doc) +
                 '</span></div>' +
-                '<div class="card-row"><span class="label">Ítem</span><span>' +
+                '<div class="card-row"><span class="label">Código ítem</span><span>' +
                 escapeHtml(item) +
                 '</span></div>' +
-                '<div class="card-row"><span class="label">Cant</span><span>' +
+                '<div class="card-row"><span class="label">Cantidad</span><span>' +
                 escapeHtml(cant) +
                 '</span></div>' +
-                '<div class="card-row"><span class="label">Valor</span><span>' +
+                '<div class="card-row"><span class="label">Importe</span><span>' +
                 escapeHtml(valor) +
                 '</span></div>' +
-                '<div class="card-row"><span class="label">Zona</span><span>' +
+                '<div class="card-row"><span class="label">Zona comercial</span><span>' +
                 escapeHtml(zona) +
                 '</span></div>' +
                 '</div>' +
@@ -284,16 +361,29 @@
         var r = defaultRange();
         $('#vgDesde').val(r.desde);
         $('#vgHasta').val(r.hasta);
+        $('#vgPeriodo').val('todos');
+        $('#vgMes').val('');
+        $('#vgMesDesde').val('');
+        $('#vgMesHasta').val('');
+        syncPeriodoUI();
+        $('#vgPeriodo').on('change', function () {
+            syncPeriodoUI();
+        });
 
         $('#btnToggleFiltrosDemo').on('click', toggleFiltros);
         $('#btnFiltrarVentas').on('click', function () {
             applyAndReload(true);
         });
         $('#btnLimpiarVentas').on('click', function () {
+            $('#vgPeriodo').val('todos');
             $('#vgDesde').val('');
             $('#vgHasta').val('');
+            $('#vgMes').val('');
+            $('#vgMesDesde').val('');
+            $('#vgMesHasta').val('');
             $('#vgNombre').val('');
             $('#vgDoc').val('');
+            syncPeriodoUI();
             applyAndReload(true);
         });
 
