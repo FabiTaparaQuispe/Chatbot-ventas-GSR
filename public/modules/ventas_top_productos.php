@@ -54,32 +54,25 @@ $pdfName = 'top_productos_' . $desde . '_' . $hasta . '.pdf';
     <link rel="stylesheet" href="../assets/css/app.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
     <style>
-        body { font-family: system-ui, sans-serif; margin: 0; background: var(--bg, #0f172a); color: var(--text, #e2e8f0); }
-        header { padding: 1rem 1.25rem; background: linear-gradient(135deg, #1d4ed8, #6d28d9); }
-        h1 { margin: 0; font-size: 1.1rem; }
-        .meta { margin: 0.35rem 0 0; font-size: 0.85rem; opacity: 0.9; }
-        main { padding: 1rem; max-width: 1100px; margin: 0 auto; }
-        .chart-wrap { margin-bottom: 1rem; }
+        body { margin: 0; }
     </style>
     <?php ventas_reporte_tabs_styles(); ?>
     <?php ventas_reporte_tabla_styles(); ?>
 </head>
 <body>
-    <header><h1>Top productos por SUM(Valor)</h1>
-        <p class="meta"><?= htmlspecialchars($desde, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars($hasta, ENT_QUOTES, 'UTF-8') ?> · Top <?= (int) $top ?></p></header>
-    <main>
-        <div class="chart-wrap" data-ventas-tabs>
-            <div class="reporte-tabs">
-                <div class="reporte-tab-bar">
-                    <button type="button" class="reporte-tab is-active">Tabla</button>
-                    <button type="button" class="reporte-tab">Gráfico</button>
-                </div>
-                <div class="reporte-tab-panel is-active" data-panel="0">
-                    <div class="reporte-toolbar"><button type="button" class="btn-pdf" id="btn-pdf">Descargar PDF</button></div>
-                    <div id="reporte-pdf-root">
-                        <h2 class="pdf-h2">Top productos</h2>
-                        <table>
-                            <thead><tr><th>#</th><th>CodItem</th><th>Glosa</th><th>Líneas</th><th>SUM(Valor)</th><th>Cantidad</th></tr></thead>
+    <main class="reporte-modulo-main">
+        <div class="reporte-page">
+            <div class="page-head">
+                <h1>Top productos por importe (SUM Valor)</h1>
+                <p class="reporte-inline-meta"><?= htmlspecialchars($desde, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars($hasta, ENT_QUOTES, 'UTF-8') ?> · Top <?= (int) $top ?></p>
+            </div>
+            <div class="tabla-listado-wrapper">
+                <div class="reporte-toolbar"><button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button></div>
+                <div id="reporte-pdf-root">
+                    <h2 class="pdf-h2">Top productos</h2>
+                    <div class="table-wrapper overflow-x-auto productos-dt-skin">
+                        <table class="data-table config-table display stripe">
+                            <thead><tr><th>N°</th><th>Código ítem</th><th>Descripción</th><th>Líneas</th><th>Importe</th><th>Cantidad</th></tr></thead>
                             <tbody>
                                 <?php $i = 0; foreach ($data['filas'] as $f) { $i++; ?>
                                 <tr>
@@ -95,14 +88,16 @@ $pdfName = 'top_productos_' . $desde . '_' . $hasta . '.pdf';
                         </table>
                     </div>
                 </div>
-                <div class="reporte-tab-panel chart-panel" data-panel="1"><div class="chart-inner"><canvas id="ch"></canvas></div></div>
             </div>
+            <section class="reporte-chart-section" aria-label="Gráfico">
+                <h3 class="reporte-chart-heading">Gráfico</h3>
+                <div class="chart-inner"><canvas id="ch"></canvas></div>
+            </section>
         </div>
     </main>
     <script>
     (function () {
         var payload = <?= $chartJson !== false ? $chartJson : '{}' ?>;
-        var root = document.querySelector('[data-ventas-tabs]');
         var chart = null;
 
         var PALETTE = [
@@ -195,7 +190,14 @@ $pdfName = 'top_productos_' . $desde . '_' . $hasta . '.pdf';
                 document.documentElement.style.colorScheme = mode === 'dark' ? 'dark' : 'light';
             } catch (e) {}
         }
-        if (root) root.addEventListener('ventas-reporte-tab', function (ev) { if (ev.detail && ev.detail.index === 1) build(); });
+        function bootChart() {
+            build();
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', bootChart);
+        } else {
+            bootChart();
+        }
         window.addEventListener('storage', function (ev) {
             if (!ev || ev.key !== 'ix2-theme') return;
             var mode = (ev.newValue === 'dark' || ev.newValue === 'light') ? ev.newValue : null;

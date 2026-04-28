@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/DocumentoTipoEtiqueta.php';
+
 /**
  * Añade al texto del asistente un resumen numerado desde el JSON de la última herramienta
  * cuando el modelo solo devuelve el enlace al gráfico (o casi).
@@ -353,9 +355,10 @@ final class ChatReplyEnricher
                 continue;
             }
             $t = (string) ($row['tdoc'] ?? '');
+            $label = DocumentoTipoEtiqueta::etiqueta($t);
             $ln = (int) ($row['lineas'] ?? 0);
             $v = self::fmtNum($row['suma_valor'] ?? 0);
-            $out[] = "{$i}. TDoc {$t}: {$ln} líneas, suma Valor " . $v;
+            $out[] = "{$i}. {$label}: {$ln} líneas, suma Valor " . $v;
             $i++;
             if ($i > 25) {
                 break;

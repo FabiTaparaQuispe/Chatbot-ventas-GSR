@@ -78,50 +78,54 @@ $pdfName = 'pareto_clientes_' . preg_replace('/[^a-zA-Z0-9_-]+/', '_', $data['pr
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= $pageTitle ?></title>
+    <script>
+    (function () {
+        try {
+            var m = document.cookie.match(/(?:^|; )ix2-theme=([^;]*)/);
+            var mode = m ? decodeURIComponent(m[1]).toLowerCase().trim() : '';
+            if (mode !== 'dark' && mode !== 'light') mode = localStorage.getItem('ix2-theme') || '';
+            if (mode !== 'dark' && mode !== 'light') mode = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', mode);
+            document.documentElement.style.colorScheme = mode === 'dark' ? 'dark' : 'light';
+        } catch (e) {}
+    })();
+    </script>
+    <link rel="stylesheet" href="../assets/css/app.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
     <style>
-        body { font-family: system-ui, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
-        header { padding: 1rem 1.25rem; background: linear-gradient(135deg, #1d4ed8, #6d28d9); }
-        h1 { margin: 0; font-size: 1.1rem; font-weight: 600; }
-        .meta { margin: 0.35rem 0 0; font-size: 0.85rem; opacity: 0.9; }
-        main { padding: 1rem; max-width: 1100px; margin: 0 auto; }
-        .chart-wrap { margin-bottom: 1rem; }
+        body { margin: 0; }
         canvas { max-height: 70vh; }
     </style>
     <?php ventas_reporte_tabs_styles(); ?>
     <?php ventas_reporte_tabla_styles(); ?>
 </head>
 <body>
-    <header>
-        <h1>Top clientes por Valor — zona <?= htmlspecialchars($data['prefijo_descri_zona_precio'], ENT_QUOTES, 'UTF-8') ?></h1>
-        <p class="meta">ventasgeneral · <?= htmlspecialchars($desde, ENT_QUOTES, 'UTF-8') ?> a <?= htmlspecialchars($hasta, ENT_QUOTES, 'UTF-8') ?>
-            · Total SUM(Valor) en zona: <?= number_format((float) $data['total_valor_zona'], 2, '.', ',') ?>
-            · Top <?= (int) $top ?></p>
-    </header>
-    <main>
-        <div class="chart-wrap" data-ventas-tabs>
-            <div class="reporte-tabs">
-                <div class="reporte-tab-bar">
-                    <button type="button" class="reporte-tab is-active">Tabla</button>
-                    <button type="button" class="reporte-tab">Gráfico</button>
+    <main class="reporte-modulo-main">
+        <div class="reporte-page">
+            <div class="page-head">
+                <h1>Top clientes por importe — zona <?= htmlspecialchars($data['prefijo_descri_zona_precio'], ENT_QUOTES, 'UTF-8') ?></h1>
+                <p class="reporte-inline-meta"><?= htmlspecialchars($desde, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars($hasta, ENT_QUOTES, 'UTF-8') ?>
+                    · Total en zona: <?= number_format((float) $data['total_valor_zona'], 2, '.', ',') ?>
+                    · Top <?= (int) $top ?></p>
+            </div>
+            <div class="tabla-listado-wrapper">
+                <div class="reporte-toolbar">
+                    <button type="button" class="btn btn-primary" id="btn-pdf-clientes-inline">Descargar PDF</button>
                 </div>
-                <div class="reporte-tab-panel is-active" data-panel="0">
-                    <div class="reporte-toolbar">
-                        <button type="button" class="btn-pdf" id="btn-pdf-clientes-inline">Descargar PDF</button>
-                    </div>
-                    <div id="reporte-pdf-root">
-                        <h2 class="pdf-h2">Ranking de clientes por SUM(Valor)</h2>
-                        <p class="pdf-meta">DescriZonaPrecio LIKE <?= htmlspecialchars($data['prefijo_descri_zona_precio'], ENT_QUOTES, 'UTF-8') ?>% · <?= htmlspecialchars($desde, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars($hasta, ENT_QUOTES, 'UTF-8') ?></p>
-                        <table>
+                <div id="reporte-pdf-root">
+                    <h2 class="pdf-h2">Ranking de clientes (importe en zona)</h2>
+                    <p class="pdf-meta">Zona precio con prefijo <?= htmlspecialchars($data['prefijo_descri_zona_precio'], ENT_QUOTES, 'UTF-8') ?> · <?= htmlspecialchars($desde, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars($hasta, ENT_QUOTES, 'UTF-8') ?></p>
+                    <div class="table-wrapper overflow-x-auto productos-dt-skin">
+                        <table class="data-table config-table display stripe">
                             <thead>
                                 <tr>
-                                    <th>#</th>
-                                    <th>Cod. cliente</th>
+                                    <th>N°</th>
+                                    <th>Cód. cliente</th>
                                     <th>Nombre cliente</th>
-                                    <th>SUM(Valor)</th>
+                                    <th>Importe</th>
                                     <th>Líneas</th>
-                                    <th>% zona</th>
-                                    <th>% acum.</th>
+                                    <th>% en zona</th>
+                                    <th>% acumulado</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -140,18 +144,18 @@ $pdfName = 'pareto_clientes_' . preg_replace('/[^a-zA-Z0-9_-]+/', '_', $data['pr
                         </table>
                     </div>
                 </div>
-                <div class="reporte-tab-panel chart-panel" data-panel="1">
-                    <div class="chart-inner">
-                        <canvas id="paretoChart" aria-label="Gráfico Pareto clientes"></canvas>
-                    </div>
-                </div>
             </div>
+            <section class="reporte-chart-section" aria-label="Gráfico">
+                <h3 class="reporte-chart-heading">Gráfico</h3>
+                <div class="chart-inner">
+                    <canvas id="paretoChart" aria-label="Gráfico Pareto clientes"></canvas>
+                </div>
+            </section>
         </div>
     </main>
     <script>
     (function () {
         var payload = <?= $chartJson !== false ? $chartJson : '{}' ?>;
-        var root = document.querySelector('[data-ventas-tabs]');
         var created = false;
         function buildChart() {
             if (created || !window.Chart) return;
@@ -230,10 +234,10 @@ $pdfName = 'pareto_clientes_' . preg_replace('/[^a-zA-Z0-9_-]+/', '_', $data['pr
             });
             created = true;
         }
-        if (root) {
-            root.addEventListener('ventas-reporte-tab', function (ev) {
-                if (ev.detail && ev.detail.index === 1) buildChart();
-            });
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', buildChart);
+        } else {
+            buildChart();
         }
     })();
     </script>

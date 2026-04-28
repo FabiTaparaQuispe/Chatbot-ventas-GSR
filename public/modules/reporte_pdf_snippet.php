@@ -9,79 +9,54 @@ function ventas_reporte_tabla_styles(): void
 {
     echo <<<'CSS'
 <style>
-    .reporte-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin: 0 0 1rem; }
-    .reporte-toolbar a, .reporte-toolbar button {
-        font: inherit; font-size: 0.875rem; padding: 0.45rem 0.85rem; border-radius: 8px; cursor: pointer;
-        text-decoration: none; border: 1px solid #475569; background: #334155; color: #e2e8f0;
+    .reporte-modulo-main { padding: 1rem; max-width: 1100px; margin: 0 auto; }
+    .page-head .reporte-inline-meta { margin: 0.35rem 0 0; color: var(--muted, #64748b); font-size: 0.9rem; line-height: 1.45; }
+    .reporte-toolbar { display: flex; flex-wrap: wrap; gap: 0.65rem; align-items: center; margin: 0 0 1rem; }
+    #reporte-pdf-root { color: var(--text, #0f172a); }
+    #reporte-pdf-root h2.pdf-h2 { margin: 0 0 0.5rem; font-size: 1rem; font-weight: 700; color: var(--text, #0f172a); letter-spacing: -0.02em; }
+    #reporte-pdf-root .pdf-meta { font-size: 0.82rem; color: var(--muted, #64748b); margin: 0 0 0.85rem; line-height: 1.45; }
+    #reporte-pdf-root table.data-table { font-size: 0.86rem; }
+    #reporte-pdf-root table.data-table tbody td {
+        padding: 0.65rem 0.85rem;
+        border-bottom: 1px solid var(--border, #e2e8f0);
+        vertical-align: top;
     }
-    .reporte-toolbar a:hover, .reporte-toolbar button:hover { background: #3b82f6; border-color: #2563eb; color: #fff; }
-    .reporte-toolbar .btn-pdf { background: #b91c1c; border-color: #991b1b; color: #fff; }
-    .reporte-toolbar .btn-pdf:hover { background: #dc2626; border-color: #b91c1c; }
-    #reporte-pdf-root { background: #fff; color: #0f172a; padding: 1rem 1.25rem; border-radius: 8px; }
-    #reporte-pdf-root h2.pdf-h2 { margin: 0 0 0.5rem; font-size: 1rem; color: #0f172a; }
-    #reporte-pdf-root .pdf-meta { font-size: 0.8rem; color: #475569; margin-bottom: 0.75rem; }
-    #reporte-pdf-root table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
-    #reporte-pdf-root th, #reporte-pdf-root td { border: 1px solid #cbd5e1; padding: 0.35rem 0.45rem; text-align: left; vertical-align: top; }
-    #reporte-pdf-root th { background: #e2e8f0; font-weight: 600; }
-    #reporte-pdf-root tr:nth-child(even) { background: #f8fafc; }
+    #reporte-pdf-root table.data-table tbody tr:nth-child(even) { background: var(--row-alt, #f8fafc); }
+    html[data-theme="dark"] #reporte-pdf-root table.data-table tbody tr:nth-child(even) { background: var(--row-alt, #27272a); }
 </style>
 CSS;
 }
 
+/** Layout de reportes embebidos / links del chat: sin cintón de pestañas ni marco oscuro. */
 function ventas_reporte_tabs_styles(): void
 {
     echo <<<'CSS'
 <style>
-    .reporte-tabs { background: #1e293b; border-radius: 12px; border: 1px solid #334155; overflow: hidden; }
-    .reporte-tab-bar { display: flex; gap: 0; border-bottom: 1px solid #334155; background: #0f172a; }
-    .reporte-tab {
-        flex: 1; max-width: 220px; padding: 0.65rem 1rem; border: none; background: transparent; color: #94a3b8;
-        cursor: pointer; font: inherit; font-size: 0.9rem; border-bottom: 3px solid transparent;
+    .reporte-page { display: flex; flex-direction: column; gap: 1.25rem; }
+    .reporte-chart-section {
+        background: var(--surface, #fff);
+        border: 1px solid var(--border, #e2e8f0);
+        border-radius: 0.75rem;
+        box-shadow: var(--shadow-soft, 0 4px 24px rgba(15, 23, 42, 0.06));
+        padding: 1rem 1.25rem 1.15rem;
     }
-    .reporte-tab:hover { color: #e2e8f0; }
-    .reporte-tab.is-active { color: #fff; border-bottom-color: #3b82f6; background: #1e293b; }
-    .reporte-tab-panel { display: none; padding: 1rem; }
-    .reporte-tab-panel.is-active { display: block; }
-    .reporte-tab-panel.chart-panel { min-height: 280px; }
+    .reporte-chart-heading {
+        margin: 0 0 0.75rem;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text, #0f172a);
+        letter-spacing: -0.01em;
+    }
     .chart-inner { position: relative; height: min(55vh, 420px); }
 </style>
 CSS;
 }
 
+/** Antes: pestañas Tabla/Gráfico. Ahora el gráfico se monta al cargar; se deja función vacía por compatibilidad. */
 function ventas_reporte_tabs_script(): void
 {
     echo <<<'JS'
-<script>
-(function () {
-    function init(root) {
-        var tabs = [].slice.call(root.querySelectorAll('.reporte-tab'));
-        var panels = [].slice.call(root.querySelectorAll('.reporte-tab-panel'));
-        function show(i) {
-            var n = tabs.length;
-            if (n === 0) return;
-            if (i < 0 || i >= n) i = 0;
-            tabs.forEach(function (t, ix) { t.classList.toggle('is-active', ix === i); });
-            panels.forEach(function (p, ix) { p.classList.toggle('is-active', ix === i); });
-            try {
-                root.dispatchEvent(new CustomEvent('ventas-reporte-tab', { detail: { index: i } }));
-            } catch (e) {}
-        }
-        tabs.forEach(function (t, i) {
-            t.addEventListener('click', function () { show(i); });
-        });
-        var start = 0;
-        try {
-            if (location.hash === '#grafico') start = 1;
-            var sp = new URLSearchParams(location.search);
-            if (sp.get('tab') === '1') start = 1;
-        } catch (e) {}
-        show(start);
-    }
-    document.addEventListener('DOMContentLoaded', function () {
-        document.querySelectorAll('[data-ventas-tabs]').forEach(init);
-    });
-})();
-</script>
+<script>/* reportes: layout apilado; sin init de pestañas */</script>
 JS;
 }
 

@@ -76,40 +76,47 @@ $pdfName = 'ventas_comparativo_' . $dim . '.pdf';
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Comparativo ventas</title>
+    <script>
+    (function () {
+        function readCookieTheme() {
+            try {
+                var m = document.cookie.match(/(?:^|; )ix2-theme=([^;]*)/);
+                return m ? decodeURIComponent(m[1]).toLowerCase().trim() : '';
+            } catch (e) { return ''; }
+        }
+        var mode = readCookieTheme() || (function () { try { return localStorage.getItem('ix2-theme'); } catch (e) { return null; } })();
+        if (mode !== 'dark' && mode !== 'light') {
+            mode = (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+        }
+        var d = document.documentElement;
+        d.setAttribute('data-theme', mode);
+        d.style.colorScheme = mode === 'dark' ? 'dark' : 'light';
+    })();
+    </script>
+    <link rel="stylesheet" href="../assets/css/app.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
     <style>
-        body { font-family: system-ui, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
-        header { padding: 1rem 1.25rem; background: linear-gradient(135deg, #1d4ed8, #6d28d9); }
-        h1 { margin: 0; font-size: 1.1rem; font-weight: 600; }
-        .meta { margin: 0.35rem 0 0; font-size: 0.82rem; opacity: 0.9; }
-        main { padding: 1rem; max-width: 1100px; margin: 0 auto; }
-        .chart-wrap { margin-bottom: 1rem; }
+        body { margin: 0; }
     </style>
     <?php ventas_reporte_tabs_styles(); ?>
     <?php ventas_reporte_tabla_styles(); ?>
 </head>
 <body>
-    <header>
-        <h1>Comparativo SUM(Valor) por <?= htmlspecialchars($dimLabel, ENT_QUOTES, 'UTF-8') ?></h1>
-        <p class="meta">A: <?= htmlspecialchars($a1, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars($a2, ENT_QUOTES, 'UTF-8') ?>
-            &nbsp;|&nbsp; B: <?= htmlspecialchars($b1, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars($b2, ENT_QUOTES, 'UTF-8') ?></p>
-    </header>
-    <main>
-        <div class="chart-wrap" data-ventas-tabs>
-            <div class="reporte-tabs">
-                <div class="reporte-tab-bar">
-                    <button type="button" class="reporte-tab is-active">Tabla</button>
-                    <button type="button" class="reporte-tab">Gráfico</button>
-                </div>
-                <div class="reporte-tab-panel is-active" data-panel="0">
-                    <div class="reporte-toolbar">
-                        <button type="button" class="btn-pdf" id="btn-pdf">Descargar PDF</button>
-                    </div>
-                    <div id="reporte-pdf-root">
-                        <h2 class="pdf-h2">Comparativo por <?= htmlspecialchars($dimLabel, ENT_QUOTES, 'UTF-8') ?></h2>
-                        <table>
+    <main class="reporte-modulo-main">
+        <div class="reporte-page">
+            <div class="page-head">
+                <h1>Comparativo importe (SUM Valor) por <?= htmlspecialchars($dimLabel, ENT_QUOTES, 'UTF-8') ?></h1>
+                <p class="reporte-inline-meta">Periodo A: <?= htmlspecialchars($a1, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars($a2, ENT_QUOTES, 'UTF-8') ?>
+                    · Periodo B: <?= htmlspecialchars($b1, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars($b2, ENT_QUOTES, 'UTF-8') ?></p>
+            </div>
+            <div class="tabla-listado-wrapper">
+                <div class="reporte-toolbar"><button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button></div>
+                <div id="reporte-pdf-root">
+                    <h2 class="pdf-h2">Comparativo por <?= htmlspecialchars($dimLabel, ENT_QUOTES, 'UTF-8') ?></h2>
+                    <div class="table-wrapper overflow-x-auto productos-dt-skin">
+                        <table class="data-table config-table display stripe">
                             <thead>
-                                <tr><th>#</th><th>Etiqueta</th><th>Valor A</th><th>Valor B</th><th>Delta (B−A)</th></tr>
+                                <tr><th>N°</th><th>Etiqueta</th><th>Importe periodo A</th><th>Importe periodo B</th><th>Diferencia (B − A)</th></tr>
                             </thead>
                             <tbody>
                                 <?php $i = 0; foreach ($data['filas'] as $f) { $i++; ?>
@@ -125,16 +132,16 @@ $pdfName = 'ventas_comparativo_' . $dim . '.pdf';
                         </table>
                     </div>
                 </div>
-                <div class="reporte-tab-panel chart-panel" data-panel="1">
-                    <div class="chart-inner"><canvas id="ch"></canvas></div>
-                </div>
             </div>
+            <section class="reporte-chart-section" aria-label="Gráfico">
+                <h3 class="reporte-chart-heading">Gráfico</h3>
+                <div class="chart-inner"><canvas id="ch"></canvas></div>
+            </section>
         </div>
     </main>
     <script>
     (function () {
         var payload = <?= $chartJson !== false ? $chartJson : '{}' ?>;
-        var root = document.querySelector('[data-ventas-tabs]');
         var done = false;
         function build() {
             if (done || !window.Chart) return;
@@ -161,7 +168,11 @@ $pdfName = 'ventas_comparativo_' . $dim . '.pdf';
             });
             done = true;
         }
-        if (root) root.addEventListener('ventas-reporte-tab', function (ev) { if (ev.detail && ev.detail.index === 1) build(); });
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', build);
+        } else {
+            build();
+        }
     })();
     </script>
     <?php ventas_reporte_tabs_script(); ?>

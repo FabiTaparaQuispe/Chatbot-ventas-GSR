@@ -4,7 +4,6 @@ declare(strict_types=1);
 $pageTitle = $pageTitle ?? 'Inicio';
 $bodyClass = trim('app-shell ' . ($bodyClass ?? ''));
 $loadVentasAssets = $loadVentasAssets ?? false;
-$loadCharts = $loadCharts ?? false;
 
 // Base URL para soportar acceso vía /<proyecto>/ (sin /public/ en la URL).
 $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? '/index.php'));
