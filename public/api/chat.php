@@ -63,7 +63,9 @@ $system = [
         . 'Solo usa ventasgeneral_top_clientes_nota_credito si el usuario pide explícitamente notas de crédito, NC, TDoc=07, devoluciones o anulaciones. '
         . 'Si hay filas de ranking/top, escribe primero la lista numerada (1. nombre: N notas, valor X) y al final UNA líneacon reporte_url; no respondas solo con el gráfico ni repitas el mismo párrafo. '
         . 'Mapeo breve: más NC por cliente → ventasgeneral_top_clientes_nota_credito; URL gráfico ventas_top_clientes_nc.php?desde=&hasta=&top= (no inventes ventasgeneral_top_clientes_nc). pareto NC por zona → ventasgeneral_pareto_nc_zonaprecio (pareto_nc_zona.php, no por cliente); top compra global → ventasgeneral_top_clientes_globales; top por zona precio → ventasgeneral_top_clientes_zona_precio; barras dim → ventasgeneral_barras_ventas_dimension; comparativo 2 periodos → ventasgeneral_comparativo_periodos; productos → ventasgeneral_top_productos; mix TDoc → ventasgeneral_mix_tdoc; ruta/corp → ventasgeneral_barras_ruta_comercial / ventasgeneral_barras_corporativo; serie mensual → ventasgeneral_serie_mensual_valor; proyección ventas → ventasgeneral_proyeccion_ventas; líneas sueltas → ventasgeneral_buscar; totales → ventasgeneral_resumen. '
-        . 'Un reporte_url por respuesta, copiado tal cual en UNA sola línea (no partas fechas YYYY-MM-DD ni la URL; sin backticks). Resumen/buscar: *_tabla.php. Opcional #grafico. Español, breve.',
+        . 'Un reporte_url por respuesta, copiado tal cual en UNA sola línea (no partas fechas YYYY-MM-DD ni la URL; sin backticks). Resumen/buscar: *_tabla.php. Opcional #grafico. '
+        . 'Moneda en texto para el usuario: importes en soles peruanos con prefijo S/ (ej. S/ 1,234,567.89). No uses el símbolo de dólar ($) ni la etiqueta USD para montos. '
+        . 'Español, breve.',
 ];
 
 $sanitized = [];

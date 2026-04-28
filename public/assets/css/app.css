@@ -427,6 +427,13 @@ html[data-theme="dark"] .ventas-chat-msg.assistant .ventas-chat-msg-body {
     background: var(--surface-2);
 }
 
+.ventas-chat-sql-block {
+    margin-top: 0.65rem;
+    padding-top: 0.65rem;
+    border-top: 1px dashed var(--border);
+    opacity: 0.95;
+}
+
 .ventas-chat-msg--streaming .ventas-chat-msg-body {
     min-height: 1.35em;
 }

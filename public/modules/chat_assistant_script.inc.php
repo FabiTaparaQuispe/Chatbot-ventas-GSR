@@ -617,11 +617,20 @@ declare(strict_types=1);
         return path;
     }
 
+    /** Montos mostrados como soles (S/), no dólares ($), en la vista del chat. */
+    function formatImportesSoles(text) {
+        let s = String(text || '');
+        // $ 1,234.56 o $1234567.89 (evita tocar URLs: no hay espacio tras $ en http)
+        s = s.replace(/\$\s*([\d]{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)/g, 'S/ $1');
+        return s;
+    }
+
     function linkifyAssistant(text) {
         let t = normalizeTextForLinkify(text);
         t = unwrapBackticksAroundPhpUrls(t);
         t = collapseDateLineBreaks(t);
         t = collapseMultilineQueryUrls(t);
+        t = formatImportesSoles(t);
         const re = /(https?:\/\/[^\s<]+|sql_texto\.php\?[^\s<]+|(?:pareto_nc_zona|pareto_clientes_zona)(?:_tabla)?\.php\?[^\s<]+|ventasgeneral_top_clientes_nc\.php\?[^\s<]+|ventasgeneral_top_clientes_zona_precio\.php\?[^\s<]+|ventas_(?:barras_dimension|comparativo|top_productos|top_clientes_global|top_clientes_nc|mix_tdoc|barras_ruta|barras_corporativo|serie_mensual)\.php\?[^\s<]+|ventasgeneral_(?:buscar|resumen)(?:_tabla)?\.php\?[^\s<]+)/gi;
         const out = [];
         let last = 0;
@@ -640,11 +649,51 @@ declare(strict_types=1);
         return out.join('');
     }
 
+    function splitAssistantAnswerAndSql(fullText) {
+        const s = String(fullText || '');
+        if (!s) return { head: '', tail: '' };
+        const markers = [
+            '\n\nSELECT ',
+            '\nSELECT ',
+            '\n\nSentencia SQL ejecutada',
+            '\nSentencia SQL ejecutada',
+            '\n\nSentencia SQL',
+            '\nSentencia SQL',
+            '\n\n---\n',
+        ];
+        let idx = -1;
+        for (let i = 0; i < markers.length; i++) {
+            const m = markers[i];
+            const at = s.indexOf(m);
+            if (at >= 0 && (idx < 0 || at < idx)) idx = at;
+        }
+        if (idx < 0) return { head: s, tail: '' };
+        const head = s.slice(0, idx).replace(/\s+$/g, '');
+        const tail = s.slice(idx).replace(/^\s+/g, '');
+        // Evita “cortar” demasiado pronto si el texto solo menciona SELECT como palabra.
+        if (tail.length < 20) return { head: s, tail: '' };
+        return { head: head, tail: tail };
+    }
+
+    function renderAssistantHtml(fullText) {
+        const parts = splitAssistantAnswerAndSql(fullText);
+        if (!parts.tail) return linkifyAssistant(parts.head);
+        return (
+            linkifyAssistant(parts.head) +
+            '\n\n' +
+            '<div class="ventas-chat-sql-block">' +
+            linkifyAssistant(parts.tail) +
+            '</div>'
+        );
+    }
+
     let assistantStreamGen = 0;
 
     function streamAssistantIntoBody(bodyEl, fullText, gen, outerDiv) {
         const full = String(fullText);
-        const len = full.length;
+        const parts = splitAssistantAnswerAndSql(full);
+        const head = parts.head || '';
+        const len = head.length;
         let pos = 0;
         let charsPerStep = 1;
         if (len > 1200) charsPerStep = 2;
@@ -655,13 +704,15 @@ declare(strict_types=1);
         function tick() {
             if (!bodyEl.isConnected || gen !== assistantStreamGen) return;
             pos = Math.min(len, pos + charsPerStep);
-            bodyEl.textContent = full.slice(0, pos);
+            bodyEl.textContent = formatImportesSoles(head.slice(0, pos));
             if (log) log.scrollTop = log.scrollHeight;
             if (pos < len) {
                 window.setTimeout(tick, stepMs);
             } else {
                 if (!bodyEl.isConnected || gen !== assistantStreamGen) return;
-                bodyEl.innerHTML = linkifyAssistant(full);
+                // La respuesta (head) ya terminó de “escribirse”.
+                // El anexo SQL (tail) aparece de golpe sin animación.
+                bodyEl.innerHTML = renderAssistantHtml(full);
                 if (outerDiv) outerDiv.classList.remove('ventas-chat-msg--streaming');
                 if (log) log.scrollTop = log.scrollHeight;
             }
@@ -677,7 +728,7 @@ declare(strict_types=1);
         const body = el.querySelector('.ventas-chat-msg-body');
         const last = history.length ? history[history.length - 1] : null;
         if (body && last && last.role === 'assistant' && typeof last.content === 'string') {
-            body.innerHTML = linkifyAssistant(last.content);
+            body.innerHTML = renderAssistantHtml(last.content);
         }
         el.classList.remove('ventas-chat-msg--streaming');
         log.scrollTop = log.scrollHeight;
@@ -704,7 +755,7 @@ declare(strict_types=1);
                 div.classList.add('ventas-chat-msg--streaming');
                 streamAssistantIntoBody(body, text, gen, div);
             } else {
-                body.innerHTML = linkifyAssistant(text);
+                body.innerHTML = renderAssistantHtml(text);
             }
         } else {
             body.textContent = text;
