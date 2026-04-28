@@ -63,7 +63,7 @@ $pdfName = 'top_productos_' . $desde . '_' . $hasta . '.pdf';
     <main class="reporte-modulo-main">
         <div class="reporte-page">
             <div class="page-head">
-                <h1>Top productos por importe (SUM Valor)</h1>
+                <h1>Top productos por importe</h1>
                 <p class="reporte-inline-meta"><?= htmlspecialchars($desde, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars($hasta, ENT_QUOTES, 'UTF-8') ?> · Top <?= (int) $top ?></p>
             </div>
             <div class="tabla-listado-wrapper">
@@ -147,7 +147,7 @@ $pdfName = 'top_productos_' . $desde . '_' . $hasta . '.pdf';
                     labels: payload.labels,
                     datasets: [
                         {
-                            label: 'SUM(Valor)',
+                            label: 'Importe',
                             data: payload.valores,
                             backgroundColor: cols.bg,
                             borderColor: cols.br,
@@ -178,7 +178,7 @@ $pdfName = 'top_productos_' . $desde . '_' . $hasta . '.pdf';
                             ticks: { color: Chart.defaults.color },
                             grid: { color: Chart.defaults.borderColor },
                             beginAtZero: true,
-                            title: { display: true, text: 'SUM(Valor)', color: Chart.defaults.color },
+                            title: { display: true, text: 'Importe', color: Chart.defaults.color },
                         },
                     },
                 },

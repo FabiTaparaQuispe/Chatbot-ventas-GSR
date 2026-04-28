@@ -101,9 +101,9 @@ $pdfName = 'resumen_ventasgeneral_' . $d1 . '_' . $d2 . '.pdf';
                         <tr>
                             <th>N°</th>
                             <th>Filas</th>
-                            <th>Suma Valor</th>
-                            <th>Suma Cantidad</th>
-                            <th>Suma Peso</th>
+                            <th>Importe total</th>
+                            <th>Cantidad total</th>
+                            <th>Peso total</th>
                         </tr>
                     </thead>
                     <tbody>

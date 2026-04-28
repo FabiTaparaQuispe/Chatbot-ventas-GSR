@@ -68,7 +68,7 @@ $pdfName = 'top_clientes_nc_' . $desde . '_' . $hasta . '.pdf';
                 <h1>Top clientes por notas de crédito (TDoc = 07)</h1>
                 <p class="reporte-inline-meta"><?= htmlspecialchars($desde, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars($hasta, ENT_QUOTES, 'UTF-8') ?>
                     · Líneas NC en periodo: <?= (int) ($data['total_lineas_nc'] ?? 0) ?>
-                    · Importe NC (SUM Valor): <?= number_format((float) ($data['total_valor_nc'] ?? 0), 2, '.', ',') ?></p>
+                    · Importe NC: <?= number_format((float) ($data['total_valor_nc'] ?? 0), 2, '.', ',') ?></p>
             </div>
             <div class="tabla-listado-wrapper">
                 <div class="reporte-toolbar"><button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button></div>
@@ -76,7 +76,7 @@ $pdfName = 'top_clientes_nc_' . $desde . '_' . $hasta . '.pdf';
                     <h2 class="pdf-h2">Ranking clientes (notas de crédito)</h2>
                     <div class="table-wrapper overflow-x-auto productos-dt-skin">
                         <table class="data-table config-table display stripe">
-                            <thead><tr><th>N°</th><th>Cód. cliente</th><th>Nombre cliente</th><th>Líneas NC</th><th>Importe (SUM Valor)</th><th>% líneas</th><th>% acum. líneas</th></tr></thead>
+                            <thead><tr><th>N°</th><th>Cód. cliente</th><th>Nombre cliente</th><th>Líneas NC</th><th>Importe</th><th>% líneas</th><th>% acum. líneas</th></tr></thead>
                             <tbody>
                                 <?php $i = 0; foreach ($data['filas'] as $f) { $i++; ?>
                                 <tr>

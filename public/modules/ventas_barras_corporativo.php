@@ -117,7 +117,7 @@ $pdfName = 'ventas_corporativo_' . $desde . '_' . $hasta . '.pdf';
                 data: {
                     labels: payload.labels,
                     datasets: [{
-                        label: 'SUM(Valor)',
+                        label: 'Importe',
                         data: payload.valores,
                         backgroundColor: bg,
                         borderColor: br,

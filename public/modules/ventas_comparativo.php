@@ -48,7 +48,7 @@ try {
     exit;
 }
 
-$dimLabel = $dim === 'comercial' ? 'Zona comercial' : 'DescriZonaPrecio';
+$dimLabel = $dim === 'comercial' ? 'Zona comercial' : 'Zona precio';
 $labels = [];
 $va = [];
 $vb = [];
@@ -105,7 +105,7 @@ $pdfName = 'ventas_comparativo_' . $dim . '.pdf';
     <main class="reporte-modulo-main">
         <div class="reporte-page">
             <div class="page-head">
-                <h1>Comparativo importe (SUM Valor) por <?= htmlspecialchars($dimLabel, ENT_QUOTES, 'UTF-8') ?></h1>
+                <h1>Comparativo de importe por <?= htmlspecialchars($dimLabel, ENT_QUOTES, 'UTF-8') ?></h1>
                 <p class="reporte-inline-meta">Periodo A: <?= htmlspecialchars($a1, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars($a2, ENT_QUOTES, 'UTF-8') ?>
                     · Periodo B: <?= htmlspecialchars($b1, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars($b2, ENT_QUOTES, 'UTF-8') ?></p>
             </div>

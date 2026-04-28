@@ -164,12 +164,164 @@ require_once __DIR__ . '/ventas_chat_config.inc.php';
     .chat-panel-foot button#ventasChatSend:hover { background: var(--accent-hover, #1d4ed8); }
     .chat-panel-foot button#ventasChatSend:disabled { opacity: 0.5; cursor: not-allowed; }
 
+    .ventas-chat-mic-btn {
+        width: 2.6rem;
+        height: 2.6rem;
+        border-radius: 10px;
+        border: 1px solid var(--input-border, #cbd5e1);
+        background: var(--input-bg, #f8fafc);
+        color: var(--text, #0f172a);
+        cursor: pointer;
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+        line-height: 1;
+    }
+    html[data-theme="dark"] .ventas-chat-mic-btn {
+        border-color: var(--input-border, #52525b);
+        background: var(--input-bg, #27272a);
+        color: var(--text, #f4f4f5);
+    }
+    .ventas-chat-mic-btn[aria-pressed="true"] {
+        border-color: rgba(239, 68, 68, 0.65);
+        box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
+    }
+
     .chat-panel .ventas-chat-shortcuts {
         margin: 0 0.75rem;
     }
     .chat-panel .ventas-chat-err {
         margin: 0 0.75rem 0.65rem;
     }
+
+    /* Historial (drawer) */
+    .ventas-chat-drawer {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        pointer-events: none;
+    }
+    .ventas-chat-drawer[hidden] { display: none !important; }
+    .ventas-chat-drawer-backdrop {
+        flex: 1;
+        background: rgba(15, 23, 42, 0.38);
+        opacity: 0;
+        transition: opacity 0.18s ease;
+    }
+    html[data-theme="dark"] .ventas-chat-drawer-backdrop { background: rgba(0, 0, 0, 0.55); }
+    .ventas-chat-drawer-panel {
+        width: min(88vw, 340px);
+        background: var(--surface, #ffffff);
+        color: var(--text, #0f172a);
+        border-left: 1px solid var(--border, #e2e8f0);
+        transform: translateX(12px);
+        opacity: 0;
+        transition: transform 0.18s ease, opacity 0.18s ease;
+        display: flex;
+        flex-direction: column;
+    }
+    html[data-theme="dark"] .ventas-chat-drawer-panel {
+        background: var(--surface, #18181b);
+        color: var(--text, #f4f4f5);
+        border-left-color: var(--border, #3f3f46);
+    }
+    .ventas-chat-drawer[data-open="1"] { pointer-events: auto; }
+    .ventas-chat-drawer[data-open="1"] .ventas-chat-drawer-backdrop { opacity: 1; }
+    .ventas-chat-drawer[data-open="1"] .ventas-chat-drawer-panel { opacity: 1; transform: translateX(0); }
+
+    .ventas-chat-drawer-head {
+        padding: 0.75rem 0.85rem;
+        border-bottom: 1px solid var(--border, #e2e8f0);
+        display: grid;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+    html[data-theme="dark"] .ventas-chat-drawer-head { border-bottom-color: var(--border, #3f3f46); }
+    .ventas-chat-drawer-head-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+    .ventas-chat-drawer-search {
+        width: 100%;
+        border: 1px solid var(--border, #e2e8f0);
+        background: var(--surface-2, #f8fafc);
+        color: inherit;
+        border-radius: 10px;
+        padding: 0.5rem 0.6rem;
+        font: inherit;
+        font-size: 0.85rem;
+    }
+    html[data-theme="dark"] .ventas-chat-drawer-search {
+        border-color: var(--border, #3f3f46);
+        background: var(--surface-2, #27272a);
+    }
+    .ventas-chat-drawer-section {
+        padding: 0.2rem 0.25rem 0.4rem;
+        font-size: 0.78rem;
+        opacity: 0.75;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+    }
+    .ventas-chat-drawer-title { font-weight: 700; font-size: 0.95rem; margin: 0; }
+    .ventas-chat-drawer-tools { display: flex; gap: 0.35rem; align-items: center; }
+    .ventas-chat-drawer-btn {
+        border: 1px solid var(--border, #e2e8f0);
+        background: var(--surface-2, #f8fafc);
+        color: inherit;
+        border-radius: 10px;
+        padding: 0.45rem 0.6rem;
+        cursor: pointer;
+        font: inherit;
+        font-size: 0.85rem;
+    }
+    html[data-theme="dark"] .ventas-chat-drawer-btn {
+        border-color: var(--border, #3f3f46);
+        background: var(--surface-2, #27272a);
+    }
+    .ventas-chat-drawer-btn:hover { filter: brightness(0.98); }
+    .ventas-chat-drawer-list { padding: 0.5rem; overflow: auto; flex: 1; }
+    .ventas-chat-thread {
+        width: 100%;
+        text-align: left;
+        border: 1px solid var(--border, #e2e8f0);
+        background: var(--surface, #ffffff);
+        color: inherit;
+        border-radius: 12px;
+        padding: 0.6rem 0.65rem;
+        cursor: pointer;
+        display: grid;
+        gap: 0.25rem;
+        margin-bottom: 0.5rem;
+    }
+    html[data-theme="dark"] .ventas-chat-thread {
+        border-color: var(--border, #3f3f46);
+        background: var(--surface, #18181b);
+    }
+    .ventas-chat-thread[aria-current="true"] {
+        border-color: rgba(37, 99, 235, 0.6);
+        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
+    }
+    .ventas-chat-thread-title { font-weight: 700; font-size: 0.9rem; line-height: 1.2; }
+    .ventas-chat-thread-meta { font-size: 0.78rem; opacity: 0.75; }
+    .ventas-chat-thread-row { display: flex; justify-content: space-between; gap: 0.5rem; align-items: center; }
+    .ventas-chat-thread-del {
+        border: none;
+        background: transparent;
+        color: inherit;
+        opacity: 0.7;
+        cursor: pointer;
+        padding: 0.2rem 0.35rem;
+        border-radius: 8px;
+        font-size: 1rem;
+        line-height: 1;
+    }
+    .ventas-chat-thread-del:hover { background: rgba(148, 163, 184, 0.18); opacity: 1; }
 </style>
 
 <button type="button" id="ventasChatFab" class="chat-fab" aria-controls="ventasChatPanel" aria-expanded="false" aria-label="Abrir asistente de consultas" title="Asistente">
@@ -183,6 +335,7 @@ require_once __DIR__ . '/ventas_chat_config.inc.php';
     <div class="chat-panel-head">
         <h2 id="ventasChatPanelTitle">Asistente de ventas</h2>
         <div class="chat-panel-actions">
+            <button type="button" id="ventasChatThreadsBtn" class="chat-icon-btn" aria-label="Historial" title="Historial">☰</button>
             <button type="button" id="ventasChatClear" class="chat-icon-btn" aria-label="Limpiar conversación" title="Limpiar chat">⌫</button>
             <button type="button" id="ventasChatClose" class="chat-icon-btn" aria-label="Cerrar">×</button>
         </div>
@@ -203,10 +356,28 @@ require_once __DIR__ . '/ventas_chat_config.inc.php';
     <div class="chat-panel-foot">
         <div class="row">
             <textarea id="ventasChatInput" placeholder="Ej.: ¿Cuánto sumó Valor en marzo de 2026?" rows="2"></textarea>
+            <button type="button" id="ventasChatMic" class="ventas-chat-mic-btn" aria-label="Dictado por voz" title="Dictado por voz" aria-pressed="false">🎙</button>
             <button type="button" id="ventasChatSend">Enviar</button>
         </div>
     </div>
     <p id="ventasChatError" class="ventas-chat-err" hidden></p>
+
+    <div id="ventasChatThreadsDrawer" class="ventas-chat-drawer" hidden>
+        <div class="ventas-chat-drawer-backdrop" data-action="close" aria-hidden="true"></div>
+        <aside class="ventas-chat-drawer-panel" aria-label="Historial de conversaciones">
+            <div class="ventas-chat-drawer-head">
+                <div class="ventas-chat-drawer-head-top">
+                    <p class="ventas-chat-drawer-title">Chats</p>
+                    <div class="ventas-chat-drawer-tools">
+                        <button type="button" id="ventasChatNewThread" class="ventas-chat-drawer-btn" title="Nuevo chat">Nuevo</button>
+                        <button type="button" id="ventasChatCloseThreads" class="ventas-chat-drawer-btn" title="Cerrar historial">Cerrar</button>
+                    </div>
+                </div>
+                <input id="ventasChatThreadsSearch" class="ventas-chat-drawer-search" type="search" placeholder="Buscar chats…" aria-label="Buscar chats">
+            </div>
+            <div id="ventasChatThreadsList" class="ventas-chat-drawer-list" role="list"></div>
+        </aside>
+    </div>
 </div>
 
 <?php require __DIR__ . '/chat_assistant_script.inc.php'; ?>

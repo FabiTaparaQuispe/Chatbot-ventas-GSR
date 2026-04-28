@@ -167,7 +167,7 @@ $pdfName = 'pareto_clientes_' . preg_replace('/[^a-zA-Z0-9_-]+/', '_', $data['pr
                     labels: payload.labels,
                     datasets: [
                         {
-                            label: 'SUM(Valor)',
+                            label: 'Importe',
                             data: payload.valores,
                             backgroundColor: 'rgba(59, 130, 246, 0.65)',
                             borderColor: 'rgba(59, 130, 246, 1)',
@@ -218,7 +218,7 @@ $pdfName = 'pareto_clientes_' . preg_replace('/[^a-zA-Z0-9_-]+/', '_', $data['pr
                             position: 'left',
                             ticks: { color: '#94a3b8' },
                             grid: { color: 'rgba(148, 163, 184, 0.15)' },
-                            title: { display: true, text: 'Valor', color: '#cbd5e1' },
+                            title: { display: true, text: 'Importe', color: '#cbd5e1' },
                         },
                         y1: {
                             type: 'linear',

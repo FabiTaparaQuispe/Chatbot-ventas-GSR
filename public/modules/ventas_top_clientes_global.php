@@ -75,7 +75,7 @@ $pdfName = 'top_clientes_global_' . $desde . '_' . $hasta . '.pdf';
                     <h2 class="pdf-h2">Ranking global clientes</h2>
                     <div class="table-wrapper overflow-x-auto productos-dt-skin">
                         <table class="data-table config-table display stripe">
-                            <thead><tr><th>N°</th><th>Cód. cliente</th><th>Nombre cliente</th><th>Líneas</th><th>Importe (SUM Valor)</th><th>% del total</th><th>% acumulado</th></tr></thead>
+                            <thead><tr><th>N°</th><th>Cód. cliente</th><th>Nombre cliente</th><th>Líneas</th><th>Importe</th><th>% del total</th><th>% acumulado</th></tr></thead>
                             <tbody>
                                 <?php $i = 0; foreach ($data['filas'] as $f) { $i++; ?>
                                 <tr>
@@ -151,7 +151,7 @@ $pdfName = 'top_clientes_global_' . $desde . '_' . $hasta . '.pdf';
                     labels: payload.labels,
                     datasets: [
                         {
-                            label: 'SUM(Valor)',
+                            label: 'Importe',
                             data: payload.valores,
                             backgroundColor: cols.bg,
                             borderColor: cols.br,
@@ -194,7 +194,7 @@ $pdfName = 'top_clientes_global_' . $desde . '_' . $hasta . '.pdf';
                         y: {
                             ticks: { color: Chart.defaults.color },
                             grid: { color: Chart.defaults.borderColor },
-                            title: { display: true, text: 'SUM(Valor)', color: Chart.defaults.color },
+                            title: { display: true, text: 'Importe', color: Chart.defaults.color },
                         },
                         y1: {
                             type: 'linear',

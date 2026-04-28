@@ -29,7 +29,7 @@ try {
     exit;
 }
 
-$dimLabel = $dim === 'comercial' ? 'Zona comercial' : 'DescriZonaPrecio';
+$dimLabel = $dim === 'comercial' ? 'Zona comercial' : 'Zona precio';
 $labels = [];
 $valores = [];
 foreach ($data['filas'] as $f) {
@@ -45,7 +45,7 @@ foreach ($data['filas'] as $f) {
 $chartJson = json_encode([
     'labels' => $labels,
     'valores' => $valores,
-    'titulo' => 'SUM(Valor) por ' . $dimLabel,
+    'titulo' => 'Importe por ' . $dimLabel,
 ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
 $pdfName = 'ventas_barras_' . $dim . '_' . $desde . '_' . $hasta . '.pdf';
 $pageTitle = 'Ventas por ' . $dimLabel;
@@ -147,7 +147,7 @@ $pageTitle = 'Ventas por ' . $dimLabel;
                 data: {
                     labels: payload.labels,
                     datasets: [{
-                        label: payload.titulo || 'Valor',
+                        label: payload.titulo || 'Importe',
                         data: payload.valores,
                         backgroundColor: bg,
                         borderColor: br,

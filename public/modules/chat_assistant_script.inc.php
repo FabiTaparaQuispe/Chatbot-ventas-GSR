@@ -9,9 +9,20 @@ declare(strict_types=1);
     const CHAT_API = <?= json_encode($ventasChatApiUrl, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const VENTAS_PUBLIC_BASE = <?= json_encode($ventasPublicWebBase, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const VENTAS_MODULES_WEB_BASE = <?= json_encode($ventasWebModulesBase, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-    const LS_HISTORY = 'ventasChatbot_history_v1';
-    const LS_DRAFT = 'ventasChatbot_draft_v1';
+    const USER_KEY_RAW = <?= json_encode($ventasChatUserKey ?? 'anon', JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    const USER_KEY = String(USER_KEY_RAW || 'anon')
+        .toLowerCase()
+        .replace(/\s+/g, '')
+        .replace(/[^a-z0-9@._-]+/g, '_')
+        .slice(0, 80) || 'anon';
+    const NS = 'ventasChatbot:' + USER_KEY + ':';
+    const LS_HISTORY = NS + 'history_v1'; // legado (una sola conversación)
+    const LS_THREADS = NS + 'threads_v1';
+    const LS_ACTIVE_THREAD = NS + 'active_thread_v1';
+    const LS_DRAFT = NS + 'draft_v1';
+    const LS_FAVS = NS + 'favs_v1';
     const MAX_LOCAL_MESSAGES = 120;
+    const MAX_THREADS = 40;
     const isFull = typeof window !== 'undefined' && window.VENTAS_CHAT_FULL === true;
 
     const log = document.getElementById('ventasChatLog');
@@ -23,8 +34,327 @@ declare(strict_types=1);
     const closeBtn = document.getElementById('ventasChatClose');
     const clearBtn = document.getElementById('ventasChatClear');
     const faqSelect = document.getElementById('ventasChatFaqSelect');
+    const threadsBtn = document.getElementById('ventasChatThreadsBtn');
+    const threadsDrawer = document.getElementById('ventasChatThreadsDrawer');
+    const threadsList = document.getElementById('ventasChatThreadsList');
+    const threadsSearch = document.getElementById('ventasChatThreadsSearch');
+    const newThreadBtn = document.getElementById('ventasChatNewThread');
+    const closeThreadsBtn = document.getElementById('ventasChatCloseThreads');
+    const micBtn = document.getElementById('ventasChatMic');
     let faqTemplatesCache = [];
     const history = [];
+    let threads = [];
+    let activeThreadId = '';
+    let threadsQuery = '';
+
+    // Favoritos ("Mis preguntas frecuentes")
+    function loadFavs() {
+        try {
+            const raw = localStorage.getItem(LS_FAVS);
+            const arr = raw ? safeJsonParse(raw) : null;
+            if (!Array.isArray(arr)) return [];
+            return arr
+                .filter(x => x && typeof x.text === 'string' && x.text.trim() !== '')
+                .map(x => ({ title: typeof x.title === 'string' ? x.title : '', text: String(x.text) }))
+                .slice(0, 30);
+        } catch (e) { return []; }
+    }
+    function saveFavs(arr) {
+        try { localStorage.setItem(LS_FAVS, JSON.stringify(arr || [])); } catch (e) { /* ignore */ }
+    }
+    function addFavFromInput() {
+        if (!input) return;
+        const t = String(input.value || '').trim();
+        if (!t) return;
+        const title = t.replace(/\s+/g, ' ').slice(0, 42) + (t.length > 42 ? '…' : '');
+        const favs = loadFavs();
+        const exists = favs.some(f => (f && String(f.text).trim()) === t);
+        if (!exists) {
+            favs.unshift({ title: title || 'Frecuente', text: t });
+            saveFavs(favs.slice(0, 30));
+        }
+        renderVentasFaqSelect();
+    }
+
+    function nowTs() { return Date.now(); }
+    function safeJsonParse(raw) {
+        try { return JSON.parse(raw); } catch (e) { return null; }
+    }
+    function makeId() {
+        return 't_' + nowTs().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
+    }
+    function firstUserTitle(msgs) {
+        const m = (Array.isArray(msgs) ? msgs : []).find(x => x && x.role === 'user' && typeof x.content === 'string' && x.content.trim() !== '');
+        if (!m) return 'Nuevo chat';
+        const t = m.content.trim().replace(/\s+/g, ' ');
+        return t.length > 42 ? (t.slice(0, 39) + '…') : t;
+    }
+
+    function loadThreads() {
+        let out = [];
+        try {
+            const raw = localStorage.getItem(LS_THREADS);
+            const arr = raw ? safeJsonParse(raw) : null;
+            if (Array.isArray(arr)) out = arr;
+        } catch (e) { /* ignore */ }
+        out = out
+            .filter(t => t && typeof t.id === 'string')
+            .map(t => ({
+                id: String(t.id),
+                title: typeof t.title === 'string' ? t.title : 'Nuevo chat',
+                createdAt: typeof t.createdAt === 'number' ? t.createdAt : nowTs(),
+                updatedAt: typeof t.updatedAt === 'number' ? t.updatedAt : (typeof t.createdAt === 'number' ? t.createdAt : nowTs()),
+                messages: Array.isArray(t.messages) ? t.messages.filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string') : [],
+            }));
+        out.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        if (out.length > MAX_THREADS) out = out.slice(0, MAX_THREADS);
+        return out;
+    }
+    function saveThreads() {
+        try {
+            localStorage.setItem(LS_THREADS, JSON.stringify(threads));
+        } catch (e) { /* ignore */ }
+    }
+    function loadActiveThreadId() {
+        try {
+            const v = localStorage.getItem(LS_ACTIVE_THREAD);
+            return v ? String(v) : '';
+        } catch (e) { return ''; }
+    }
+    function setActiveThreadId(id) {
+        activeThreadId = String(id || '');
+        try {
+            localStorage.setItem(LS_ACTIVE_THREAD, activeThreadId);
+        } catch (e) { /* ignore */ }
+    }
+
+    function migrateLegacyHistoryIfAny() {
+        // Si el usuario ya tenía historial "antiguo", lo convertimos a un thread.
+        let legacy = null;
+        try {
+            const raw = localStorage.getItem(LS_HISTORY);
+            if (raw) legacy = safeJsonParse(raw);
+        } catch (e) { legacy = null; }
+        if (!Array.isArray(legacy) || legacy.length === 0) return;
+        const stale = legacy.some(m => m && m.role === 'assistant' && hasGenericClienteLabels(m.content || ''));
+        if (stale) {
+            try { localStorage.removeItem(LS_HISTORY); } catch (e) { /* ignore */ }
+            return;
+        }
+        const tid = makeId();
+        threads.unshift({
+            id: tid,
+            title: firstUserTitle(legacy),
+            createdAt: nowTs(),
+            updatedAt: nowTs(),
+            messages: legacy.filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'),
+        });
+        if (threads.length > MAX_THREADS) threads = threads.slice(0, MAX_THREADS);
+        saveThreads();
+        setActiveThreadId(tid);
+        try { localStorage.removeItem(LS_HISTORY); } catch (e) { /* ignore */ }
+    }
+
+    function formatDate(ts) {
+        try {
+            const d = new Date(ts);
+            const dd = String(d.getDate()).padStart(2, '0');
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const yy = d.getFullYear();
+            return dd + '/' + mm + '/' + yy;
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function openThreadsDrawer() {
+        if (!threadsDrawer) return;
+        threadsDrawer.hidden = false;
+        threadsDrawer.setAttribute('data-open', '1');
+        renderThreadsList();
+        if (threadsSearch) threadsSearch.focus();
+    }
+    function closeThreadsDrawer() {
+        if (!threadsDrawer) return;
+        threadsDrawer.removeAttribute('data-open');
+        threadsDrawer.hidden = true;
+    }
+    function threadMatchesQuery(t, q) {
+        if (!q) return true;
+        const qq = q.toLowerCase().trim();
+        if (!qq) return true;
+        const title = String(t.title || '').toLowerCase();
+        if (title.includes(qq)) return true;
+        const msgs = Array.isArray(t.messages) ? t.messages : [];
+        for (let i = 0; i < Math.min(10, msgs.length); i++) {
+            const m = msgs[i];
+            if (m && typeof m.content === 'string' && m.content.toLowerCase().includes(qq)) return true;
+        }
+        return false;
+    }
+
+    function renderThreadsList() {
+        if (!threadsList) return;
+        threadsList.innerHTML = '';
+        const q = String(threadsQuery || '').trim();
+        const filtered = (threads || []).filter(t => threadMatchesQuery(t, q));
+        if (!filtered || filtered.length === 0) {
+            const p = document.createElement('p');
+            p.style.margin = '0.5rem';
+            p.style.opacity = '0.75';
+            p.textContent = q ? 'No hay resultados para tu búsqueda.' : 'Aún no hay conversaciones guardadas.';
+            threadsList.appendChild(p);
+            return;
+        }
+        const recientes = filtered.slice(0, 8);
+        const resto = filtered.slice(8);
+
+        function sectionLabel(txt) {
+            const s = document.createElement('div');
+            s.className = 'ventas-chat-drawer-section';
+            s.textContent = txt;
+            threadsList.appendChild(s);
+        }
+
+        sectionLabel('Recientes');
+        recientes.forEach(renderThreadItem);
+        if (resto.length) {
+            sectionLabel('Todos');
+            resto.forEach(renderThreadItem);
+        }
+
+        function renderThreadItem(t) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'ventas-chat-thread';
+            btn.setAttribute('role', 'listitem');
+            btn.dataset.threadId = t.id;
+            btn.setAttribute('aria-current', t.id === activeThreadId ? 'true' : 'false');
+
+            const row = document.createElement('div');
+            row.className = 'ventas-chat-thread-row';
+
+            const title = document.createElement('div');
+            title.className = 'ventas-chat-thread-title';
+            title.textContent = t.title || 'Nuevo chat';
+
+            const del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'ventas-chat-thread-del';
+            del.title = 'Eliminar';
+            del.setAttribute('aria-label', 'Eliminar chat');
+            del.textContent = '×';
+            del.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                deleteThread(t.id);
+            });
+
+            row.appendChild(title);
+            row.appendChild(del);
+
+            const meta = document.createElement('div');
+            meta.className = 'ventas-chat-thread-meta';
+            const n = Array.isArray(t.messages) ? t.messages.length : 0;
+            meta.textContent = (formatDate(t.updatedAt) || '') + (n ? (' · ' + n + ' mensajes') : '');
+
+            btn.appendChild(row);
+            btn.appendChild(meta);
+
+            btn.addEventListener('click', function () {
+                switchToThread(t.id);
+                closeThreadsDrawer();
+                if (input) input.focus();
+            });
+            threadsList.appendChild(btn);
+        }
+    }
+
+    function clearUiChat() {
+        assistantStreamGen += 1;
+        history.length = 0;
+        if (log) log.innerHTML = '';
+        if (errEl) errEl.hidden = true;
+        syncFullPageHero();
+    }
+
+    function ensureAtLeastOneThread() {
+        if (threads.length > 0) return;
+        const tid = makeId();
+        threads = [{
+            id: tid,
+            title: 'Nuevo chat',
+            createdAt: nowTs(),
+            updatedAt: nowTs(),
+            messages: [],
+        }];
+        saveThreads();
+        setActiveThreadId(tid);
+    }
+
+    function persistActiveThreadFromHistory() {
+        if (!activeThreadId) return;
+        const idx = threads.findIndex(t => t && t.id === activeThreadId);
+        if (idx < 0) return;
+        const t = threads[idx];
+        t.messages = history.slice(0);
+        t.updatedAt = nowTs();
+        t.title = firstUserTitle(t.messages);
+        // Move to top
+        threads.splice(idx, 1);
+        threads.unshift(t);
+        if (threads.length > MAX_THREADS) threads = threads.slice(0, MAX_THREADS);
+        saveThreads();
+        renderThreadsList();
+    }
+
+    function switchToThread(id) {
+        const t = threads.find(x => x && x.id === id);
+        if (!t) return;
+        setActiveThreadId(t.id);
+        clearUiChat();
+        if (input) input.value = '';
+        autosizeInput();
+        try { localStorage.removeItem(LS_DRAFT); } catch (e) { /* ignore */ }
+        for (const m of (t.messages || [])) {
+            history.push({ role: m.role, content: m.content });
+            append(m.role, m.content);
+        }
+        renderThreadsList();
+    }
+
+    function createNewThread() {
+        const tid = makeId();
+        const t = { id: tid, title: 'Nuevo chat', createdAt: nowTs(), updatedAt: nowTs(), messages: [] };
+        threads.unshift(t);
+        if (threads.length > MAX_THREADS) threads = threads.slice(0, MAX_THREADS);
+        saveThreads();
+        setActiveThreadId(tid);
+        clearUiChat();
+        if (input) {
+            input.value = '';
+            autosizeInput();
+            input.focus();
+        }
+        try { localStorage.removeItem(LS_DRAFT); } catch (e) { /* ignore */ }
+        renderThreadsList();
+    }
+
+    function deleteThread(id) {
+        const idx = threads.findIndex(t => t && t.id === id);
+        if (idx < 0) return;
+        const wasActive = threads[idx].id === activeThreadId;
+        threads.splice(idx, 1);
+        if (threads.length === 0) {
+            ensureAtLeastOneThread();
+        }
+        saveThreads();
+        if (wasActive) {
+            setActiveThreadId(threads[0].id);
+            switchToThread(threads[0].id);
+        }
+        renderThreadsList();
+    }
 
     function syncFullPageHero() {
         if (!isFull) return;
@@ -72,12 +402,29 @@ declare(strict_types=1);
         ph.value = '';
         ph.textContent = '— Selecciona una consulta —';
         faqSelect.appendChild(ph);
+
+        const favs = loadFavs();
+        if (favs.length) {
+            const og = document.createElement('optgroup');
+            og.label = 'Mis preguntas frecuentes';
+            favs.forEach(function (f, i) {
+                const o = document.createElement('option');
+                o.value = 'fav:' + String(i);
+                o.textContent = f.title || ('Frecuente ' + (i + 1));
+                og.appendChild(o);
+            });
+            faqSelect.appendChild(og);
+        }
+
+        const og2 = document.createElement('optgroup');
+        og2.label = 'Sugerencias';
         faqTemplatesCache.forEach(function (item, i) {
             const o = document.createElement('option');
-            o.value = String(i);
+            o.value = 'tpl:' + String(i);
             o.textContent = item.label;
-            faqSelect.appendChild(o);
+            og2.appendChild(o);
         });
+        faqSelect.appendChild(og2);
         faqSelect.selectedIndex = 0;
     }
 
@@ -85,10 +432,17 @@ declare(strict_types=1);
         faqSelect.addEventListener('change', function () {
             const v = faqSelect.value;
             if (v === '') return;
-            const idx = parseInt(v, 10);
-            if (!isNaN(idx) && faqTemplatesCache[idx]) {
-                input.value = faqTemplatesCache[idx].text;
+            if (String(v).startsWith('tpl:')) {
+                const idx = parseInt(String(v).slice(4), 10);
+                if (!isNaN(idx) && faqTemplatesCache[idx]) input.value = faqTemplatesCache[idx].text;
+            } else if (String(v).startsWith('fav:')) {
+                const idx = parseInt(String(v).slice(4), 10);
+                const favs = loadFavs();
+                if (!isNaN(idx) && favs[idx]) input.value = favs[idx].text;
+            }
+            if (input && input.value) {
                 input.focus();
+                autosizeInput();
             }
             faqSelect.selectedIndex = 0;
         });
@@ -297,31 +651,20 @@ declare(strict_types=1);
     }
 
     function saveHistory() {
-        try {
-            localStorage.setItem(LS_HISTORY, JSON.stringify(history));
-        } catch (e) { /* ignore */ }
+        // Compat: mantiene el legacy por si algo externo aún lo usa, pero el origen de verdad es threads.
+        try { localStorage.setItem(LS_HISTORY, JSON.stringify(history)); } catch (e) { /* ignore */ }
+        persistActiveThreadFromHistory();
     }
 
     function loadHistory() {
-        try {
-            const raw = localStorage.getItem(LS_HISTORY);
-            if (!raw) return;
-            const arr = JSON.parse(raw);
-            if (!Array.isArray(arr)) return;
-            const stale = arr.some(m => m && m.role === 'assistant' && hasGenericClienteLabels(m.content || ''));
-            if (stale) {
-                localStorage.removeItem(LS_HISTORY);
-                localStorage.removeItem(LS_DRAFT);
-                return;
-            }
-            history.length = 0;
-            log.innerHTML = '';
-            for (const m of arr) {
-                if (!m || (m.role !== 'user' && m.role !== 'assistant') || typeof m.content !== 'string') continue;
-                history.push({ role: m.role, content: m.content });
-                append(m.role, m.content);
-            }
-        } catch (e) { /* ignore */ }
+        threads = loadThreads();
+        migrateLegacyHistoryIfAny();
+        threads = loadThreads(); // recargar tras migración
+        ensureAtLeastOneThread();
+        const storedActive = loadActiveThreadId();
+        const activeOk = storedActive && threads.some(t => t && t.id === storedActive);
+        setActiveThreadId(activeOk ? storedActive : threads[0].id);
+        switchToThread(activeThreadId);
     }
 
     function saveDraft() {
@@ -393,18 +736,52 @@ declare(strict_types=1);
     }
     if (clearBtn) {
         clearBtn.addEventListener('click', function () {
-            assistantStreamGen += 1;
-            history.length = 0;
-            if (log) log.innerHTML = '';
+            // "Limpiar conversación" = reinicia SOLO el chat activo (no borra historial de otros chats)
+            clearUiChat();
             if (input) input.value = '';
             autosizeInput();
-            try {
-                localStorage.removeItem(LS_HISTORY);
-                localStorage.removeItem(LS_DRAFT);
-            } catch (e) { /* ignore */ }
-            if (errEl) errEl.hidden = true;
-            syncFullPageHero();
+            try { localStorage.removeItem(LS_DRAFT); } catch (e) { /* ignore */ }
+            persistActiveThreadFromHistory();
             if (input) input.focus();
+        });
+    }
+
+    if (threadsBtn) {
+        threadsBtn.addEventListener('click', function () {
+            if (!threadsDrawer || threadsDrawer.hidden) openThreadsDrawer();
+            else closeThreadsDrawer();
+        });
+    }
+    if (threadsDrawer) {
+        threadsDrawer.addEventListener('click', function (ev) {
+            const t = ev.target;
+            if (!t) return;
+            if (t && t.getAttribute && t.getAttribute('data-action') === 'close') closeThreadsDrawer();
+        });
+    }
+    if (threadsSearch) {
+        threadsSearch.addEventListener('input', function () {
+            threadsQuery = String(threadsSearch.value || '');
+            renderThreadsList();
+        });
+    }
+    if (closeThreadsBtn) {
+        closeThreadsBtn.addEventListener('click', closeThreadsDrawer);
+    }
+    if (newThreadBtn) {
+        newThreadBtn.addEventListener('click', function () {
+            createNewThread();
+            closeThreadsDrawer();
+        });
+    }
+
+    // Guardar como "Mis frecuentes" con Alt+Enter (o Ctrl/Cmd+S ya soportado abajo)
+    if (input) {
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' && e.altKey) {
+                e.preventDefault();
+                addFavFromInput();
+            }
         });
     }
 
@@ -415,6 +792,9 @@ declare(strict_types=1);
             }
             closePanel();
         }
+        if (e.key === 'Escape' && threadsDrawer && !threadsDrawer.hidden) {
+            closeThreadsDrawer();
+        }
     });
 
     loadHistory();
@@ -422,6 +802,89 @@ declare(strict_types=1);
         syncFullPageHero();
     }
     renderVentasFaqSelect();
+    // Dictado por voz (si está disponible)
+    (function setupDictation() {
+        if (!micBtn) return;
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) {
+            micBtn.hidden = true;
+            return;
+        }
+        let recog = null;
+        let listening = false;
+        let baseBeforeDictation = '';
+        let finalDictated = '';
+
+        function setListening(on) {
+            listening = !!on;
+            micBtn.setAttribute('aria-pressed', listening ? 'true' : 'false');
+            micBtn.title = listening ? 'Detener dictado' : 'Dictado por voz';
+        }
+
+        function ensure() {
+            if (recog) return recog;
+            recog = new SR();
+            recog.lang = 'es-PE';
+            recog.interimResults = true;
+            recog.continuous = false;
+            recog.maxAlternatives = 1;
+            recog.onresult = function (ev) {
+                try {
+                    if (!input) return;
+                    // Evita duplicados: SpeechRecognition emite resultados parciales acumulativos.
+                    // Construimos "final" + "interim" y actualizamos el input sin concatenar cada evento.
+                    let interim = '';
+                    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+                        const r = ev.results[i];
+                        const t = (r && r[0] && r[0].transcript) ? String(r[0].transcript) : '';
+                        if (!t) continue;
+                        if (r.isFinal) {
+                            finalDictated = (finalDictated + ' ' + t).replace(/\s+/g, ' ').trim();
+                        } else {
+                            interim += t;
+                        }
+                    }
+                    interim = String(interim || '').replace(/\s+/g, ' ').trim();
+                    const base = String(baseBeforeDictation || '').trim();
+                    const composed = (base + ' ' + finalDictated + ' ' + interim).replace(/\s+/g, ' ').trim();
+                    input.value = composed;
+                    autosizeInput();
+                } catch (e) { /* ignore */ }
+            };
+            recog.onerror = function () { setListening(false); };
+            recog.onend = function () { setListening(false); };
+            return recog;
+        }
+
+        micBtn.addEventListener('click', function () {
+            try {
+                const r = ensure();
+                if (!listening) {
+                    baseBeforeDictation = String(input && input.value ? input.value : '').trim();
+                    finalDictated = '';
+                    setListening(true);
+                    r.start();
+                    if (input) input.focus();
+                } else {
+                    setListening(false);
+                    r.stop();
+                }
+            } catch (e) {
+                setListening(false);
+            }
+        });
+    })();
+
+    // Guardar favorito con Ctrl/Cmd+S en el input (rápido)
+    if (input) {
+        input.addEventListener('keydown', function (e) {
+            const isSave = (e.key === 's' || e.key === 'S') && (e.ctrlKey || e.metaKey);
+            if (isSave) {
+                e.preventDefault();
+                addFavFromInput();
+            }
+        });
+    }
     if (isFull) {
         loadDraft();
         autosizeInput();

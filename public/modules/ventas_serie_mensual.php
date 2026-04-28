@@ -56,7 +56,7 @@ $pdfName = 'serie_mensual_' . $desde . '_' . $hasta . '.pdf';
     <main class="reporte-modulo-main">
         <div class="reporte-page">
             <div class="page-head">
-                <h1>Serie mensual (SUM Valor)</h1>
+                <h1>Serie mensual (importe)</h1>
                 <p class="reporte-inline-meta"><?= htmlspecialchars($desde, ENT_QUOTES, 'UTF-8') ?> — <?= htmlspecialchars($hasta, ENT_QUOTES, 'UTF-8') ?></p>
             </div>
             <div class="tabla-listado-wrapper">
@@ -95,7 +95,7 @@ $pdfName = 'serie_mensual_' . $desde . '_' . $hasta . '.pdf';
             if (!ctx || !payload.labels) return;
             new Chart(ctx, {
                 type: 'line',
-                data: { labels: payload.labels, datasets: [{ label: 'SUM(Valor)', data: payload.valores, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.2)', fill: true, tension: 0.2 }] },
+                data: { labels: payload.labels, datasets: [{ label: 'Importe', data: payload.valores, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.2)', fill: true, tension: 0.2 }] },
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1' } } },
                     scales: { x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' } }, y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' } } } },
             });

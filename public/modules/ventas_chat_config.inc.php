@@ -28,3 +28,17 @@ $ventasPublicWebBase = '/';
 if (function_exists('app_public_base')) {
     $ventasPublicWebBase = app_public_base();
 }
+
+// Clave de usuario para storage local (historial, borradores, favoritos).
+// Si no hay sesión, cae a 'anon'.
+$ventasChatUserKey = 'anon';
+try {
+    if (isset($_SESSION) && is_array($_SESSION) && isset($_SESSION['usuario'])) {
+        $u = trim((string) $_SESSION['usuario']);
+        if ($u !== '') {
+            $ventasChatUserKey = $u;
+        }
+    }
+} catch (Throwable $e) {
+    // ignore
+}
