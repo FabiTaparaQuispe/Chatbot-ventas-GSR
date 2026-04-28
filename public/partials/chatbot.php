@@ -30,11 +30,11 @@ if ($usuario !== '') {
     </div>
     <div class="chatbot-surface">
         <details class="ventas-chat-shortcuts chatbot-shortcuts">
-            <summary>Atajos y palabras clave</summary>
+            <summary>Consejos para tu consulta</summary>
             <ul>
-                <li><strong>Fechas</strong>: dos fechas en formato YYYY-MM-DD o un mes claro; si faltan, el asistente debe pedirlas antes de consultar.</li>
-                <li><strong>Zona / mercado</strong>: prefijos (AQP, TACNA, MOQUEGUA…) sobre DescriZonaPrecio; no hay campo ciudad.</li>
-                <li><strong>Nota de crédito</strong> (comprobante tipo 07): rankings de NC solo si lo pides en la consulta.</li>
+                <li><strong>Fechas</strong>: indica desde qué día y hasta qué día te interesa (por ejemplo <em>1 de marzo al 31 de marzo de 2026</em>, o también <em>2026-03-01</em> y <em>2026-03-31</em>). Si falta eso, el asistente te lo preguntará antes de sacar números.</li>
+                <li><strong>Zona o mercado</strong>: si quieres acotar por región, usa el mismo nombre corto que suele aparecer en tus listas o facturas (como AQP, TACNA o MOQUEGUA). No filtramos por “ciudad” aparte; va por esa zona comercial.</li>
+                <li><strong>Notas de crédito o devoluciones</strong>: solo las ponemos en primer plano en rankings especiales si lo pides explícitamente en tu mensaje.</li>
             </ul>
         </details>
         <div class="ventas-chat-chips-wrap chatbot-faq-wrap">
