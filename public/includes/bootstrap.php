@@ -21,6 +21,10 @@ function app_public_base(): string
     if ($docRoot !== '' && $publicFs !== '' && strcasecmp($docRoot, $publicFs) === 0) {
         return ($scriptDir === '/' || $scriptDir === '.') ? '/' : (rtrim($scriptDir, '/') . '/');
     }
+    // Si el script actual YA está dentro de /public, la base es ese directorio.
+    if (str_ends_with($scriptDir, '/public')) {
+        return rtrim($scriptDir, '/') . '/';
+    }
     if (str_ends_with($script, '/public/index.php') || str_ends_with($script, '/public/login.php')) {
         return rtrim($scriptDir, '/') . '/';
     }

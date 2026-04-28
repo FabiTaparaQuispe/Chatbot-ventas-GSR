@@ -24,6 +24,7 @@ declare(strict_types=1);
     const MAX_LOCAL_MESSAGES = 120;
     const MAX_THREADS = 40;
     const isFull = typeof window !== 'undefined' && window.VENTAS_CHAT_FULL === true;
+    const THREADS_API = (typeof VENTAS_PUBLIC_BASE !== 'undefined' ? String(VENTAS_PUBLIC_BASE || '') : '') + 'api/chat_threads.php';
 
     const log = document.getElementById('ventasChatLog');
     const input = document.getElementById('ventasChatInput');
@@ -109,6 +110,66 @@ declare(strict_types=1);
         out.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
         if (out.length > MAX_THREADS) out = out.slice(0, MAX_THREADS);
         return out;
+    }
+
+    async function serverListThreads(query) {
+        const q = (query || '').trim();
+        const url = THREADS_API + (q ? ('?q=' + encodeURIComponent(q)) : '');
+        const res = await fetch(url, { method: 'GET', credentials: 'same-origin' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data || data.ok !== true || !Array.isArray(data.threads)) throw new Error('server');
+        return data.threads.map(t => ({
+            id: String(t.id || ''),
+            title: String(t.title || 'Nuevo chat'),
+            updatedAt: Date.parse(String(t.updatedAt || '')) || nowTs(),
+            createdAt: nowTs(),
+            messages: [], // lazy-load
+        })).filter(t => t.id !== '');
+    }
+
+    async function serverLoadThread(clientId) {
+        const url = THREADS_API + '?thread=' + encodeURIComponent(String(clientId || ''));
+        const res = await fetch(url, { method: 'GET', credentials: 'same-origin' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data || data.ok !== true) throw new Error('server');
+        const t = data.thread;
+        if (!t) return null;
+        return {
+            id: String(t.id || ''),
+            title: String(t.title || 'Nuevo chat'),
+            createdAt: Date.parse(String(t.createdAt || '')) || nowTs(),
+            updatedAt: Date.parse(String(t.updatedAt || '')) || nowTs(),
+            messages: Array.isArray(t.messages) ? t.messages.map(m => ({ role: m.role, content: m.content })) : [],
+        };
+    }
+
+    async function serverSaveThread(thread) {
+        const payload = {
+            id: thread.id,
+            title: thread.title || 'Nuevo chat',
+            messages: Array.isArray(thread.messages) ? thread.messages : [],
+        };
+        const res = await fetch(THREADS_API, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data || data.ok !== true) throw new Error('server');
+        return true;
+    }
+
+    async function serverDeleteThread(clientId) {
+        const res = await fetch(THREADS_API, {
+            method: 'DELETE',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: String(clientId || '') }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data || data.ok !== true) throw new Error('server');
+        return true;
     }
     function saveThreads() {
         try {
@@ -306,6 +367,8 @@ declare(strict_types=1);
         if (threads.length > MAX_THREADS) threads = threads.slice(0, MAX_THREADS);
         saveThreads();
         renderThreadsList();
+        // Best-effort: sincroniza con servidor.
+        serverSaveThread({ id: t.id, title: t.title, messages: t.messages }).catch(() => {});
     }
 
     function switchToThread(id) {
@@ -316,11 +379,25 @@ declare(strict_types=1);
         if (input) input.value = '';
         autosizeInput();
         try { localStorage.removeItem(LS_DRAFT); } catch (e) { /* ignore */ }
-        for (const m of (t.messages || [])) {
-            history.push({ role: m.role, content: m.content });
-            append(m.role, m.content);
-        }
-        renderThreadsList();
+        (async function () {
+            // Lazy-load desde servidor si no hay mensajes en cache local.
+            if ((!t.messages || t.messages.length === 0) && t.id) {
+                try {
+                    const full = await serverLoadThread(t.id);
+                    if (full && Array.isArray(full.messages)) {
+                        t.messages = full.messages;
+                        t.title = full.title || t.title;
+                        t.updatedAt = full.updatedAt || t.updatedAt;
+                        saveThreads();
+                    }
+                } catch (e) { /* ignore */ }
+            }
+            for (const m of (t.messages || [])) {
+                history.push({ role: m.role, content: m.content });
+                append(m.role, m.content);
+            }
+            renderThreadsList();
+        })();
     }
 
     function createNewThread() {
@@ -338,6 +415,7 @@ declare(strict_types=1);
         }
         try { localStorage.removeItem(LS_DRAFT); } catch (e) { /* ignore */ }
         renderThreadsList();
+        serverSaveThread({ id: t.id, title: t.title, messages: [] }).catch(() => {});
     }
 
     function deleteThread(id) {
@@ -349,6 +427,7 @@ declare(strict_types=1);
             ensureAtLeastOneThread();
         }
         saveThreads();
+        serverDeleteThread(id).catch(() => {});
         if (wasActive) {
             setActiveThreadId(threads[0].id);
             switchToThread(threads[0].id);
@@ -660,6 +739,20 @@ declare(strict_types=1);
         threads = loadThreads();
         migrateLegacyHistoryIfAny();
         threads = loadThreads(); // recargar tras migración
+        // Mejor esfuerzo: reemplaza con threads del servidor (si hay login + tablas).
+        (async function () {
+            try {
+                const srv = await serverListThreads('');
+                if (srv && srv.length) {
+                    threads = srv;
+                    saveThreads();
+                    const storedActive = loadActiveThreadId();
+                    const activeOk = storedActive && threads.some(t => t && t.id === storedActive);
+                    setActiveThreadId(activeOk ? storedActive : threads[0].id);
+                    switchToThread(activeThreadId);
+                }
+            } catch (e) { /* ignore */ }
+        })();
         ensureAtLeastOneThread();
         const storedActive = loadActiveThreadId();
         const activeOk = storedActive && threads.some(t => t && t.id === storedActive);
@@ -907,17 +1000,45 @@ declare(strict_types=1);
         send.disabled = true;
         sendInFlight = true;
 
-        try {
+        async function callChatApiOnce() {
             const res = await fetch(CHAT_API, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ messages: history }),
+                credentials: 'same-origin',
             });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok || data.ok === false) {
-                throw new Error(data.error || ('HTTP ' + res.status));
+            const ct = (res.headers && res.headers.get) ? (res.headers.get('content-type') || '') : '';
+            const raw = await res.text().catch(() => '');
+            let data = {};
+            if (ct.toLowerCase().includes('application/json')) {
+                data = safeJsonParse(raw) || {};
+            } else {
+                // Si el servidor devolvió HTML (login/error), lo registramos para debug rápido.
+                data = { ok: false, error: 'Respuesta no-JSON (posible sesión/redirect)' };
             }
-            const reply = data.reply || '';
+            if (!res.ok || data.ok === false) {
+                const msg = (data && data.error) ? String(data.error) : ('HTTP ' + res.status);
+                const err = new Error(msg);
+                err.status = res.status;
+                err.nonJson = !ct.toLowerCase().includes('application/json');
+                err.raw = raw;
+                throw err;
+            }
+            return String(data.reply || '');
+        }
+
+        try {
+            let reply = '';
+            try {
+                reply = await callChatApiOnce();
+            } catch (e1) {
+                // Reintento único: a veces el primer request falla por redirect/cold-start.
+                const isRetryable = (e1 && (e1.nonJson || e1.status === 429 || e1.status === 500 || e1.status === 502 || e1.status === 503));
+                if (!isRetryable) throw e1;
+                await new Promise(r => setTimeout(r, 650));
+                reply = await callChatApiOnce();
+            }
+
             history.push({ role: 'assistant', content: reply });
             saveHistory();
             if (!trimHistory()) {
@@ -925,7 +1046,9 @@ declare(strict_types=1);
             }
         } catch (e) {
             const errMsg = String(e.message || e).toLowerCase();
-            const friendly = (errMsg.includes('token') || errMsg.includes('rate limit') || errMsg.includes('tpd') || errMsg.includes('diario'))
+            const friendly = (errMsg.includes('no-json') || errMsg.includes('respuesta no-json') || errMsg.includes('sesión') || errMsg.includes('redirect'))
+                ? 'Tu sesión parece haber cambiado o el servidor respondió algo inesperado. Recarga la página e intentá de nuevo.'
+                : (errMsg.includes('token') || errMsg.includes('rate limit') || errMsg.includes('tpd') || errMsg.includes('diario'))
                 ? 'Un momento, estoy pensando… Se alcanzó el límite de consultas. Intentá de nuevo en unos minutos.'
                 : 'Un momento, estoy procesando… Hubo un inconveniente. Por favor intentá de nuevo.';
             append('assistant', friendly);

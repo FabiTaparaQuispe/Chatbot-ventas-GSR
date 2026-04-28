@@ -12,13 +12,34 @@ $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $u = trim((string) ($_POST['usuario'] ?? ''));
     $c = (string) ($_POST['clave'] ?? '');
-    if ($u !== '' && $c !== '') {
-        $_SESSION['active'] = true;
-        $_SESSION['usuario'] = $u;
-        header('Location: ' . app_public_base() . 'index.php');
-        exit;
+    if ($u === '' || $c === '') {
+        $error = 'Usuario y contraseña requeridos.';
+    } else {
+        try {
+            $pdo = ventas_pdo();
+            $st = $pdo->prepare('SELECT password_hash, is_active FROM app_users WHERE username = :u LIMIT 1');
+            $st->execute([':u' => $u]);
+            $row = $st->fetch(PDO::FETCH_ASSOC) ?: null;
+            $ok = false;
+            if ($row && (int) ($row['is_active'] ?? 0) === 1) {
+                $hash = (string) ($row['password_hash'] ?? '');
+                $ok = $hash !== '' && password_verify($c, $hash);
+                if ($ok) {
+                    $pdo->prepare('UPDATE app_users SET last_login_at = NOW() WHERE username = :u')->execute([':u' => $u]);
+                }
+            }
+            if ($ok) {
+                $_SESSION['active'] = true;
+                $_SESSION['usuario'] = $u;
+                header('Location: ' . app_public_base() . 'index.php');
+                exit;
+            }
+            $error = 'Usuario o contraseña incorrectos.';
+        } catch (Throwable $e) {
+            // Ya no permitimos login ficticio.
+            $error = 'No se pudo validar el acceso (tablas de usuarios no configuradas). Ejecuta `docs/schema_auth_chat.sql` en la BD.';
+        }
     }
-    $error = 'Usuario y contraseña requeridos.';
 }
 
 ?>

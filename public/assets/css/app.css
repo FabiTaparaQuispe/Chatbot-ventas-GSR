@@ -1040,6 +1040,53 @@ html[data-theme="dark"] .login-panel {
     background: var(--bg);
 }
 
+/* Overrides para utilidades Tailwind usadas en login.php */
+html[data-theme="dark"] body.login-page .login-panel,
+html[data-theme="dark"] body.login-page .login-sip-panel {
+    color: var(--text);
+}
+html[data-theme="dark"] body.login-page .login-panel .text-gray-900,
+html[data-theme="dark"] body.login-page .login-panel .text-gray-800,
+html[data-theme="dark"] body.login-page .login-panel .text-gray-700 {
+    color: var(--text) !important;
+}
+html[data-theme="dark"] body.login-page .login-panel .text-gray-600,
+html[data-theme="dark"] body.login-page .login-panel .text-gray-500,
+html[data-theme="dark"] body.login-page .login-panel .text-gray-400 {
+    color: var(--muted) !important;
+}
+html[data-theme="dark"] body.login-page .login-panel .bg-white,
+html[data-theme="dark"] body.login-page .login-panel .bg-gray-50,
+html[data-theme="dark"] body.login-page .login-panel .bg-gray-100 {
+    background-color: var(--surface-2) !important;
+}
+html[data-theme="dark"] body.login-page .login-panel input,
+html[data-theme="dark"] body.login-page .login-panel select,
+html[data-theme="dark"] body.login-page .login-panel textarea {
+    background-color: var(--surface-2) !important;
+    color: var(--text) !important;
+    border-color: var(--border) !important;
+}
+html[data-theme="dark"] body.login-page .login-panel input::placeholder,
+html[data-theme="dark"] body.login-page .login-panel textarea::placeholder {
+    color: var(--muted) !important;
+}
+html[data-theme="dark"] body.login-page .login-panel .border-gray-200,
+html[data-theme="dark"] body.login-page .login-panel .border-gray-100 {
+    border-color: var(--border) !important;
+}
+html[data-theme="dark"] body.login-page .login-panel .bg-red-50 {
+    background-color: rgba(239, 68, 68, 0.12) !important;
+}
+html[data-theme="dark"] body.login-page .login-panel .text-red-600 {
+    color: #f87171 !important;
+}
+html[data-theme="dark"] body.login-page .login-panel .shadow-lg,
+html[data-theme="dark"] body.login-page .login-panel .shadow-blue-600\/30,
+html[data-theme="dark"] body.login-page .login-panel .shadow-blue-600\/40 {
+    box-shadow: none !important;
+}
+
 /*
  * Ventas general — vista Iconos en modo oscuro.
  * Va al final de la cascada; usa #tablaVentasWrapper + data-app-theme (sincronizado en theme.js)
