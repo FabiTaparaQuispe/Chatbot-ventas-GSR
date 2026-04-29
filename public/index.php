@@ -11,16 +11,20 @@ if ($page === 'graficos') {
     exit;
 }
 
-$allowedPages = ['ventas', 'chatbot'];
+$allowedPages = ['ventas', 'chatbot', 'historial_preguntas'];
 if (!in_array($page, $allowedPages, true)) {
     $page = 'ventas';
 }
 
 $currentPage = $page;
-$pageTitle = $page === 'chatbot' ? 'Chatbot' : 'Ventas general';
+$pageTitle = match ($page) {
+    'chatbot' => 'Chatbot',
+    'historial_preguntas' => 'Preguntas al chatbot',
+    default => 'Ventas general',
+};
 $loadVentasAssets = $page === 'ventas';
 $skipFloatingChat = $page === 'chatbot';
-$bodyClass = $page === 'chatbot' ? 'app-page-chatbot' : '';
+$bodyClass = $page === 'chatbot' ? 'app-page-chatbot' : ($page === 'historial_preguntas' ? 'app-page-historial-chat' : '');
 
 $extraScripts = '';
 if ($loadVentasAssets) {
@@ -30,6 +34,8 @@ if ($loadVentasAssets) {
 require __DIR__ . '/includes/layout-start.php';
 if ($page === 'chatbot') {
     require __DIR__ . '/partials/chatbot.php';
+} elseif ($page === 'historial_preguntas') {
+    require __DIR__ . '/partials/historial_preguntas.php';
 } else {
     require __DIR__ . '/partials/ventasgeneral.php';
 }

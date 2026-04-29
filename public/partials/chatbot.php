@@ -1,6 +1,13 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/../modules/ventas_chat_config.inc.php';
+$ventasHistorialPreguntasUrl = $ventasPublicWebBase;
+if ($ventasHistorialPreguntasUrl !== '' && !str_ends_with($ventasHistorialPreguntasUrl, '/')) {
+    $ventasHistorialPreguntasUrl .= '/';
+}
+$ventasHistorialPreguntasUrl .= 'index.php?page=historial_preguntas';
+
 $usuario = (string) ($_SESSION['usuario'] ?? '');
 $nomCorto = '';
 if ($usuario !== '') {
@@ -162,8 +169,17 @@ if ($usuario !== '') {
         </a>
         <span class="chatbot-topbar-title">Asistente de ventas</span>
         <div class="chatbot-topbar-actions">
-            <button type="button" id="ventasChatThreadsBtn" class="chatbot-icon-btn" title="Historial" aria-label="Historial">☰</button>
+            <button type="button" id="ventasChatThreadsBtn" class="chatbot-icon-btn" title="Chats recientes" aria-label="Chats recientes">💬</button>
             <button type="button" id="ventasChatClear" class="chatbot-icon-btn" title="Limpiar conversación" aria-label="Limpiar conversación">⌫</button>
+            <details class="ventas-chat-head-menu" id="ventasChatHeadMenu">
+                <summary class="chatbot-icon-btn ventas-chat-menu-summary" aria-label="Más opciones" title="Más">⋮</summary>
+                <div class="ventas-chat-menu-panel ventas-chat-menu-panel--page" role="menu">
+                    <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuNew" role="menuitem">Nueva conversación</button>
+                    <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuClear" role="menuitem">Limpiar esta conversación…</button>
+                    <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuPrefs" role="menuitem">Personalización…</button>
+                    <a class="ventas-chat-menu-item ventas-chat-menu-link" role="menuitem" href="<?= htmlspecialchars($ventasHistorialPreguntasUrl, ENT_QUOTES, 'UTF-8') ?>">Preguntas guardadas</a>
+                </div>
+            </details>
         </div>
     </header>
     <div class="chatbot-body">
@@ -200,10 +216,10 @@ if ($usuario !== '') {
 
     <div id="ventasChatThreadsDrawer" class="ventas-chat-drawer-full" hidden>
         <div class="ventas-chat-drawer-backdrop" data-action="close" aria-hidden="true"></div>
-        <aside class="ventas-chat-drawer-panel" aria-label="Historial de conversaciones">
+        <aside class="ventas-chat-drawer-panel" aria-label="Conversaciones recientes">
             <div class="ventas-chat-drawer-head">
                 <div class="ventas-chat-drawer-head-top">
-                    <p class="ventas-chat-drawer-title">Chats</p>
+                    <p class="ventas-chat-drawer-title">Conversaciones recientes</p>
                     <div class="ventas-chat-drawer-tools">
                         <button type="button" id="ventasChatNewThread" class="ventas-chat-drawer-btn" title="Nuevo chat">Nuevo</button>
                         <button type="button" id="ventasChatCloseThreads" class="ventas-chat-drawer-btn" title="Cerrar historial">Cerrar</button>
@@ -217,5 +233,4 @@ if ($usuario !== '') {
 </div>
 <script>window.VENTAS_CHAT_FULL = true;</script>
 <?php
-require_once __DIR__ . '/../modules/ventas_chat_config.inc.php';
 require_once __DIR__ . '/../modules/chat_assistant_script.inc.php';

@@ -130,10 +130,15 @@ try {
             if ($role !== 'user' && $role !== 'assistant') continue;
             $content = (string) ($m['content'] ?? '');
             if ($content === '') continue;
-            if (strlen($content) > 4000) $content = substr($content, 0, 4000);
+            // MEDIUMTEXT en BD; evitamos truncar respuestas largas del asistente (listas + SQL).
+            if (strlen($content) > 524288) {
+                $content = substr($content, 0, 524288);
+            }
             $stM->execute([':tid' => $threadId, ':role' => $role, ':content' => $content]);
             $n++;
-            if ($n >= 220) break;
+            if ($n >= 500) {
+                break;
+            }
         }
 
         $pdo->commit();

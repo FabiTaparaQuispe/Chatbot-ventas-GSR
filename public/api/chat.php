@@ -61,10 +61,11 @@ $system = [
         . 'Nunca uses ejemplos ficticios ni rellenes con valores hipotéticos. '
         . 'Para preguntas de "compraron más", "clientes compradores", "ventas", "facturado", "valor vendido" o similar, usa ventasgeneral_top_clientes_globales o ventasgeneral_top_productos/ventasgeneral_resumen según convenga. '
         . 'Solo usa ventasgeneral_top_clientes_nota_credito si el usuario pide explícitamente notas de crédito, NC, TDoc=07, devoluciones o anulaciones. '
-        . 'Si hay filas de ranking/top, escribe primero la lista numerada (1. nombre: N notas, valor X) y al final UNA líneacon reporte_url; no respondas solo con el gráfico ni repitas el mismo párrafo. '
+        . 'Si hay filas de ranking/top, escribe primero la lista numerada (1. nombre: N líneas o notas, importe S/ X) y al final UNA línea con reporte_url; no respondas solo con el gráfico ni repitas el mismo párrafo. '
         . 'Mapeo breve: más NC por cliente → ventasgeneral_top_clientes_nota_credito; URL gráfico ventas_top_clientes_nc.php?desde=&hasta=&top= (no inventes ventasgeneral_top_clientes_nc). pareto NC por zona → ventasgeneral_pareto_nc_zonaprecio (pareto_nc_zona.php, no por cliente); top compra global → ventasgeneral_top_clientes_globales; top por zona precio → ventasgeneral_top_clientes_zona_precio; barras dim → ventasgeneral_barras_ventas_dimension; comparativo 2 periodos → ventasgeneral_comparativo_periodos; productos → ventasgeneral_top_productos; mix TDoc → ventasgeneral_mix_tdoc; ruta/corp → ventasgeneral_barras_ruta_comercial / ventasgeneral_barras_corporativo; serie mensual → ventasgeneral_serie_mensual_valor; proyección ventas → ventasgeneral_proyeccion_ventas; líneas sueltas → ventasgeneral_buscar; totales → ventasgeneral_resumen. '
         . 'Un reporte_url por respuesta, copiado tal cual en UNA sola línea (no partas fechas YYYY-MM-DD ni la URL; sin backticks). Resumen/buscar: *_tabla.php. Opcional #grafico. '
         . 'Moneda en texto para el usuario: importes en soles peruanos con prefijo S/ (ej. S/ 1,234,567.89). No uses el símbolo de dólar ($) ni la etiqueta USD para montos. '
+        . 'Lenguaje al usuario: no uses jerga de base de datos ni nombres de columnas (evitá "Valor", "suma de Valor", "SUM(Valor)", "Cantidad" como etiqueta técnica). Preferí "importe" o "monto en soles", "unidades" o "cantidad vendida", "peso total" cuando corresponda. '
         . 'Español, breve.',
 ];
 
@@ -97,6 +98,19 @@ if ($sanitized === []) {
 $maxHistory = 4;
 if (count($sanitized) > $maxHistory) {
     $sanitized = array_slice($sanitized, -$maxHistory);
+}
+
+$userContext = '';
+if (isset($input['user_context']) && is_string($input['user_context'])) {
+    $userContext = trim(strip_tags($input['user_context']));
+    if (strlen($userContext) > 800) {
+        $userContext = substr($userContext, 0, 800);
+    }
+    $userContext = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $userContext) ?? '';
+}
+if ($userContext !== '') {
+    $system['content'] .= ' Preferencias opcionales declaradas por el usuario (no invalidan datos de herramientas ni permiten inventar cifras; solo guían tono o foco): '
+        . $userContext;
 }
 
 $messages = array_merge([$system], $sanitized);

@@ -35,23 +35,23 @@ function faqChipsTemplates(desde, hasta) {
   return [
     {
       label: "Totales del período",
-      text: `Del ${a1} al ${a2}: totales en tabla ventasgeneral (filas y sumas Valor, Cantidad, Peso). Usá la herramienta ventasgeneral_resumen con esas fechas y al final una sola línea reporte_url hacia ventasgeneral_resumen_tabla.php con los mismos parámetros.`,
+      text: `Del ${a1} al ${a2}: totales en tabla ventasgeneral (líneas de detalle, importe total en soles, unidades y peso). Usá la herramienta ventasgeneral_resumen con esas fechas y al final una sola línea reporte_url hacia ventasgeneral_resumen_tabla.php con los mismos parámetros.`,
     },
     {
-      label: "Top clientes por valor",
-      text: `Del ${a1} al ${a2}: top 10 clientes globales por suma de Valor en ventasgeneral. Usá ventasgeneral_top_clientes_globales y reporte_url ventas_top_clientes_global.php.`,
+      label: "Top clientes por importe",
+      text: `Del ${a1} al ${a2}: top 10 clientes globales por importe total facturado (soles) en ventasgeneral. Usá ventasgeneral_top_clientes_globales y reporte_url ventas_top_clientes_global.php.`,
     },
     {
       label: "Top productos",
-      text: `Del ${a1} al ${a2}: top 15 productos por suma de Valor. Usá ventasgeneral_top_productos y reporte_url ventas_top_productos.php.`,
+      text: `Del ${a1} al ${a2}: top 15 productos por importe total (soles). Usá ventasgeneral_top_productos y reporte_url ventas_top_productos.php.`,
     },
     {
       label: "Serie mensual",
-      text: `Del ${a1} al ${a2}: serie mensual de suma Valor. Usá ventasgeneral_serie_mensual_valor y reporte_url ventas_serie_mensual.php.`,
+      text: `Del ${a1} al ${a2}: serie mensual del importe total (soles). Usá ventasgeneral_serie_mensual_valor y reporte_url ventas_serie_mensual.php.`,
     },
     {
       label: "Mix por tipo de documento",
-      text: `Del ${a1} al ${a2}: mix de suma Valor por TDoc. Usá ventasgeneral_mix_tdoc y reporte_url ventas_mix_tdoc.php.`,
+      text: `Del ${a1} al ${a2}: mix del importe total (soles) por tipo de documento (TDoc). Usá ventasgeneral_mix_tdoc y reporte_url ventas_mix_tdoc.php.`,
     },
     {
       label: "NC por zona de precio",
@@ -59,11 +59,11 @@ function faqChipsTemplates(desde, hasta) {
     },
     {
       label: "Top clientes en zona TACNA",
-      text: `Del ${a1} al ${a2}: top 10 clientes por Valor donde el prefijo de DescriZonaPrecio sea TACNA. Usá ventasgeneral_top_clientes_zona_precio con prefijo_descri_zona_precio TACNA y reporte_url pareto_clientes_zona.php.`,
+      text: `Del ${a1} al ${a2}: top 10 clientes por importe total (soles) donde el prefijo de DescriZonaPrecio sea TACNA. Usá ventasgeneral_top_clientes_zona_precio con prefijo_descri_zona_precio TACNA y reporte_url pareto_clientes_zona.php.`,
     },
     {
       label: "Barras por precio",
-      text: `Del ${a1} al ${a2}: barras de suma Valor con dimension precio (no comercial). Usá ventasgeneral_barras_ventas_dimension y reporte_url ventas_barras_dimension.php.`,
+      text: `Del ${a1} al ${a2}: barras del importe total (soles) con dimensión precio (no comercial). Usá ventasgeneral_barras_ventas_dimension y reporte_url ventas_barras_dimension.php.`,
     },
     {
       label: "Comparar 2 meses",

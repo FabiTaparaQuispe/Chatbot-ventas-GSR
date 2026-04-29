@@ -21,6 +21,8 @@ declare(strict_types=1);
     const LS_ACTIVE_THREAD = NS + 'active_thread_v1';
     const LS_DRAFT = NS + 'draft_v1';
     const LS_FAVS = NS + 'favs_v1';
+    const LS_PREFS_CONTEXT = NS + 'prefs_context_v1';
+    const LS_HIDE_TIPS = NS + 'hide_consejos_v1';
     const MAX_LOCAL_MESSAGES = 120;
     const MAX_THREADS = 40;
     const isFull = typeof window !== 'undefined' && window.VENTAS_CHAT_FULL === true;
@@ -42,6 +44,7 @@ declare(strict_types=1);
     const newThreadBtn = document.getElementById('ventasChatNewThread');
     const closeThreadsBtn = document.getElementById('ventasChatCloseThreads');
     const micBtn = document.getElementById('ventasChatMic');
+    const recentsBtn = document.getElementById('ventasChatRecentsBtn');
     let faqTemplatesCache = [];
     const history = [];
     let threads = [];
@@ -228,6 +231,119 @@ declare(strict_types=1);
         }
     }
 
+    function dayBucketLabel(ts) {
+        const n = typeof ts === 'number' ? ts : parseInt(String(ts), 10);
+        const d = new Date(n);
+        if (isNaN(d.getTime())) return 'Anteriores';
+        const now = new Date();
+        const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        const startYesterday = startToday - 86400000;
+        const startWeek = startToday - 7 * 86400000;
+        const t = d.getTime();
+        if (t >= startToday) return 'Hoy';
+        if (t >= startYesterday) return 'Ayer';
+        if (t >= startWeek) return 'Últimos 7 días';
+        return 'Anteriores';
+    }
+
+    function buildChatRequestBody() {
+        const body = { messages: history };
+        const u = loadUserContextForApi();
+        if (u !== '') body.user_context = u;
+        return body;
+    }
+    function loadPrefsContextRaw() {
+        try {
+            return localStorage.getItem(LS_PREFS_CONTEXT) || '';
+        } catch (e) {
+            return '';
+        }
+    }
+    function savePrefsContextRaw(s) {
+        try {
+            localStorage.setItem(LS_PREFS_CONTEXT, String(s || '').slice(0, 4000));
+        } catch (e) { /* ignore */ }
+    }
+    function loadUserContextForApi() {
+        const t = loadPrefsContextRaw().trim();
+        return t.length > 800 ? t.slice(0, 800) : t;
+    }
+    function applyShortcutsVisibility() {
+        const secciones = document.querySelectorAll('.ventas-chat-shortcuts');
+        let hide = false;
+        try {
+            hide = localStorage.getItem(LS_HIDE_TIPS) === '1';
+        } catch (e) { /* ignore */ }
+        secciones.forEach(function (el) {
+            el.classList.toggle('ventas-chat-shortcuts--user-hidden', hide);
+        });
+    }
+    function closeHeadMenu() {
+        const hm = document.getElementById('ventasChatHeadMenu');
+        if (hm) hm.removeAttribute('open');
+    }
+
+    let prefsDialog = null;
+    function ensurePrefsDialog() {
+        if (prefsDialog) return prefsDialog;
+        prefsDialog = document.createElement('dialog');
+        prefsDialog.id = 'ventasChatPrefsDialog';
+        prefsDialog.className = 'ventas-chat-prefs-dialog';
+        prefsDialog.innerHTML = ''
+            + '<div class="ventas-chat-prefs-inner">'
+            + '<h3 class="ventas-chat-prefs-title">Personalización</h3>'
+            + '<p class="ventas-chat-prefs-lead">Opcional: el asistente tendrá en cuenta esto (tono, formato, prioridades). No reemplaza datos ni permite inventar cifras.</p>'
+            + '<label class="ventas-chat-prefs-label" for="ventasChatPrefsTextarea">Instrucciones personalizadas</label>'
+            + '<textarea id="ventasChatPrefsTextarea" class="ventas-chat-prefs-textarea" rows="5" maxlength="2000" placeholder="Ej.: Respondé en pocas frases. Cuando haya tablas, resumí el hallazgo principal primero."></textarea>'
+            + '<label class="ventas-chat-prefs-check"><input type="checkbox" id="ventasChatPrefsHideTips"> Ocultar «Consejos para tu consulta» en este panel</label>'
+            + '<div class="ventas-chat-prefs-actions">'
+            + '<button type="button" class="ventas-chat-prefs-btn ventas-chat-prefs-btn--ghost" data-prefs-cancel>Cancelar</button>'
+            + '<button type="button" class="ventas-chat-prefs-btn ventas-chat-prefs-btn--primary" data-prefs-save>Guardar</button>'
+            + '</div></div>';
+        document.body.appendChild(prefsDialog);
+        prefsDialog.querySelector('[data-prefs-cancel]').addEventListener('click', function () {
+            prefsDialog.close();
+        });
+        prefsDialog.querySelector('[data-prefs-save]').addEventListener('click', function () {
+            const ta = prefsDialog.querySelector('#ventasChatPrefsTextarea');
+            const ck = prefsDialog.querySelector('#ventasChatPrefsHideTips');
+            savePrefsContextRaw(ta ? ta.value : '');
+            try {
+                localStorage.setItem(LS_HIDE_TIPS, ck && ck.checked ? '1' : '0');
+            } catch (e) { /* ignore */ }
+            applyShortcutsVisibility();
+            prefsDialog.close();
+        });
+        return prefsDialog;
+    }
+    function openPrefsDialog() {
+        const d = ensurePrefsDialog();
+        const ta = d.querySelector('#ventasChatPrefsTextarea');
+        const ck = d.querySelector('#ventasChatPrefsHideTips');
+        if (ta) ta.value = loadPrefsContextRaw();
+        try {
+            if (ck) ck.checked = localStorage.getItem(LS_HIDE_TIPS) === '1';
+        } catch (e2) {
+            if (ck) ck.checked = false;
+        }
+        if (typeof d.showModal === 'function') d.showModal();
+        if (ta) ta.focus();
+    }
+
+    function clearActiveConversationMaybeConfirm() {
+        if (history.length > 0) {
+            if (!window.confirm('¿Borrar todos los mensajes de esta conversación? Podés abrir otras desde «Chats recientes».')) {
+                return;
+            }
+        }
+        clearUiChat();
+        if (input) input.value = '';
+        autosizeInput();
+        try { localStorage.removeItem(LS_DRAFT); } catch (e) { /* ignore */ }
+        persistActiveThreadFromHistory();
+        if (input) input.focus();
+    }
+
     function openThreadsDrawer() {
         if (!threadsDrawer) return;
         threadsDrawer.hidden = false;
@@ -263,25 +379,23 @@ declare(strict_types=1);
             const p = document.createElement('p');
             p.style.margin = '0.5rem';
             p.style.opacity = '0.75';
-            p.textContent = q ? 'No hay resultados para tu búsqueda.' : 'Aún no hay conversaciones guardadas.';
+            p.textContent = q ? 'No hay resultados para tu búsqueda.' : 'Aún no hay conversaciones. Usá «Nueva conversación» o enviá un mensaje para crear una.';
             threadsList.appendChild(p);
             return;
         }
-        const recientes = filtered.slice(0, 8);
-        const resto = filtered.slice(8);
+
+        const buckets = { Hoy: [], Ayer: [], 'Últimos 7 días': [], Anteriores: [] };
+        const order = ['Hoy', 'Ayer', 'Últimos 7 días', 'Anteriores'];
+        filtered.forEach(function (t) {
+            const b = dayBucketLabel(t.updatedAt);
+            if (buckets[b]) buckets[b].push(t);
+        });
 
         function sectionLabel(txt) {
             const s = document.createElement('div');
             s.className = 'ventas-chat-drawer-section';
             s.textContent = txt;
             threadsList.appendChild(s);
-        }
-
-        sectionLabel('Recientes');
-        recientes.forEach(renderThreadItem);
-        if (resto.length) {
-            sectionLabel('Todos');
-            resto.forEach(renderThreadItem);
         }
 
         function renderThreadItem(t) {
@@ -302,8 +416,8 @@ declare(strict_types=1);
             const del = document.createElement('button');
             del.type = 'button';
             del.className = 'ventas-chat-thread-del';
-            del.title = 'Eliminar';
-            del.setAttribute('aria-label', 'Eliminar chat');
+            del.title = 'Eliminar conversación';
+            del.setAttribute('aria-label', 'Eliminar conversación');
             del.textContent = '×';
             del.addEventListener('click', function (ev) {
                 ev.preventDefault();
@@ -329,6 +443,13 @@ declare(strict_types=1);
             });
             threadsList.appendChild(btn);
         }
+
+        order.forEach(function (label) {
+            const arr = buckets[label];
+            if (!arr.length) return;
+            sectionLabel(label);
+            arr.forEach(renderThreadItem);
+        });
     }
 
     function clearUiChat() {
@@ -461,15 +582,15 @@ declare(strict_types=1);
         const c1 = toYmd(new Date(y, 1, 1));
         const c2 = toYmd(new Date(y, 2, 0));
         return [
-            { label: 'Totales del período', text: 'Del ' + desde + ' al ' + hasta + ', ¿cuáles son los totales de ventas (filas, suma de Valor, suma de Cantidad y suma de Peso)?' },
-            { label: 'Top clientes (valor)', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el top 10 de clientes (global) por suma de Valor.' },
-            { label: 'Top productos', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el top 15 de productos por suma de Valor.' },
-            { label: 'Serie mensual', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame la serie mensual de la suma de Valor.' },
-            { label: 'Mix por tipo de documento', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el mix de suma de Valor por tipo de documento.' },
+            { label: 'Totales del período', text: 'Del ' + desde + ' al ' + hasta + ', ¿cuáles son los totales de ventas (líneas de detalle, importe total en soles, unidades y peso)?' },
+            { label: 'Top clientes (importe)', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el top 10 de clientes a nivel global por importe total facturado (soles).' },
+            { label: 'Top productos', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el top 15 de productos por importe total (soles).' },
+            { label: 'Serie mensual', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame la serie mensual del importe total (soles).' },
+            { label: 'Mix por tipo de documento', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el mix del importe total (soles) por tipo de documento.' },
             { label: 'NC por zona precio', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el pareto de notas de crédito (tipo 07) por zona de precio (DescriZonaPrecio).' },
-            { label: 'Top en zona TACNA', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el top 10 de clientes por suma de Valor dentro de la zona de precio con prefijo TACNA.' },
-            { label: 'Barras (precio)', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame un gráfico de barras de suma de Valor por zona de precio (DescriZonaPrecio).' },
-            { label: 'Comparar 2 meses', text: 'Compara la suma de Valor por zona de precio (DescriZonaPrecio): período A del ' + b1 + ' al ' + b2 + ' vs período B del ' + c1 + ' al ' + c2 + ' (top 10).' },
+            { label: 'Top en zona TACNA', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el top 10 de clientes por importe total (soles) dentro de la zona de precio con prefijo TACNA.' },
+            { label: 'Barras (precio)', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame un gráfico de barras del importe total (soles) por zona de precio (DescriZonaPrecio).' },
+            { label: 'Comparar 2 meses', text: 'Compará el importe total (soles) por zona de precio (DescriZonaPrecio): período A del ' + b1 + ' al ' + b2 + ' vs período B del ' + c1 + ' al ' + c2 + ' (top 10).' },
         ];
     }
     function renderVentasFaqSelect() {
@@ -786,6 +907,28 @@ declare(strict_types=1);
         persistActiveThreadFromHistory();
     }
 
+    function getThreadIdFromUrl() {
+        try {
+            const q = new URLSearchParams(window.location.search || '');
+            const t = String(q.get('thread') || '').trim();
+            return t !== '' ? t : '';
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function resolveActiveThreadIdFromState() {
+        const urlT = getThreadIdFromUrl();
+        if (urlT && threads.some(t => t && t.id === urlT)) {
+            return urlT;
+        }
+        const stored = loadActiveThreadId();
+        if (stored && threads.some(t => t && t.id === stored)) {
+            return stored;
+        }
+        return threads[0] && threads[0].id ? threads[0].id : '';
+    }
+
     function loadHistory() {
         threads = loadThreads();
         migrateLegacyHistoryIfAny();
@@ -797,18 +940,21 @@ declare(strict_types=1);
                 if (srv && srv.length) {
                     threads = srv;
                     saveThreads();
-                    const storedActive = loadActiveThreadId();
-                    const activeOk = storedActive && threads.some(t => t && t.id === storedActive);
-                    setActiveThreadId(activeOk ? storedActive : threads[0].id);
-                    switchToThread(activeThreadId);
                 }
             } catch (e) { /* ignore */ }
+            ensureAtLeastOneThread();
+            const tid = resolveActiveThreadIdFromState();
+            if (tid) {
+                setActiveThreadId(tid);
+                switchToThread(tid);
+            }
         })();
         ensureAtLeastOneThread();
-        const storedActive = loadActiveThreadId();
-        const activeOk = storedActive && threads.some(t => t && t.id === storedActive);
-        setActiveThreadId(activeOk ? storedActive : threads[0].id);
-        switchToThread(activeThreadId);
+        const tid0 = resolveActiveThreadIdFromState();
+        if (tid0) {
+            setActiveThreadId(tid0);
+            switchToThread(tid0);
+        }
     }
 
     function saveDraft() {
@@ -858,6 +1004,7 @@ declare(strict_types=1);
         renderVentasFaqSelect();
         loadDraft();
         autosizeInput();
+        applyShortcutsVisibility();
         if (input) input.focus();
     }
 
@@ -880,13 +1027,7 @@ declare(strict_types=1);
     }
     if (clearBtn) {
         clearBtn.addEventListener('click', function () {
-            // "Limpiar conversación" = reinicia SOLO el chat activo (no borra historial de otros chats)
-            clearUiChat();
-            if (input) input.value = '';
-            autosizeInput();
-            try { localStorage.removeItem(LS_DRAFT); } catch (e) { /* ignore */ }
-            persistActiveThreadFromHistory();
-            if (input) input.focus();
+            clearActiveConversationMaybeConfirm();
         });
     }
 
@@ -918,6 +1059,41 @@ declare(strict_types=1);
             closeThreadsDrawer();
         });
     }
+    if (recentsBtn) {
+        recentsBtn.addEventListener('click', function () {
+            openThreadsDrawer();
+        });
+    }
+    const menuNew = document.getElementById('ventasChatMenuNew');
+    const menuClear = document.getElementById('ventasChatMenuClear');
+    const menuPrefs = document.getElementById('ventasChatMenuPrefs');
+    if (menuNew) {
+        menuNew.addEventListener('click', function () {
+            closeHeadMenu();
+            createNewThread();
+            closeThreadsDrawer();
+            if (input) input.focus();
+        });
+    }
+    if (menuClear) {
+        menuClear.addEventListener('click', function () {
+            closeHeadMenu();
+            clearActiveConversationMaybeConfirm();
+        });
+    }
+    if (menuPrefs) {
+        menuPrefs.addEventListener('click', function () {
+            closeHeadMenu();
+            openPrefsDialog();
+        });
+    }
+    document.addEventListener('click', function (ev) {
+        const hm = document.getElementById('ventasChatHeadMenu');
+        if (!hm || !hm.hasAttribute('open')) return;
+        const t = ev.target;
+        if (t && hm.contains(t)) return;
+        hm.removeAttribute('open');
+    });
 
     // Guardar como "Mis frecuentes" con Alt+Enter (o Ctrl/Cmd+S ya soportado abajo)
     if (input) {
@@ -930,6 +1106,20 @@ declare(strict_types=1);
     }
 
     document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            const dlg = document.getElementById('ventasChatPrefsDialog');
+            if (dlg && dlg.open) {
+                e.preventDefault();
+                dlg.close();
+                return;
+            }
+            const hm = document.getElementById('ventasChatHeadMenu');
+            if (hm && hm.hasAttribute('open')) {
+                e.preventDefault();
+                hm.removeAttribute('open');
+                return;
+            }
+        }
         if (e.key === 'Escape' && panel && !panel.hidden) {
             if (isFull) {
                 return;
@@ -942,6 +1132,7 @@ declare(strict_types=1);
     });
 
     loadHistory();
+    applyShortcutsVisibility();
     if (isFull) {
         syncFullPageHero();
     }
@@ -1055,7 +1246,7 @@ declare(strict_types=1);
             const res = await fetch(CHAT_API, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages: history }),
+                body: JSON.stringify(buildChatRequestBody()),
                 credentials: 'same-origin',
             });
             const ct = (res.headers && res.headers.get) ? (res.headers.get('content-type') || '') : '';

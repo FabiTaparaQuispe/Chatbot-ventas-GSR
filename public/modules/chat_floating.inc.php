@@ -4,6 +4,12 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/ventas_chat_config.inc.php';
 
+$ventasHistorialPreguntasUrl = $ventasPublicWebBase;
+if ($ventasHistorialPreguntasUrl !== '' && !str_ends_with($ventasHistorialPreguntasUrl, '/')) {
+    $ventasHistorialPreguntasUrl .= '/';
+}
+$ventasHistorialPreguntasUrl .= 'index.php?page=historial_preguntas';
+
 ?>
 <style>
     body:not(.app-page-chatbot) { padding-bottom: 5rem; }
@@ -81,7 +87,7 @@ require_once __DIR__ . '/ventas_chat_config.inc.php';
         font-size: 1rem;
         font-weight: 600;
     }
-    .chat-panel-actions { display: flex; align-items: center; gap: 0.25rem; }
+    .chat-panel-actions { display: flex; align-items: center; gap: 0.25rem; position: relative; }
     .chat-icon-btn {
         width: 2.25rem;
         height: 2.25rem;
@@ -98,6 +104,11 @@ require_once __DIR__ . '/ventas_chat_config.inc.php';
         justify-content: center;
     }
     .chat-icon-btn:hover { background: rgba(255, 255, 255, 0.25); }
+
+    a.chat-icon-btn {
+        text-decoration: none;
+        box-sizing: border-box;
+    }
 
     .chat-panel #ventasChatLog {
         flex: 1;
@@ -322,6 +333,57 @@ require_once __DIR__ . '/ventas_chat_config.inc.php';
         line-height: 1;
     }
     .ventas-chat-thread-del:hover { background: rgba(148, 163, 184, 0.18); opacity: 1; }
+
+    .ventas-chat-head-menu {
+        position: relative;
+    }
+    .ventas-chat-head-menu > summary.ventas-chat-menu-summary {
+        list-style: none;
+        cursor: pointer;
+    }
+    .ventas-chat-head-menu > summary.ventas-chat-menu-summary::-webkit-details-marker {
+        display: none;
+    }
+    .ventas-chat-menu-panel {
+        position: absolute;
+        top: calc(100% + 4px);
+        right: 0;
+        min-width: 13.5rem;
+        padding: 0.35rem;
+        border-radius: 12px;
+        background: #fff;
+        color: #0f172a;
+        border: 1px solid rgba(15, 23, 42, 0.12);
+        box-shadow: 0 12px 40px rgba(15, 23, 42, 0.18);
+        z-index: 10005;
+    }
+    html[data-theme="dark"] .ventas-chat-menu-panel {
+        background: #18181b;
+        color: #f4f4f5;
+        border-color: rgba(255, 255, 255, 0.12);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+    }
+    .ventas-chat-menu-item {
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: 0.55rem 0.65rem;
+        margin: 0;
+        border: none;
+        border-radius: 8px;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        font-size: 0.88rem;
+        cursor: pointer;
+    }
+    .ventas-chat-menu-item:hover {
+        background: rgba(37, 99, 235, 0.1);
+    }
+    a.ventas-chat-menu-item.ventas-chat-menu-link {
+        text-decoration: none;
+        box-sizing: border-box;
+    }
 </style>
 
 <button type="button" id="ventasChatFab" class="chat-fab" aria-controls="ventasChatPanel" aria-expanded="false" aria-label="Abrir asistente de consultas" title="Asistente">
@@ -335,8 +397,18 @@ require_once __DIR__ . '/ventas_chat_config.inc.php';
     <div class="chat-panel-head">
         <h2 id="ventasChatPanelTitle">Asistente de ventas</h2>
         <div class="chat-panel-actions">
-            <button type="button" id="ventasChatThreadsBtn" class="chat-icon-btn" aria-label="Historial" title="Historial">☰</button>
+            <a class="chat-icon-btn" href="<?= htmlspecialchars($ventasHistorialPreguntasUrl, ENT_QUOTES, 'UTF-8') ?>" aria-label="Preguntas al chatbot" title="Preguntas guardadas">☰</a>
+            <button type="button" id="ventasChatRecentsBtn" class="chat-icon-btn" aria-label="Chats recientes" title="Chats recientes">💬</button>
             <button type="button" id="ventasChatClear" class="chat-icon-btn" aria-label="Limpiar conversación" title="Limpiar chat">⌫</button>
+            <details class="ventas-chat-head-menu" id="ventasChatHeadMenu">
+                <summary class="chat-icon-btn ventas-chat-menu-summary" aria-label="Más opciones" title="Más">⋮</summary>
+                <div class="ventas-chat-menu-panel" role="menu">
+                    <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuNew" role="menuitem">Nueva conversación</button>
+                    <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuClear" role="menuitem">Limpiar esta conversación…</button>
+                    <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuPrefs" role="menuitem">Personalización…</button>
+                    <a class="ventas-chat-menu-item ventas-chat-menu-link" role="menuitem" href="<?= htmlspecialchars($ventasHistorialPreguntasUrl, ENT_QUOTES, 'UTF-8') ?>">Preguntas guardadas</a>
+                </div>
+            </details>
             <button type="button" id="ventasChatClose" class="chat-icon-btn" aria-label="Cerrar">×</button>
         </div>
     </div>
@@ -355,7 +427,7 @@ require_once __DIR__ . '/ventas_chat_config.inc.php';
     </div>
     <div class="chat-panel-foot">
         <div class="row">
-            <textarea id="ventasChatInput" placeholder="Ej.: ¿Cuánto sumó Valor en marzo de 2026?" rows="2"></textarea>
+            <textarea id="ventasChatInput" placeholder="Ej.: ¿Cuánto se facturó en soles en marzo de 2026?" rows="2"></textarea>
             <button type="button" id="ventasChatMic" class="ventas-chat-mic-btn" aria-label="Dictado por voz" title="Dictado por voz" aria-pressed="false">🎙</button>
             <button type="button" id="ventasChatSend">Enviar</button>
         </div>
@@ -364,10 +436,10 @@ require_once __DIR__ . '/ventas_chat_config.inc.php';
 
     <div id="ventasChatThreadsDrawer" class="ventas-chat-drawer" hidden>
         <div class="ventas-chat-drawer-backdrop" data-action="close" aria-hidden="true"></div>
-        <aside class="ventas-chat-drawer-panel" aria-label="Historial de conversaciones">
+        <aside class="ventas-chat-drawer-panel" aria-label="Conversaciones recientes">
             <div class="ventas-chat-drawer-head">
                 <div class="ventas-chat-drawer-head-top">
-                    <p class="ventas-chat-drawer-title">Chats</p>
+                    <p class="ventas-chat-drawer-title">Conversaciones recientes</p>
                     <div class="ventas-chat-drawer-tools">
                         <button type="button" id="ventasChatNewThread" class="ventas-chat-drawer-btn" title="Nuevo chat">Nuevo</button>
                         <button type="button" id="ventasChatCloseThreads" class="ventas-chat-drawer-btn" title="Cerrar historial">Cerrar</button>

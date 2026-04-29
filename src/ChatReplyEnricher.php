@@ -148,7 +148,7 @@ final class ChatReplyEnricher
 
             return 'Resumen del periodo'
                 . ($d1 !== '' && $d2 !== '' ? " {$d1} – {$d2}" : '')
-                . ": {$filas} filas, suma Valor {$sv}.";
+                . ": {$filas} líneas de detalle, importe total S/ {$sv}.";
         }
 
         $filas = null;
@@ -223,7 +223,7 @@ final class ChatReplyEnricher
             $z = (string) ($row['zona'] ?? '');
             $n = (int) ($row['lineas_nc'] ?? 0);
             $v = self::fmtNum($row['impacto_abs_valor'] ?? 0);
-            $out[] = "{$i}. {$z}: {$n} líneas NC, impacto (|Valor|) {$v}";
+            $out[] = "{$i}. {$z}: {$n} líneas NC, impacto en importe (soles) S/ {$v}";
             $i++;
             if ($i > 25) {
                 break;
@@ -245,7 +245,7 @@ final class ChatReplyEnricher
             $nom = (string) ($row['nombre_cliente'] ?? '');
             $ln = (int) ($row['lineas_venta'] ?? 0);
             $v = self::fmtNum($row['suma_valor'] ?? 0);
-            $out[] = "{$i}. {$nom}: " . $ln . ' líneas, suma Valor ' . $v;
+            $out[] = "{$i}. {$nom}: " . $ln . ' líneas, importe S/ ' . $v;
             $i++;
             if ($i > 25) {
                 break;
@@ -291,7 +291,7 @@ final class ChatReplyEnricher
             $v = self::fmtNum($row['suma_valor'] ?? 0);
             $pct = $row['pct_del_total'] ?? null;
             $pctS = is_numeric($pct) ? ', ' . self::fmtNum($pct, 2) . '% del total' : '';
-            $out[] = "{$i}. {$nom}: {$ln} líneas, suma Valor {$v}{$pctS}";
+            $out[] = "{$i}. {$nom}: {$ln} líneas, importe S/ {$v}{$pctS}";
             $i++;
             if ($i > 25) {
                 break;
@@ -313,7 +313,7 @@ final class ChatReplyEnricher
             $e = (string) ($row['etiqueta'] ?? '');
             $ln = (int) ($row['lineas'] ?? 0);
             $v = self::fmtNum($row['suma_valor'] ?? 0);
-            $out[] = "{$i}. {$e}: {$ln} líneas, suma Valor " . $v;
+            $out[] = "{$i}. {$e}: {$ln} líneas, importe S/ " . $v;
             $i++;
             if ($i > 25) {
                 break;
@@ -335,7 +335,7 @@ final class ChatReplyEnricher
             $g = (string) ($row['glosa'] ?? $row['cod_item'] ?? '');
             $v = self::fmtNum($row['suma_valor'] ?? 0);
             $ln = (int) ($row['lineas'] ?? 0);
-            $out[] = "{$i}. {$g}: {$ln} líneas, suma Valor " . $v;
+            $out[] = "{$i}. {$g}: {$ln} líneas, importe S/ " . $v;
             $i++;
             if ($i > 25) {
                 break;
@@ -358,7 +358,7 @@ final class ChatReplyEnricher
             $label = DocumentoTipoEtiqueta::etiqueta($t);
             $ln = (int) ($row['lineas'] ?? 0);
             $v = self::fmtNum($row['suma_valor'] ?? 0);
-            $out[] = "{$i}. {$label}: {$ln} líneas, suma Valor " . $v;
+            $out[] = "{$i}. {$label}: {$ln} líneas, importe S/ " . $v;
             $i++;
             if ($i > 25) {
                 break;
@@ -381,7 +381,7 @@ final class ChatReplyEnricher
             $a = self::fmtNum($row['valor_periodo_a'] ?? 0);
             $b = self::fmtNum($row['valor_periodo_b'] ?? 0);
             $d = self::fmtNum($row['delta'] ?? 0);
-            $out[] = "{$i}. {$e}: periodo A {$a}, periodo B {$b}, delta " . $d;
+            $out[] = "{$i}. {$e}: periodo A S/ {$a}, periodo B S/ {$b}, diferencia S/ " . $d;
             $i++;
             if ($i > 25) {
                 break;
@@ -405,7 +405,7 @@ final class ChatReplyEnricher
             $e = (string) ($row[$key] ?? '');
             $ln = (int) ($row['lineas'] ?? 0);
             $v = self::fmtNum($row['suma_valor'] ?? 0);
-            $out[] = "{$i}. {$e}: {$ln} líneas, suma Valor " . $v;
+            $out[] = "{$i}. {$e}: {$ln} líneas, importe S/ " . $v;
             $i++;
             if ($i > 25) {
                 break;
@@ -427,7 +427,7 @@ final class ChatReplyEnricher
             $m = (string) ($row['mes'] ?? '');
             $v = self::fmtNum($row['suma_valor'] ?? 0);
             $ln = (int) ($row['lineas'] ?? 0);
-            $out[] = "{$i}. {$m}: {$ln} líneas, suma Valor " . $v;
+            $out[] = "{$i}. {$m}: {$ln} líneas, importe S/ " . $v;
             $i++;
             if ($i > 40) {
                 break;
@@ -484,7 +484,7 @@ final class ChatReplyEnricher
             }
             $mes = (string) ($row['mes'] ?? '');
             $valor = self::fmtNum($row['valor_proyectado'] ?? 0);
-            $out[] = "{$mes}: {$valor}";
+            $out[] = "{$mes}: S/ {$valor}";
         }
 
         $nota = (string) ($payload['nota'] ?? '');

@@ -49,6 +49,13 @@ $currentPage = $currentPage ?? 'ventas';
                         <span>Chatbot</span>
                     </a>
                 </nav>
+                <p class="app-sidebar-section-label" role="presentation">Registro</p>
+                <nav class="app-sidebar-nav app-sidebar-nav--sub" aria-label="Registro de consultas al chatbot">
+                    <a href="index.php?page=historial_preguntas" class="app-nav-link<?= $currentPage === 'historial_preguntas' ? ' app-nav-link-active' : '' ?>">
+                        <i class="fas fa-list-ul" aria-hidden="true"></i>
+                        <span>Preguntas al chatbot</span>
+                    </a>
+                </nav>
             </div>
         </div>
     </div>
