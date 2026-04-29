@@ -292,10 +292,10 @@ declare(strict_types=1);
         prefsDialog.innerHTML = ''
             + '<div class="ventas-chat-prefs-inner">'
             + '<h3 class="ventas-chat-prefs-title">Personalización</h3>'
-            + '<p class="ventas-chat-prefs-lead">Opcional: el asistente tendrá en cuenta esto (tono, formato, prioridades). No reemplaza datos ni permite inventar cifras.</p>'
+            + '<p class="ventas-chat-prefs-lead">Opcional: el asistente tendrá en cuenta esto (tono, formato y prioridades). No reemplaza datos ni permite inventar cifras.</p>'
             + '<label class="ventas-chat-prefs-label" for="ventasChatPrefsTextarea">Instrucciones personalizadas</label>'
-            + '<textarea id="ventasChatPrefsTextarea" class="ventas-chat-prefs-textarea" rows="5" maxlength="2000" placeholder="Ej.: Respondé en pocas frases. Cuando haya tablas, resumí el hallazgo principal primero."></textarea>'
-            + '<label class="ventas-chat-prefs-check"><input type="checkbox" id="ventasChatPrefsHideTips"> Ocultar «Consejos para tu consulta» en este panel</label>'
+            + '<textarea id="ventasChatPrefsTextarea" class="ventas-chat-prefs-textarea" rows="5" maxlength="2000" placeholder="Ej.: Responde en pocas frases. Si hay tablas, resume primero el hallazgo principal."></textarea>'
+            + '<label class="ventas-chat-prefs-check"><input type="checkbox" id="ventasChatPrefsHideTips"> Ocultar «Consejos para tu consulta» en este chat</label>'
             + '<div class="ventas-chat-prefs-actions">'
             + '<button type="button" class="ventas-chat-prefs-btn ventas-chat-prefs-btn--ghost" data-prefs-cancel>Cancelar</button>'
             + '<button type="button" class="ventas-chat-prefs-btn ventas-chat-prefs-btn--primary" data-prefs-save>Guardar</button>'
@@ -332,7 +332,7 @@ declare(strict_types=1);
 
     function clearActiveConversationMaybeConfirm() {
         if (history.length > 0) {
-            if (!window.confirm('¿Borrar todos los mensajes de esta conversación? Podés abrir otras desde «Chats recientes».')) {
+            if (!window.confirm('¿Borrar todos los mensajes de esta conversación? Puedes abrir otras desde «Chats recientes».')) {
                 return;
             }
         }
