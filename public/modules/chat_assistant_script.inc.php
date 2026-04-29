@@ -1032,7 +1032,15 @@ declare(strict_types=1);
     }
 
     if (threadsBtn) {
-        threadsBtn.addEventListener('click', function () {
+        threadsBtn.addEventListener('click', function (ev) {
+            // Si el botón está configurado como acceso directo (por ejemplo a “Preguntas al chatbot”),
+            // navegamos y no abrimos el drawer.
+            const href = (threadsBtn.getAttribute && threadsBtn.getAttribute('data-href')) ? String(threadsBtn.getAttribute('data-href') || '').trim() : '';
+            if (href !== '') {
+                try { ev.preventDefault(); } catch (e) {}
+                window.location.href = href;
+                return;
+            }
             if (!threadsDrawer || threadsDrawer.hidden) openThreadsDrawer();
             else closeThreadsDrawer();
         });

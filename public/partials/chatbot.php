@@ -169,7 +169,14 @@ if ($usuario !== '') {
         </a>
         <span class="chatbot-topbar-title">Asistente de ventas</span>
         <div class="chatbot-topbar-actions">
-            <button type="button" id="ventasChatThreadsBtn" class="chatbot-icon-btn" title="Chats recientes" aria-label="Chats recientes">💬</button>
+            <button
+                type="button"
+                id="ventasChatThreadsBtn"
+                class="chatbot-icon-btn"
+                title="Preguntas al chatbot"
+                aria-label="Preguntas al chatbot"
+                data-href="<?= htmlspecialchars($ventasHistorialPreguntasUrl, ENT_QUOTES, 'UTF-8') ?>"
+            >💬</button>
             <button type="button" id="ventasChatClear" class="chatbot-icon-btn" title="Limpiar conversación" aria-label="Limpiar conversación">⌫</button>
             <details class="ventas-chat-head-menu" id="ventasChatHeadMenu">
                 <summary class="chatbot-icon-btn ventas-chat-menu-summary" aria-label="Más opciones" title="Más">⋮</summary>
