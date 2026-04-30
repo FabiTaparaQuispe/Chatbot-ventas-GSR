@@ -97,6 +97,17 @@ if ($sanitized === []) {
     exit;
 }
 
+// Elimina del historial respuestas anteriores del asistente que usaron
+// etiquetas genéricas ("Cliente 1", "Cliente 2"…) — son datos inventados y
+// si se reenvían como contexto el LLM los repite en la siguiente respuesta.
+$sanitized = array_values(array_filter($sanitized, static function (array $m): bool {
+    if ($m['role'] !== 'assistant') {
+        return true;
+    }
+    // Patrón: lista numerada con "Cliente N" o "Empresa N" → respuesta hallucinated
+    return !preg_match('/^\s*\d+\.\s*(?:Cliente|Empresa|Clientes?)\s+\d+/mi', $m['content']);
+}));
+
 // Menos historial = menos tokens (413 TPM en planes con límite bajo, ej. 6000).
 $maxHistory = 4;
 if (count($sanitized) > $maxHistory) {

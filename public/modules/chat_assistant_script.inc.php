@@ -514,7 +514,12 @@ declare(strict_types=1);
                 } catch (e) { /* ignore */ }
             }
             for (const m of (t.messages || [])) {
-                history.push({ role: m.role, content: m.content });
+                // No enviar al LLM respuestas hallucinated (Cliente 1/2/3…),
+                // pero sí mostrarlas en pantalla para que el usuario vea qué pasó.
+                const isStale = m.role === 'assistant' && hasGenericClienteLabels(m.content || '');
+                if (!isStale) {
+                    history.push({ role: m.role, content: m.content });
+                }
                 append(m.role, m.content);
             }
             renderThreadsList();
@@ -1298,7 +1303,11 @@ declare(strict_types=1);
                 reply = await callChatApiOnce();
             }
 
-            history.push({ role: 'assistant', content: reply });
+            // Solo guardar en history si no es una respuesta hallucinated (Cliente 1/2/3…).
+            // De esta forma no contamina el contexto de la siguiente consulta.
+            if (!hasGenericClienteLabels(reply)) {
+                history.push({ role: 'assistant', content: reply });
+            }
             saveHistory();
             if (!trimHistory()) {
                 append('assistant', reply, { streamAssistant: true });

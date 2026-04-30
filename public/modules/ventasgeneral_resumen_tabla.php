@@ -24,7 +24,7 @@ $d2 = vrt_parse_date('fecha_hasta') ?? vrt_parse_date('hasta');
 if ($d1 === null || $d2 === null || $d1 > $d2) {
     http_response_code(400);
     header('Content-Type: text/plain; charset=utf-8');
-    echo 'Parámetros: fecha_desde y fecha_hasta (YYYY-MM-DD); alias desde y hasta. Opcionales: zona_comercial, cod_cliente, prefijo_descri_zona_precio';
+    echo 'Parámetros: fecha_desde y fecha_hasta (YYYY-MM-DD); alias desde y hasta. Opcionales: zona_comercial, cod_cliente, prefijo_descri_zona_precio, provincia, tipo_documento';
     exit;
 }
 
@@ -46,6 +46,16 @@ $prefZ = isset($_GET['prefijo_descri_zona_precio']) ? strtoupper(trim((string) $
 if ($prefZ !== '') {
     $sql .= ' AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,\'\'))) LIKE :prefzp';
     $params[':prefzp'] = $prefZ . '%';
+}
+$prov = isset($_GET['provincia']) ? trim((string) $_GET['provincia']) : '';
+if ($prov !== '') {
+    $sql .= ' AND Provincia LIKE :prov';
+    $params[':prov'] = '%' . $prov . '%';
+}
+$tdoctipo = isset($_GET['tipo_documento']) ? trim((string) $_GET['tipo_documento']) : '';
+if ($tdoctipo !== '') {
+    $sql .= ' AND TipoDocumento LIKE :tdoctipo';
+    $params[':tdoctipo'] = '%' . $tdoctipo . '%';
 }
 
 $pdo = ventas_pdo();
@@ -111,8 +121,8 @@ $pdfName = 'resumen_ventasgeneral_' . $d1 . '_' . $d2 . '.pdf';
                             <td>1</td>
                             <td><?= htmlspecialchars((string) ($row['filas'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= number_format((float) ($row['suma_valor'] ?? 0), 2, '.', ',') ?></td>
-                            <td><?= htmlspecialchars((string) ($row['suma_cantidad'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><?= htmlspecialchars((string) ($row['suma_peso'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><?= number_format((float) ($row['suma_cantidad'] ?? 0), 2, '.', ',') ?></td>
+                            <td><?= number_format((float) ($row['suma_peso'] ?? 0), 2, '.', ',') ?></td>
                         </tr>
                     </tbody>
                 </table>
