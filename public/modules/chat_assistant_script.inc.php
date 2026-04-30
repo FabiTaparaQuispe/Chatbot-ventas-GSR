@@ -590,7 +590,16 @@ declare(strict_types=1);
             { label: 'NC por zona precio', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el pareto de notas de crédito (tipo 07) por zona de precio (DescripcionZonaPrecio).' },
             { label: 'Top en zona TACNA', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el top 10 de clientes por importe total (soles) dentro de la zona de precio con prefijo TACNA.' },
             { label: 'Barras (precio)', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame un gráfico de barras del importe total (soles) por zona de precio (DescripcionZonaPrecio).' },
+            { label: 'Barras por ruta comercial', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el top 10 de rutas comerciales por importe total (soles).' },
+            { label: 'Barras por corporativo', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el top 10 de corporativos por importe total (soles).' },
             { label: 'Comparar 2 meses', text: 'Compará el importe total (soles) por zona de precio (DescripcionZonaPrecio): período A del ' + b1 + ' al ' + b2 + ' vs período B del ' + c1 + ' al ' + c2 + ' (top 10).' },
+            { label: 'Proyección próximos 3 meses', text: 'Del ' + desde + ' al ' + hasta + ', proyectá las ventas para los próximos 3 meses basándote en la tendencia histórica.' },
+            { label: 'Totales en provincia AREQUIPA', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el resumen de ventas (líneas, importe en soles, unidades) filtrando solo la provincia de AREQUIPA.' },
+            { label: 'Totales en provincia TACNA', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el resumen de ventas (líneas, importe en soles, unidades) filtrando solo la provincia de TACNA.' },
+            { label: 'Solo Boletas de Venta', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el resumen de ventas considerando solo las Boletas de Venta.' },
+            { label: 'Solo Facturas', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el resumen de ventas considerando solo las Facturas.' },
+            { label: 'Top clientes zona AQP', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el top 10 de clientes por importe total (soles) dentro de la zona de precio con prefijo AQP.' },
+            { label: 'Top clientes zona MOQUEGUA', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el top 10 de clientes por importe total (soles) dentro de la zona de precio con prefijo MOQUEGUA.' },
         ];
     }
     function renderVentasFaqSelect() {
