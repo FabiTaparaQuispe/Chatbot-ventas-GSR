@@ -117,7 +117,7 @@ final class ToolExecutor
         }
 
         $sql = 'SELECT COUNT(*) AS filas, COALESCE(SUM(Valor),0) AS suma_valor, COALESCE(SUM(Cantidad),0) AS suma_cantidad, COALESCE(SUM(Peso),0) AS suma_peso
-            FROM ventasgeneral WHERE FechaCont BETWEEN :d1 AND :d2';
+            FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2';
         $params = [':d1' => $d1, ':d2' => $d2];
 
         $zona = isset($args['zona_comercial']) ? trim((string) $args['zona_comercial']) : '';
@@ -128,14 +128,26 @@ final class ToolExecutor
 
         $cod = isset($args['cod_cliente']) ? trim((string) $args['cod_cliente']) : '';
         if ($cod !== '') {
-            $sql .= ' AND CodCliente = :cod';
+            $sql .= ' AND CodigoCliente = :cod';
             $params[':cod'] = $cod;
         }
 
         $prefZ = isset($args['prefijo_descri_zona_precio']) ? strtoupper(trim((string) $args['prefijo_descri_zona_precio'])) : '';
         if ($prefZ !== '') {
-            $sql .= ' AND UPPER(TRIM(COALESCE(DescriZonaPrecio,\'\'))) LIKE :prefzp';
+            $sql .= ' AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,\'\'))) LIKE :prefzp';
             $params[':prefzp'] = $prefZ . '%';
+        }
+
+        $prov = isset($args['provincia']) ? trim((string) $args['provincia']) : '';
+        if ($prov !== '') {
+            $sql .= ' AND Provincia LIKE :prov';
+            $params[':prov'] = '%' . $prov . '%';
+        }
+
+        $tdoctipo = isset($args['tipo_documento']) ? trim((string) $args['tipo_documento']) : '';
+        if ($tdoctipo !== '') {
+            $sql .= ' AND TipoDocumento LIKE :tdoctipo';
+            $params[':tdoctipo'] = '%' . $tdoctipo . '%';
         }
 
         $st = $this->pdo->prepare($sql);
@@ -151,6 +163,12 @@ final class ToolExecutor
         }
         if ($prefZ !== '') {
             $tablaQ['prefijo_descri_zona_precio'] = $prefZ;
+        }
+        if ($prov !== '') {
+            $tablaQ['provincia'] = $prov;
+        }
+        if ($tdoctipo !== '') {
+            $tablaQ['tipo_documento'] = $tdoctipo;
         }
 
         return [
@@ -202,7 +220,7 @@ final class ToolExecutor
         return [
             'tabla' => 'ventasgeneral',
             'criterio_nc' => "TDoc = '07' (notas de crédito en ETL ventasgeneral)",
-            'agrupacion' => 'DescriZonaPrecio',
+            'agrupacion' => 'DescripcionZonaPrecio',
             'periodo' => $data['periodo'],
             'total_impacto_nc_valor_abs' => $data['total_impacto_nc'],
             'filas_pareto' => $data['filas'],
@@ -237,8 +255,8 @@ final class ToolExecutor
 
         return [
             'tabla' => 'ventasgeneral',
-            'criterio' => 'SUM(Valor) por CodCliente; solo líneas con DescriZonaPrecio LIKE prefijo%',
-            'agrupacion' => 'CodCliente (NombreCliente)',
+            'criterio' => 'SUM(Valor) por CodigoCliente; solo líneas con DescripcionZonaPrecio LIKE prefijo%',
+            'agrupacion' => 'CodigoCliente (NombreCliente)',
             'periodo' => $data['periodo'],
             'prefijo_descri_zona_precio' => $data['prefijo_descri_zona_precio'],
             'total_valor_zona' => $data['total_valor_zona'],
@@ -475,7 +493,7 @@ final class ToolExecutor
 
         return [
             'tabla' => 'ventasgeneral',
-            'criterio' => 'TDoc = 07; ranking por COUNT(*) por CodCliente (notas de crédito)',
+            'criterio' => 'CodigoDocumento = 07; ranking por COUNT(*) por CodigoCliente (notas de crédito)',
             'periodo' => $data['periodo'],
             'total_lineas_nc' => $data['total_lineas_nc'],
             'total_valor_nc' => $data['total_valor_nc'],
@@ -496,9 +514,9 @@ final class ToolExecutor
         $meses = $this->intArg($args['meses_a_proyectar'] ?? null, 3, 1, 12);
 
         // Obtener serie mensual histórica
-        $sql = 'SELECT DATE_FORMAT(FechaCont, \'%Y-%m\') AS mes, SUM(Valor) AS suma_valor
-                FROM ventasgeneral WHERE FechaCont BETWEEN :d1 AND :d2
-                GROUP BY DATE_FORMAT(FechaCont, \'%Y-%m\') ORDER BY mes';
+        $sql = 'SELECT DATE_FORMAT(FechaContable, \'%Y-%m\') AS mes, SUM(Valor) AS suma_valor
+                FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2
+                GROUP BY DATE_FORMAT(FechaContable, \'%Y-%m\') ORDER BY mes';
         $paramsSerie = [':d1' => $d1, ':d2' => $d2];
         $st = $this->pdo->prepare($sql);
         $st->execute($paramsSerie);

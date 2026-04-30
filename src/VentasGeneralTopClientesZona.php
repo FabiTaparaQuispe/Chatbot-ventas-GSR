@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Top clientes por SUM(Valor) filtrando prefijo en DescriZonaPrecio (ventasgeneral).
+ * Top clientes por SUM(Valor) filtrando prefijo en DescripcionZonaPrecio (ventasgeneral2).
  */
 final class VentasGeneralTopClientesZona
 {
@@ -26,22 +26,22 @@ final class VentasGeneralTopClientesZona
         $like = $pref . '%';
 
         $sqlTotal = 'SELECT COALESCE(SUM(Valor), 0) AS total_valor
-            FROM ventasgeneral
-            WHERE FechaCont BETWEEN :d1 AND :d2
-            AND UPPER(TRIM(COALESCE(DescriZonaPrecio, \'\'))) LIKE :pref';
+            FROM ventasgeneral2
+            WHERE FechaContable BETWEEN :d1 AND :d2
+            AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio, \'\'))) LIKE :pref';
         $stT = $pdo->prepare($sqlTotal);
         $stT->execute([':d1' => $d1, ':d2' => $d2, ':pref' => $like]);
         $totalRow = $stT->fetch(PDO::FETCH_ASSOC) ?: [];
         $totalZona = (float) ($totalRow['total_valor'] ?? 0);
 
-        $sql = 'SELECT CodCliente,
+        $sql = 'SELECT CodigoCliente,
                 MAX(COALESCE(NULLIF(TRIM(NombreCliente), \'\'), \'(sin nombre)\')) AS nombre_cliente,
                 COALESCE(SUM(Valor), 0) AS suma_valor,
                 COUNT(*) AS lineas_venta
-            FROM ventasgeneral
-            WHERE FechaCont BETWEEN :d1 AND :d2
-            AND UPPER(TRIM(COALESCE(DescriZonaPrecio, \'\'))) LIKE :pref
-            GROUP BY CodCliente
+            FROM ventasgeneral2
+            WHERE FechaContable BETWEEN :d1 AND :d2
+            AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio, \'\'))) LIKE :pref
+            GROUP BY CodigoCliente
             ORDER BY suma_valor DESC
             LIMIT ' . $topN;
 
@@ -56,7 +56,7 @@ final class VentasGeneralTopClientesZona
             $pctFila = $totalZona != 0.0 ? ($sv / $totalZona) * 100.0 : 0.0;
             $cum += $pctFila;
             $filas[] = [
-                'cod_cliente' => (string) ($row['CodCliente'] ?? ''),
+                'cod_cliente' => (string) ($row['CodigoCliente'] ?? ''),
                 'nombre_cliente' => (string) ($row['nombre_cliente'] ?? ''),
                 'suma_valor' => $sv,
                 'lineas_venta' => (int) ($row['lineas_venta'] ?? 0),

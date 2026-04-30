@@ -55,11 +55,11 @@ function faqChipsTemplates(desde, hasta) {
     },
     {
       label: "NC por zona de precio",
-      text: `Del ${a1} al ${a2}: pareto de notas de crédito (TDoc 07) por DescriZonaPrecio. Usá ventasgeneral_pareto_nc_zonaprecio y reporte_url pareto_nc_zona.php.`,
+      text: `Del ${a1} al ${a2}: pareto de notas de crédito (TDoc 07) por DescripcionZonaPrecio. Usá ventasgeneral_pareto_nc_zonaprecio y reporte_url pareto_nc_zona.php.`,
     },
     {
       label: "Top clientes en zona TACNA",
-      text: `Del ${a1} al ${a2}: top 10 clientes por importe total (soles) donde el prefijo de DescriZonaPrecio sea TACNA. Usá ventasgeneral_top_clientes_zona_precio con prefijo_descri_zona_precio TACNA y reporte_url pareto_clientes_zona.php.`,
+      text: `Del ${a1} al ${a2}: top 10 clientes por importe total (soles) donde el prefijo de DescripcionZonaPrecio sea TACNA. Usá ventasgeneral_top_clientes_zona_precio con prefijo_descri_zona_precio TACNA y reporte_url pareto_clientes_zona.php.`,
     },
     {
       label: "Barras por precio",

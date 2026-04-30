@@ -33,11 +33,11 @@ try {
     $d1 = vgt_parse_date($desde);
     $d2 = vgt_parse_date($hasta);
     if ($d1 !== null) {
-        $where .= ' AND FechaCont >= :d1';
+        $where .= ' AND FechaContable >= :d1';
         $params[':d1'] = $d1;
     }
     if ($d2 !== null) {
-        $where .= ' AND FechaCont <= :d2';
+        $where .= ' AND FechaContable <= :d2';
         $params[':d2'] = $d2;
     }
     if ($qnom !== '') {
@@ -45,16 +45,16 @@ try {
         $params[':nom'] = '%' . $qnom . '%';
     }
     if ($qdoc !== '') {
-        $where .= ' AND NumeroDoc LIKE :ndoc';
+        $where .= ' AND NumeroFactura LIKE :ndoc';
         $params[':ndoc'] = '%' . $qdoc . '%';
     }
 
-    $stc = $pdo->prepare('SELECT COUNT(*) FROM ventasgeneral' . $where);
+    $stc = $pdo->prepare('SELECT COUNT(*) FROM ventasgeneral2' . $where);
     $stc->execute($params);
     $total = (int) $stc->fetchColumn();
 
-    $sql = 'SELECT id, FechaCont, CodCliente, NombreCliente, NumeroDoc, CodItem, Glosa, Cantidad, Valor, ZonaComercial
-        FROM ventasgeneral' . $where . ' ORDER BY FechaCont DESC, id DESC LIMIT ' . (int) $limit . ' OFFSET ' . (int) $offset;
+    $sql = 'SELECT id, FechaContable, CodigoCliente, NombreCliente, NumeroFactura, CodigoItem, GlosaDetalle, Cantidad, Valor, ZonaComercial
+        FROM ventasgeneral2' . $where . ' ORDER BY FechaContable DESC, id DESC LIMIT ' . (int) $limit . ' OFFSET ' . (int) $offset;
     $st = $pdo->prepare($sql);
     $st->execute($params);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
@@ -114,11 +114,11 @@ try {
                         <?php foreach ($rows as $r): ?>
                             <tr>
                                 <td><?= htmlspecialchars((string) ($r['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                                <td><?= htmlspecialchars((string) ($r['FechaCont'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td><?= htmlspecialchars((string) ($r['FechaContable'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                                 <td><?= htmlspecialchars((string) ($r['NombreCliente'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                                <td><?= htmlspecialchars((string) ($r['NumeroDoc'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                                <td><?= htmlspecialchars((string) ($r['CodItem'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                                <td><?= htmlspecialchars((string) ($r['Glosa'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td><?= htmlspecialchars((string) ($r['NumeroFactura'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td><?= htmlspecialchars((string) ($r['CodigoItem'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td><?= htmlspecialchars((string) ($r['GlosaDetalle'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                                 <td><?= htmlspecialchars((string) ($r['Cantidad'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                                 <td><?= htmlspecialchars((string) ($r['Valor'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                                 <td><?= htmlspecialchars((string) ($r['ZonaComercial'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>

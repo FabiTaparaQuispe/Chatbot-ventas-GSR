@@ -129,6 +129,8 @@
             hasta: dr.hasta,
             nombre: ($('#vgNombre').val() || '').trim(),
             numero_doc: ($('#vgDoc').val() || '').trim(),
+            tipo_documento: ($('#vgTipoDoc').val() || '').trim(),
+            provincia: ($('#vgProvincia').val() || '').trim(),
         };
     }
 
@@ -158,6 +160,9 @@
             var cant = row[7] != null ? String(row[7]) : '';
             var valor = row[8] != null ? String(row[8]) : '';
             var zona = row[9] != null ? String(row[9]) : '';
+            var tipoDoc = row[10] != null ? String(row[10]) : '';
+            var provincia = row[11] != null ? String(row[11]) : '';
+            var linea = row[12] != null ? String(row[12]) : '';
 
             var h =
                 '<article class="card-item prod-card">' +
@@ -191,6 +196,15 @@
                 '</span></div>' +
                 '<div class="card-row"><span class="label">Zona comercial</span><span>' +
                 escapeHtml(zona) +
+                '</span></div>' +
+                '<div class="card-row"><span class="label">Tipo documento</span><span>' +
+                escapeHtml(tipoDoc) +
+                '</span></div>' +
+                '<div class="card-row"><span class="label">Provincia</span><span>' +
+                escapeHtml(provincia) +
+                '</span></div>' +
+                '<div class="card-row"><span class="label">Línea comercial</span><span>' +
+                escapeHtml(linea) +
                 '</span></div>' +
                 '</div>' +
                 '<div class="prod-card-meta">' +
@@ -282,6 +296,8 @@
             processing: true,
             searching: true,
             ordering: false,
+            scrollX: true,
+            scrollCollapse: true,
             pageLength: 20,
             lengthMenu: [
                 [20, 25, 50, 100],
@@ -300,6 +316,8 @@
                     hasta: f.hasta,
                     nombre: f.nombre,
                     numero_doc: f.numero_doc,
+                    tipo_documento: f.tipo_documento,
+                    provincia: f.provincia,
                 };
                 $.ajax({
                     url: 'api/ventasgeneral_dt.php',
@@ -336,6 +354,9 @@
                 { data: 7 },
                 { data: 8 },
                 { data: 9 },
+                { data: 10 },
+                { data: 11 },
+                { data: 12 },
             ],
             drawCallback: function () {
                 rebuildCards();
@@ -353,6 +374,7 @@
                 if (vista === 'iconos') {
                     renderIconosControls();
                 }
+                try { table.columns.adjust(); } catch (e) {}
             },
         });
     }
@@ -383,6 +405,8 @@
             $('#vgMesHasta').val('');
             $('#vgNombre').val('');
             $('#vgDoc').val('');
+            $('#vgTipoDoc').val('');
+            $('#vgProvincia').val('');
             syncPeriodoUI();
             applyAndReload(true);
         });

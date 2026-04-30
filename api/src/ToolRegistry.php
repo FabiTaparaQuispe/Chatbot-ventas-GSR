@@ -34,7 +34,7 @@ final class ToolRegistry
             ),
             $this->fn(
                 'compras_cliente_periodo',
-                'Totales y conteo de lineas de un cliente en un periodo. codigo_cliente = DNI o RUC (sale.tprocli o ventasgeneral.CodCliente).',
+                'Totales y conteo de lineas de un cliente en un periodo. codigo_cliente = DNI o RUC (sale.tprocli o ventasgeneral.CodigoCliente).',
                 [
                     'codigo_cliente' => ['type' => 'string'],
                     'fecha_desde' => ['type' => 'string'],
@@ -62,7 +62,7 @@ final class ToolRegistry
                     'tipo_zona' => [
                         'type' => 'string',
                         'enum' => ['comercial', 'distribucion'],
-                        'description' => 'comercial = ZonaComercial; distribucion = DescriZonaDistribucion',
+                        'description' => 'comercial = ZonaComercial; distribucion = DescripcionZonaDistribucion',
                     ],
                     'limite' => ['type' => 'integer', 'default' => 15],
                 ],
@@ -155,8 +155,8 @@ final class ToolRegistry
         $fuente = (string) $args['fuente'];
 
         if ($fuente === 'ventasgeneral') {
-            $sql = 'SELECT CodCliente AS codigo, MAX(NombreCliente) AS nombre, SUM(Valor) AS total_valor, SUM(Cantidad) AS total_cantidad, SUM(Peso) AS total_peso
-                    FROM ventasgeneral WHERE FechaCont BETWEEN :d1 AND :d2 GROUP BY CodCliente ORDER BY total_valor DESC LIMIT ' . $lim;
+            $sql = 'SELECT CodigoCliente AS codigo, MAX(NombreCliente) AS nombre, SUM(Valor) AS total_valor, SUM(Cantidad) AS total_cantidad, SUM(Peso) AS total_peso
+                    FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2 GROUP BY CodigoCliente ORDER BY total_valor DESC LIMIT ' . $lim;
         } else {
             $sql = 'SELECT tprocli AS codigo, SUM(timport) AS total_importe, SUM(tcantid) AS total_cantidad
                     FROM sale WHERE tfecfac BETWEEN :d1 AND :d2 AND tlib = \'RV\' GROUP BY tprocli ORDER BY total_importe DESC LIMIT ' . $lim;
@@ -182,7 +182,7 @@ final class ToolRegistry
 
         if ($fuente === 'ventasgeneral') {
             $sql = 'SELECT COUNT(*) AS lineas, SUM(Valor) AS total_valor, SUM(Cantidad) AS total_cantidad, SUM(Peso) AS total_peso
-                    FROM ventasgeneral WHERE CodCliente = :c AND FechaCont BETWEEN :d1 AND :d2';
+                    FROM ventasgeneral2 WHERE CodigoCliente = :c AND FechaContable BETWEEN :d1 AND :d2';
         } else {
             $sql = 'SELECT COUNT(*) AS lineas, SUM(timport) AS total_importe, SUM(tcantid) AS total_cantidad
                     FROM sale WHERE tprocli = :c AND tfecfac BETWEEN :d1 AND :d2 AND tlib = \'RV\'';
@@ -204,8 +204,8 @@ final class ToolRegistry
         $fuente = (string) $args['fuente'];
 
         if ($fuente === 'ventasgeneral') {
-            $sql = 'SELECT DATE_FORMAT(FechaCont, \'%Y-%m\') AS mes, SUM(Valor) AS total_valor, SUM(Cantidad) AS total_cantidad, SUM(Peso) AS total_peso
-                    FROM ventasgeneral WHERE FechaCont BETWEEN :d1 AND :d2 GROUP BY DATE_FORMAT(FechaCont, \'%Y-%m\') ORDER BY mes';
+            $sql = 'SELECT DATE_FORMAT(FechaContable, \'%Y-%m\') AS mes, SUM(Valor) AS total_valor, SUM(Cantidad) AS total_cantidad, SUM(Peso) AS total_peso
+                    FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2 GROUP BY DATE_FORMAT(FechaContable, \'%Y-%m\') ORDER BY mes';
         } else {
             $sql = 'SELECT DATE_FORMAT(tfecfac, \'%Y-%m\') AS mes, SUM(timport) AS total_importe, SUM(tcantid) AS total_cantidad
                     FROM sale WHERE tfecfac BETWEEN :d1 AND :d2 AND tlib = \'RV\' GROUP BY DATE_FORMAT(tfecfac, \'%Y-%m\') ORDER BY mes';
@@ -229,10 +229,10 @@ final class ToolRegistry
         if ($tipo === 'comercial') {
             $col = 'ZonaComercial';
         } else {
-            $col = 'DescriZonaDistribucion';
+            $col = 'DescripcionZonaDistribucion';
         }
         $sql = "SELECT COALESCE(NULLIF(TRIM(`{$col}`), ''), '(sin zona)') AS zona, SUM(Valor) AS total_valor, SUM(Cantidad) AS total_cantidad, SUM(Peso) AS total_peso
-                FROM ventasgeneral WHERE FechaCont BETWEEN :d1 AND :d2
+                FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2
                 GROUP BY COALESCE(NULLIF(TRIM(`{$col}`), ''), '(sin zona)') ORDER BY total_valor DESC LIMIT {$lim}";
         $st = $this->pdo->prepare($sql);
         $st->execute(['d1' => $d1, 'd2' => $d2]);
@@ -269,8 +269,8 @@ final class ToolRegistry
         $fuente = (string) $args['fuente'];
 
         if ($fuente === 'ventasgeneral') {
-            $sql = 'SELECT CodItem AS codigo, MAX(Glosa) AS descripcion, SUM(Valor) AS total_valor, SUM(Cantidad) AS total_cantidad, SUM(Peso) AS total_peso
-                    FROM ventasgeneral WHERE FechaCont BETWEEN :d1 AND :d2 GROUP BY CodItem ORDER BY total_valor DESC LIMIT ' . $lim;
+            $sql = 'SELECT CodigoItem AS codigo, MAX(GlosaDetalle) AS descripcion, SUM(Valor) AS total_valor, SUM(Cantidad) AS total_cantidad, SUM(Peso) AS total_peso
+                    FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2 GROUP BY CodigoItem ORDER BY total_valor DESC LIMIT ' . $lim;
         } else {
             $sql = 'SELECT tcodigo AS codigo, MAX(tglosa) AS descripcion, SUM(timport) AS total_importe, SUM(tcantid) AS total_cantidad
                     FROM sale WHERE tfecfac BETWEEN :d1 AND :d2 AND tlib = \'RV\' GROUP BY tcodigo ORDER BY total_importe DESC LIMIT ' . $lim;

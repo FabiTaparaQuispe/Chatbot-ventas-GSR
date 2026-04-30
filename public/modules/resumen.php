@@ -33,7 +33,7 @@ if ($d1 === null || $d2 === null) {
         $pdo = ventas_pdo();
         $st = $pdo->prepare(
             'SELECT COUNT(*) AS filas, COALESCE(SUM(Valor),0) AS suma_valor, COALESCE(SUM(Cantidad),0) AS suma_cant, COALESCE(SUM(Peso),0) AS suma_peso
-            FROM ventasgeneral WHERE FechaCont BETWEEN :a AND :b'
+            FROM ventasgeneral2 WHERE FechaContable BETWEEN :a AND :b'
         );
         $st->execute([':a' => $d1, ':b' => $d2]);
         $vg = $st->fetch(PDO::FETCH_ASSOC);
@@ -83,7 +83,7 @@ if ($d1 === null || $d2 === null) {
             <div class="grid">
                 <section class="card">
                     <h2>ventasgeneral</h2>
-                    <p>FechaCont entre <?= htmlspecialchars($d1, ENT_QUOTES, 'UTF-8') ?> y <?= htmlspecialchars($d2, ENT_QUOTES, 'UTF-8') ?></p>
+                    <p>FechaContable entre <?= htmlspecialchars($d1, ENT_QUOTES, 'UTF-8') ?> y <?= htmlspecialchars($d2, ENT_QUOTES, 'UTF-8') ?></p>
                     <ul class="stats">
                         <li>Filas: <strong><?= htmlspecialchars((string) ($vg['filas'] ?? ''), ENT_QUOTES, 'UTF-8') ?></strong></li>
                         <li>Suma Valor: <strong><?= htmlspecialchars(number_format((float) ($vg['suma_valor'] ?? 0), 2, '.', ','), ENT_QUOTES, 'UTF-8') ?></strong></li>

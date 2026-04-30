@@ -63,6 +63,8 @@ $desde = parse_ymd((string) ($_GET['desde'] ?? ''));
 $hasta = parse_ymd((string) ($_GET['hasta'] ?? ''));
 $nombre = trim((string) ($_GET['nombre'] ?? ''));
 $numeroDoc = trim((string) ($_GET['numero_doc'] ?? ''));
+$tipoDocumento = trim((string) ($_GET['tipo_documento'] ?? ''));
+$provincia = trim((string) ($_GET['provincia'] ?? ''));
 
 try {
     $pdo = ventas_pdo();
@@ -71,11 +73,11 @@ try {
     $params = [];
 
     if ($desde !== null) {
-        $baseWhere .= ' AND FechaCont >= :d1';
+        $baseWhere .= ' AND FechaContable >= :d1';
         $params[':d1'] = $desde;
     }
     if ($hasta !== null) {
-        $baseWhere .= ' AND FechaCont <= :d2';
+        $baseWhere .= ' AND FechaContable <= :d2';
         $params[':d2'] = $hasta;
     }
     if ($nombre !== '') {
@@ -83,24 +85,32 @@ try {
         $params[':nom'] = '%' . $nombre . '%';
     }
     if ($numeroDoc !== '') {
-        $baseWhere .= ' AND NumeroDoc LIKE :ndoc';
+        $baseWhere .= ' AND NumeroFactura LIKE :ndoc';
         $params[':ndoc'] = '%' . $numeroDoc . '%';
     }
+    if ($tipoDocumento !== '') {
+        $baseWhere .= ' AND TipoDocumento LIKE :tdoctipo';
+        $params[':tdoctipo'] = '%' . $tipoDocumento . '%';
+    }
+    if ($provincia !== '') {
+        $baseWhere .= ' AND Provincia LIKE :prov';
+        $params[':prov'] = '%' . $provincia . '%';
+    }
 
-    $recordsTotal = (int) $pdo->query('SELECT COUNT(*) FROM ventasgeneral')->fetchColumn();
+    $recordsTotal = (int) $pdo->query('SELECT COUNT(*) FROM ventasgeneral2')->fetchColumn();
 
     $where = $baseWhere;
     if ($search !== '') {
-        $where .= ' AND (NombreCliente LIKE :s OR NumeroDoc LIKE :s OR CodItem LIKE :s OR Glosa LIKE :s OR ZonaComercial LIKE :s)';
+        $where .= ' AND (NombreCliente LIKE :s OR NumeroFactura LIKE :s OR CodigoItem LIKE :s OR GlosaDetalle LIKE :s OR ZonaComercial LIKE :s OR TipoDocumento LIKE :s OR Provincia LIKE :s OR LineaComercial LIKE :s)';
         $params[':s'] = '%' . $search . '%';
     }
 
-    $stc = $pdo->prepare('SELECT COUNT(*) FROM ventasgeneral' . $where);
+    $stc = $pdo->prepare('SELECT COUNT(*) FROM ventasgeneral2' . $where);
     $stc->execute($params);
     $recordsFiltered = (int) $stc->fetchColumn();
 
-    $sql = 'SELECT FechaCont, CodCliente, NombreCliente, NumeroDoc, CodItem, Glosa, Cantidad, Valor, ZonaComercial
-            FROM ventasgeneral' . $where . ' ORDER BY FechaCont DESC, id DESC LIMIT ' . (int) $length . ' OFFSET ' . (int) $start;
+    $sql = 'SELECT FechaContable, CodigoCliente, NombreCliente, NumeroFactura, CodigoItem, GlosaDetalle, Cantidad, Valor, ZonaComercial, TipoDocumento, Provincia, LineaComercial
+            FROM ventasgeneral2' . $where . ' ORDER BY FechaContable DESC, id DESC LIMIT ' . (int) $length . ' OFFSET ' . (int) $start;
     $st = $pdo->prepare($sql);
     $st->execute($params);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
@@ -109,15 +119,18 @@ try {
     foreach ($rows as $i => $r) {
         $data[] = [
             (string) ($start + $i + 1),
-            ventas_utf8_string($r['FechaCont'] ?? ''),
-            ventas_utf8_string($r['CodCliente'] ?? ''),
+            ventas_utf8_string($r['FechaContable'] ?? ''),
+            ventas_utf8_string($r['CodigoCliente'] ?? ''),
             ventas_utf8_string($r['NombreCliente'] ?? ''),
-            ventas_utf8_string($r['NumeroDoc'] ?? ''),
-            ventas_utf8_string($r['CodItem'] ?? ''),
-            ventas_utf8_string($r['Glosa'] ?? ''),
+            ventas_utf8_string($r['NumeroFactura'] ?? ''),
+            ventas_utf8_string($r['CodigoItem'] ?? ''),
+            ventas_utf8_string($r['GlosaDetalle'] ?? ''),
             ventas_utf8_string($r['Cantidad'] ?? ''),
             ventas_utf8_string($r['Valor'] ?? ''),
             ventas_utf8_string($r['ZonaComercial'] ?? ''),
+            ventas_utf8_string($r['TipoDocumento'] ?? ''),
+            ventas_utf8_string($r['Provincia'] ?? ''),
+            ventas_utf8_string($r['LineaComercial'] ?? ''),
         ];
     }
 

@@ -10,7 +10,7 @@ final class VentasGeneralReportesGraficos
     private static function colEtiqueta(string $dimension): string
     {
         return match ($dimension) {
-            'precio' => "COALESCE(NULLIF(TRIM(DescriZonaPrecio),''),'(sin zona precio)')",
+            'precio' => "COALESCE(NULLIF(TRIM(DescripcionZonaPrecio),''),'(sin zona precio)')",
             'comercial' => "COALESCE(NULLIF(TRIM(ZonaComercial),''),'(sin zona comercial)')",
             'ruta' => "COALESCE(NULLIF(TRIM(RutaComercial),''),'(sin ruta)')",
             'corporativo' => "COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'(sin corporativo)')",
@@ -27,14 +27,14 @@ final class VentasGeneralReportesGraficos
         $expr = self::colEtiqueta($dimension);
         $sql = "SELECT {$expr} AS etiqueta, COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor,
                 COALESCE(SUM(Cantidad),0) AS suma_cantidad, COALESCE(SUM(Peso),0) AS suma_peso
-            FROM ventasgeneral WHERE FechaCont BETWEEN :d1 AND :d2
+            FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2
             GROUP BY {$expr}
             ORDER BY suma_valor DESC
             LIMIT {$limit}";
         $st = $pdo->prepare($sql);
         $st->execute([':d1' => $d1, ':d2' => $d2]);
         $raw = $st->fetchAll(PDO::FETCH_ASSOC);
-        $stT = $pdo->prepare('SELECT COALESCE(SUM(Valor),0) FROM ventasgeneral WHERE FechaCont BETWEEN :d1 AND :d2');
+        $stT = $pdo->prepare('SELECT COALESCE(SUM(Valor),0) FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2');
         $stT->execute([':d1' => $d1, ':d2' => $d2]);
         $total = (float) ($stT->fetchColumn() ?: 0);
         $filas = [];
@@ -58,7 +58,7 @@ final class VentasGeneralReportesGraficos
             '_sql_traces' => [
                 ['sql' => $sql, 'params' => [':d1' => $d1, ':d2' => $d2]],
                 [
-                    'sql' => 'SELECT COALESCE(SUM(Valor),0) FROM ventasgeneral WHERE FechaCont BETWEEN :d1 AND :d2',
+                    'sql' => 'SELECT COALESCE(SUM(Valor),0) FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2',
                     'params' => [':d1' => $d1, ':d2' => $d2],
                 ],
             ],
@@ -84,11 +84,11 @@ final class VentasGeneralReportesGraficos
                 SUM(vb) AS valor_b
             FROM (
                 SELECT {$expr} AS etiqueta, COALESCE(SUM(Valor),0) AS va, 0 AS vb
-                FROM ventasgeneral WHERE FechaCont BETWEEN :a1 AND :a2
+                FROM ventasgeneral2 WHERE FechaContable BETWEEN :a1 AND :a2
                 GROUP BY {$expr}
                 UNION ALL
                 SELECT {$expr}, 0, COALESCE(SUM(Valor),0)
-                FROM ventasgeneral WHERE FechaCont BETWEEN :b1 AND :b2
+                FROM ventasgeneral2 WHERE FechaContable BETWEEN :b1 AND :b2
                 GROUP BY {$expr}
             ) u
             GROUP BY etiqueta
@@ -127,10 +127,10 @@ final class VentasGeneralReportesGraficos
     public static function topProductos(PDO $pdo, string $d1, string $d2, int $top): array
     {
         $top = max(1, min(100, $top));
-        $sql = 'SELECT CodItem AS cod_item, MAX(COALESCE(NULLIF(TRIM(Glosa),\'\'),\'(sin glosa)\')) AS glosa,
+        $sql = 'SELECT CodigoItem AS cod_item, MAX(COALESCE(NULLIF(TRIM(GlosaDetalle),\'\'),\'(sin glosa)\')) AS glosa,
                 COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor, COALESCE(SUM(Cantidad),0) AS suma_cantidad
-            FROM ventasgeneral WHERE FechaCont BETWEEN :d1 AND :d2
-            GROUP BY CodItem
+            FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2
+            GROUP BY CodigoItem
             ORDER BY suma_valor DESC
             LIMIT ' . $top;
         $st = $pdo->prepare($sql);
@@ -151,17 +151,17 @@ final class VentasGeneralReportesGraficos
     public static function topClientesGlobal(PDO $pdo, string $d1, string $d2, int $top): array
     {
         $top = max(1, min(100, $top));
-        $sql = 'SELECT CodCliente AS cod_cliente,
+        $sql = 'SELECT CodigoCliente AS cod_cliente,
                 MAX(COALESCE(NULLIF(TRIM(NombreCliente),\'\'),\'(sin nombre)\')) AS nombre_cliente,
                 COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor
-            FROM ventasgeneral WHERE FechaCont BETWEEN :d1 AND :d2
-            GROUP BY CodCliente
+            FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2
+            GROUP BY CodigoCliente
             ORDER BY suma_valor DESC
             LIMIT ' . $top;
         $st = $pdo->prepare($sql);
         $st->execute([':d1' => $d1, ':d2' => $d2]);
         $raw = $st->fetchAll(PDO::FETCH_ASSOC);
-        $stT = $pdo->prepare('SELECT COALESCE(SUM(Valor),0) FROM ventasgeneral WHERE FechaCont BETWEEN :d1 AND :d2');
+        $stT = $pdo->prepare('SELECT COALESCE(SUM(Valor),0) FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2');
         $stT->execute([':d1' => $d1, ':d2' => $d2]);
         $total = (float) ($stT->fetchColumn() ?: 0);
         $cum = 0.0;
@@ -187,7 +187,7 @@ final class VentasGeneralReportesGraficos
             '_sql_traces' => [
                 ['sql' => $sql, 'params' => [':d1' => $d1, ':d2' => $d2]],
                 [
-                    'sql' => 'SELECT COALESCE(SUM(Valor),0) FROM ventasgeneral WHERE FechaCont BETWEEN :d1 AND :d2',
+                    'sql' => 'SELECT COALESCE(SUM(Valor),0) FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2',
                     'params' => [':d1' => $d1, ':d2' => $d2],
                 ],
             ],
@@ -202,20 +202,20 @@ final class VentasGeneralReportesGraficos
     public static function topClientesNotaCredito(PDO $pdo, string $d1, string $d2, int $top): array
     {
         $top = max(1, min(100, $top));
-        $tdoc = "COALESCE(NULLIF(TRIM(TDoc),''),'') = '07'";
-        $sql = "SELECT CodCliente AS cod_cliente,
+        $tdoc = "COALESCE(NULLIF(TRIM(CodigoDocumento),''),'') = '07'";
+        $sql = "SELECT CodigoCliente AS cod_cliente,
                 MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,
                 COUNT(*) AS lineas,
                 COALESCE(SUM(Valor),0) AS suma_valor
             FROM ventasgeneral
-            WHERE FechaCont BETWEEN :d1 AND :d2 AND {$tdoc}
-            GROUP BY CodCliente
+            WHERE FechaContable BETWEEN :d1 AND :d2 AND {$tdoc}
+            GROUP BY CodigoCliente
             ORDER BY lineas DESC, suma_valor ASC
             LIMIT {$top}";
         $st = $pdo->prepare($sql);
         $st->execute([':d1' => $d1, ':d2' => $d2]);
         $raw = $st->fetchAll(PDO::FETCH_ASSOC);
-        $sqlTot = "SELECT COUNT(*) AS n, COALESCE(SUM(Valor),0) AS v FROM ventasgeneral WHERE FechaCont BETWEEN :d1 AND :d2 AND {$tdoc}";
+        $sqlTot = "SELECT COUNT(*) AS n, COALESCE(SUM(Valor),0) AS v FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2 AND {$tdoc}";
         $stT = $pdo->prepare($sqlTot);
         $stT->execute([':d1' => $d1, ':d2' => $d2]);
         $totRow = $stT->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -254,9 +254,9 @@ final class VentasGeneralReportesGraficos
      */
     public static function mixPorTdoc(PDO $pdo, string $d1, string $d2): array
     {
-        $sql = 'SELECT COALESCE(NULLIF(TRIM(TDoc),\'\'),\'(sin TDoc)\') AS tdoc, COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor
-            FROM ventasgeneral WHERE FechaCont BETWEEN :d1 AND :d2
-            GROUP BY COALESCE(NULLIF(TRIM(TDoc),\'\'),\'(sin TDoc)\')
+        $sql = 'SELECT COALESCE(NULLIF(TRIM(CodigoDocumento),\'\'),\'(sin TDoc)\') AS tdoc, COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor
+            FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2
+            GROUP BY COALESCE(NULLIF(TRIM(CodigoDocumento),\'\'),\'(sin TDoc)\')
             ORDER BY suma_valor DESC';
         $st = $pdo->prepare($sql);
         $st->execute([':d1' => $d1, ':d2' => $d2]);
@@ -294,7 +294,7 @@ final class VentasGeneralReportesGraficos
         $top = max(1, min(100, $top));
         $expr = self::colEtiqueta('ruta');
         $sql = "SELECT {$expr} AS ruta, COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor
-            FROM ventasgeneral WHERE FechaCont BETWEEN :d1 AND :d2
+            FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2
             GROUP BY {$expr}
             ORDER BY suma_valor DESC
             LIMIT {$top}";
@@ -318,9 +318,9 @@ final class VentasGeneralReportesGraficos
         $top = max(1, min(100, $top));
         $expr = self::colEtiqueta('corporativo');
         $sql = "SELECT {$expr} AS nombre_coorporativo,
-                MAX(COALESCE(NULLIF(TRIM(CodCoorporativo),''),'')) AS cod_coorporativo,
+                MAX(COALESCE(NULLIF(TRIM(CodigoCoorporativo),''),'')) AS cod_coorporativo,
                 COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor
-            FROM ventasgeneral WHERE FechaCont BETWEEN :d1 AND :d2
+            FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2
             GROUP BY {$expr}
             ORDER BY suma_valor DESC
             LIMIT {$top}";
@@ -341,9 +341,9 @@ final class VentasGeneralReportesGraficos
      */
     public static function serieMensualValor(PDO $pdo, string $d1, string $d2): array
     {
-        $sql = 'SELECT DATE_FORMAT(FechaCont, \'%Y-%m\') AS mes, COALESCE(SUM(Valor),0) AS suma_valor, COUNT(*) AS lineas
-            FROM ventasgeneral WHERE FechaCont BETWEEN :d1 AND :d2
-            GROUP BY DATE_FORMAT(FechaCont, \'%Y-%m\')
+        $sql = 'SELECT DATE_FORMAT(FechaContable, \'%Y-%m\') AS mes, COALESCE(SUM(Valor),0) AS suma_valor, COUNT(*) AS lineas
+            FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2
+            GROUP BY DATE_FORMAT(FechaContable, \'%Y-%m\')
             ORDER BY mes';
         $st = $pdo->prepare($sql);
         $st->execute([':d1' => $d1, ':d2' => $d2]);

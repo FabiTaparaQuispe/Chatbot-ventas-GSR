@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Pareto de notas de crédito (TDoc = '07') por DescriZonaPrecio en ventasgeneral.
+ * Pareto de notas de crédito (CodigoDocumento = '07') por DescripcionZonaPrecio en ventasgeneral2.
  */
 final class VentasGeneralParetoNc
 {
@@ -13,12 +13,12 @@ final class VentasGeneralParetoNc
     public static function datos(PDO $pdo, string $d1, string $d2, int $maxZonas = 100): array
     {
         $maxZonas = max(1, min(200, $maxZonas));
-        $sql = 'SELECT COALESCE(NULLIF(TRIM(DescriZonaPrecio),\'\'),\'(sin zona)\') AS zona,
+        $sql = 'SELECT COALESCE(NULLIF(TRIM(DescripcionZonaPrecio),\'\'),\'(sin zona)\') AS zona,
                 COUNT(*) AS lineas_nc,
                 COALESCE(SUM(ABS(Valor)),0) AS impacto_abs_valor
-            FROM ventasgeneral
-            WHERE FechaCont BETWEEN :d1 AND :d2 AND TDoc = \'07\'
-            GROUP BY COALESCE(NULLIF(TRIM(DescriZonaPrecio),\'\'),\'(sin zona)\')
+            FROM ventasgeneral2
+            WHERE FechaContable BETWEEN :d1 AND :d2 AND CodigoDocumento = \'07\'
+            GROUP BY COALESCE(NULLIF(TRIM(DescripcionZonaPrecio),\'\'),\'(sin zona)\')
             ORDER BY impacto_abs_valor DESC
             LIMIT ' . $maxZonas;
         $st = $pdo->prepare($sql);

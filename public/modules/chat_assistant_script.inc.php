@@ -587,10 +587,10 @@ declare(strict_types=1);
             { label: 'Top productos', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el top 15 de productos por importe total (soles).' },
             { label: 'Serie mensual', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame la serie mensual del importe total (soles).' },
             { label: 'Mix por tipo de documento', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el mix del importe total (soles) por tipo de documento.' },
-            { label: 'NC por zona precio', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el pareto de notas de crédito (tipo 07) por zona de precio (DescriZonaPrecio).' },
+            { label: 'NC por zona precio', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el pareto de notas de crédito (tipo 07) por zona de precio (DescripcionZonaPrecio).' },
             { label: 'Top en zona TACNA', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el top 10 de clientes por importe total (soles) dentro de la zona de precio con prefijo TACNA.' },
-            { label: 'Barras (precio)', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame un gráfico de barras del importe total (soles) por zona de precio (DescriZonaPrecio).' },
-            { label: 'Comparar 2 meses', text: 'Compará el importe total (soles) por zona de precio (DescriZonaPrecio): período A del ' + b1 + ' al ' + b2 + ' vs período B del ' + c1 + ' al ' + c2 + ' (top 10).' },
+            { label: 'Barras (precio)', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame un gráfico de barras del importe total (soles) por zona de precio (DescripcionZonaPrecio).' },
+            { label: 'Comparar 2 meses', text: 'Compará el importe total (soles) por zona de precio (DescripcionZonaPrecio): período A del ' + b1 + ' al ' + b2 + ' vs período B del ' + c1 + ' al ' + c2 + ' (top 10).' },
         ];
     }
     function renderVentasFaqSelect() {

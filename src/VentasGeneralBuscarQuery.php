@@ -40,8 +40,8 @@ final class VentasGeneralBuscarQuery
         $limit = self::clampLimit(isset($args['limit']) && is_numeric($args['limit']) ? (int) $args['limit'] : null);
         $offset = max(0, isset($args['offset']) && is_numeric($args['offset']) ? (int) $args['offset'] : 0);
 
-        $sql = 'SELECT id, FechaCont, CodCoorporativo, NombreCoorporativo, CodCliente, NombreCliente, TDoc, Serie, Numero, NumeroDoc, CodItem, Glosa, Cantidad, Peso, Valor, ZonaComercial, DescriZonaPrecio, RutaComercial
-            FROM ventasgeneral WHERE 1=1';
+        $sql = 'SELECT id, FechaContable, CodigoCoorporativo, NombreCoorporativo, CodigoCliente, NombreCliente, CodigoDocumento, TipoDocumento, SerieDocumento, NumeroDocumento, NumeroFactura, CodigoItem, GlosaDetalle, Cantidad, Peso, Valor, ZonaComercial, DescripcionZonaPrecio, RutaComercial, Provincia, LineaComercial
+            FROM ventasgeneral2 WHERE 1=1';
         $params = [];
 
         $fd = self::parseDateFromMixed($args['fecha_desde'] ?? null);
@@ -50,14 +50,14 @@ final class VentasGeneralBuscarQuery
             if ($fd > $fh) {
                 throw new InvalidArgumentException('fecha_desde no puede ser mayor que fecha_hasta');
             }
-            $sql .= ' AND FechaCont BETWEEN :fd AND :fh';
+            $sql .= ' AND FechaContable BETWEEN :fd AND :fh';
             $params[':fd'] = $fd;
             $params[':fh'] = $fh;
         } elseif ($fd !== null) {
-            $sql .= ' AND FechaCont >= :fd';
+            $sql .= ' AND FechaContable >= :fd';
             $params[':fd'] = $fd;
         } elseif ($fh !== null) {
-            $sql .= ' AND FechaCont <= :fh';
+            $sql .= ' AND FechaContable <= :fh';
             $params[':fh'] = $fh;
         }
 
@@ -69,13 +69,13 @@ final class VentasGeneralBuscarQuery
 
         $ndoc = isset($args['numero_doc']) ? trim((string) $args['numero_doc']) : '';
         if ($ndoc !== '') {
-            $sql .= ' AND NumeroDoc LIKE :ndoc';
+            $sql .= ' AND NumeroFactura LIKE :ndoc';
             $params[':ndoc'] = '%' . $ndoc . '%';
         }
 
         $item = isset($args['cod_item']) ? trim((string) $args['cod_item']) : '';
         if ($item !== '') {
-            $sql .= ' AND CodItem = :item';
+            $sql .= ' AND CodigoItem = :item';
             $params[':item'] = $item;
         }
 
@@ -84,17 +84,29 @@ final class VentasGeneralBuscarQuery
             if (strlen($tdoc) > 4) {
                 throw new InvalidArgumentException('tdoc demasiado largo');
             }
-            $sql .= ' AND TDoc = :tdoc';
+            $sql .= ' AND CodigoDocumento = :tdoc';
             $params[':tdoc'] = $tdoc;
         }
 
         $prefZ = isset($args['prefijo_descri_zona_precio']) ? strtoupper(trim((string) $args['prefijo_descri_zona_precio'])) : '';
         if ($prefZ !== '') {
-            $sql .= ' AND UPPER(TRIM(COALESCE(DescriZonaPrecio,\'\'))) LIKE :prefzp';
+            $sql .= ' AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,\'\'))) LIKE :prefzp';
             $params[':prefzp'] = $prefZ . '%';
         }
 
-        $sql .= ' ORDER BY FechaCont DESC, id DESC LIMIT ' . (int) $limit . ' OFFSET ' . (int) $offset;
+        $prov = isset($args['provincia']) ? trim((string) $args['provincia']) : '';
+        if ($prov !== '') {
+            $sql .= ' AND Provincia LIKE :prov';
+            $params[':prov'] = '%' . $prov . '%';
+        }
+
+        $tdoctipo = isset($args['tipo_documento']) ? trim((string) $args['tipo_documento']) : '';
+        if ($tdoctipo !== '') {
+            $sql .= ' AND TipoDocumento LIKE :tdoctipo';
+            $params[':tdoctipo'] = '%' . $tdoctipo . '%';
+        }
+
+        $sql .= ' ORDER BY FechaContable DESC, id DESC LIMIT ' . (int) $limit . ' OFFSET ' . (int) $offset;
 
         $st = $pdo->prepare($sql);
         $st->execute($params);
@@ -116,7 +128,7 @@ final class VentasGeneralBuscarQuery
     public static function buildTablaUrl(array $args): string
     {
         $q = [];
-        foreach (['fecha_desde', 'fecha_hasta', 'nombre_cliente', 'numero_doc', 'cod_item', 'tdoc', 'prefijo_descri_zona_precio'] as $k) {
+        foreach (['fecha_desde', 'fecha_hasta', 'nombre_cliente', 'numero_doc', 'cod_item', 'tdoc', 'prefijo_descri_zona_precio', 'provincia', 'tipo_documento'] as $k) {
             if (!isset($args[$k]) || $args[$k] === '' || $args[$k] === null) {
                 continue;
             }

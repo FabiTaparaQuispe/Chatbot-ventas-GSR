@@ -15,30 +15,33 @@ function ventas_tool_definitions(): array
     return [
         ['type' => 'function', 'function' => [
             'name' => 'ventasgeneral_resumen',
-            'description' => 'Agregados ventasgeneral (filas, suma Valor/Cantidad/Peso). Opc: zona_comercial, cod_cliente, prefijo_descri_zona_precio. reporte_url=ventasgeneral_resumen_tabla.php',
+            'description' => 'Agregados ventasgeneral (filas, suma Valor/Cantidad/Peso). Opc: zona_comercial, cod_cliente, prefijo_descri_zona_precio, provincia, tipo_documento. reporte_url=ventasgeneral_resumen_tabla.php',
             'parameters' => ['type' => 'object', 'properties' => [
                 'fecha_desde' => $d, 'fecha_hasta' => $d,
                 'zona_comercial' => $d, 'cod_cliente' => $d, 'prefijo_descri_zona_precio' => $d,
+                'provincia' => $d, 'tipo_documento' => $d,
             ], 'required' => ['fecha_desde', 'fecha_hasta']],
         ]],
         ['type' => 'function', 'function' => [
             'name' => 'ventasgeneral_buscar',
-            'description' => 'Filas ventasgeneral (máx 100). prefijo_descri_zona_precio para mercado. reporte_url=ventasgeneral_buscar_tabla.php',
+            'description' => 'Filas ventasgeneral (máx 100). prefijo_descri_zona_precio para mercado. Opc: provincia, tipo_documento. reporte_url=ventasgeneral_buscar_tabla.php',
             'parameters' => ['type' => 'object', 'properties' => [
                 'nombre_cliente' => $d, 'numero_doc' => $d, 'cod_item' => $d, 'tdoc' => $d,
-                'prefijo_descri_zona_precio' => $d, 'fecha_desde' => $d, 'fecha_hasta' => $d, 'limit' => $dn, 'offset' => $dn,
+                'prefijo_descri_zona_precio' => $d, 'fecha_desde' => $d, 'fecha_hasta' => $d,
+                'provincia' => $d, 'tipo_documento' => $d,
+                'limit' => $dn, 'offset' => $dn,
             ], 'required' => []],
         ]],
         ['type' => 'function', 'function' => [
             'name' => 'ventasgeneral_pareto_nc_zonaprecio',
-            'description' => 'Pareto NC TDoc=07 por DescriZonaPrecio (por zona). reporte_url=pareto_nc_zona.php',
+            'description' => 'Pareto NC TDoc=07 por DescripcionZonaPrecio (por zona). reporte_url=pareto_nc_zona.php',
             'parameters' => ['type' => 'object', 'properties' => [
                 'fecha_desde' => $d, 'fecha_hasta' => $d, 'max_zonas' => $dn,
             ], 'required' => ['fecha_desde', 'fecha_hasta']],
         ]],
         ['type' => 'function', 'function' => [
             'name' => 'ventasgeneral_top_clientes_zona_precio',
-            'description' => 'Top clientes SUM(Valor) con prefijo DescriZonaPrecio. reporte_url=pareto_clientes_zona.php',
+            'description' => 'Top clientes SUM(Valor) con prefijo DescripcionZonaPrecio. reporte_url=pareto_clientes_zona.php',
             'parameters' => ['type' => 'object', 'properties' => [
                 'fecha_desde' => $d, 'fecha_hasta' => $d, 'prefijo_descri_zona_precio' => $d, 'top_n' => $dn,
             ], 'required' => ['fecha_desde', 'fecha_hasta', 'prefijo_descri_zona_precio']],

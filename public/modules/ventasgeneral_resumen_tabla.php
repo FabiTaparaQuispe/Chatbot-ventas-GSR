@@ -29,7 +29,7 @@ if ($d1 === null || $d2 === null || $d1 > $d2) {
 }
 
 $sql = 'SELECT COUNT(*) AS filas, COALESCE(SUM(Valor),0) AS suma_valor, COALESCE(SUM(Cantidad),0) AS suma_cantidad, COALESCE(SUM(Peso),0) AS suma_peso
-    FROM ventasgeneral WHERE FechaCont BETWEEN :d1 AND :d2';
+    FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2';
 $params = [':d1' => $d1, ':d2' => $d2];
 
 $zona = isset($_GET['zona_comercial']) ? trim((string) $_GET['zona_comercial']) : '';
@@ -39,12 +39,12 @@ if ($zona !== '') {
 }
 $cod = isset($_GET['cod_cliente']) ? trim((string) $_GET['cod_cliente']) : '';
 if ($cod !== '') {
-    $sql .= ' AND CodCliente = :cod';
+    $sql .= ' AND CodigoCliente = :cod';
     $params[':cod'] = $cod;
 }
 $prefZ = isset($_GET['prefijo_descri_zona_precio']) ? strtoupper(trim((string) $_GET['prefijo_descri_zona_precio'])) : '';
 if ($prefZ !== '') {
-    $sql .= ' AND UPPER(TRIM(COALESCE(DescriZonaPrecio,\'\'))) LIKE :prefzp';
+    $sql .= ' AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,\'\'))) LIKE :prefzp';
     $params[':prefzp'] = $prefZ . '%';
 }
 
@@ -95,7 +95,7 @@ $pdfName = 'resumen_ventasgeneral_' . $d1 . '_' . $d2 . '.pdf';
             </div>
             <div id="reporte-pdf-root">
                 <h2 class="pdf-h2">Agregados del periodo</h2>
-                <p class="pdf-meta">FechaCont entre las fechas indicadas (filtros opcionales aplicados).</p>
+                <p class="pdf-meta">FechaContable entre las fechas indicadas (filtros opcionales aplicados).</p>
                 <table>
                     <thead>
                         <tr>

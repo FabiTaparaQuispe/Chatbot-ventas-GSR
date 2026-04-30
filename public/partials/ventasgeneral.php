@@ -59,6 +59,14 @@ declare(strict_types=1);
                     <label for="vgDoc">Nº doc</label>
                     <input type="text" id="vgDoc" />
                 </div>
+                <div class="filter-field">
+                    <label for="vgTipoDoc">Tipo documento</label>
+                    <input type="text" id="vgTipoDoc" placeholder="Ej. Boleta de Venta" />
+                </div>
+                <div class="filter-field">
+                    <label for="vgProvincia">Provincia</label>
+                    <input type="text" id="vgProvincia" placeholder="Ej. AREQUIPA" />
+                </div>
             </div>
             <div class="filter-actions">
                 <button type="button" class="btn btn-primary" id="btnFiltrarVentas"><i class="fas fa-filter"></i> Filtrar</button>
@@ -103,6 +111,9 @@ declare(strict_types=1);
                         <th>Cantidad</th>
                         <th>Importe</th>
                         <th>Zona comercial</th>
+                        <th>Tipo documento</th>
+                        <th>Provincia</th>
+                        <th>Línea comercial</th>
                     </tr>
                 </thead>
                 <tbody></tbody>

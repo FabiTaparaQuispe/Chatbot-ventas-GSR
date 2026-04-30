@@ -45,9 +45,9 @@ try {
     switch ($type) {
         case 'vg_daily':
             $st = $pdo->prepare(
-                'SELECT FechaCont AS dia, COUNT(*) AS filas, COALESCE(SUM(Valor),0) AS suma_valor
-                FROM ventasgeneral WHERE FechaCont BETWEEN :a AND :b
-                GROUP BY FechaCont ORDER BY FechaCont'
+                'SELECT FechaContable AS dia, COUNT(*) AS filas, COALESCE(SUM(Valor),0) AS suma_valor
+                FROM ventasgeneral2 WHERE FechaContable BETWEEN :a AND :b
+                GROUP BY FechaContable ORDER BY FechaContable'
             );
             $st->execute([':a' => $d1, ':b' => $d2]);
             echo json_encode(['ok' => true, 'series' => $st->fetchAll(PDO::FETCH_ASSOC)], JSON_UNESCAPED_UNICODE);
@@ -59,7 +59,7 @@ try {
             $st = $pdo->prepare(
                 "SELECT COALESCE(NULLIF(TRIM(ZonaComercial),''),'(sin zona)') AS zona,
                     COUNT(*) AS filas, COALESCE(SUM(Valor),0) AS suma_valor
-                FROM ventasgeneral WHERE FechaCont BETWEEN :a AND :b
+                FROM ventasgeneral2 WHERE FechaContable BETWEEN :a AND :b
                 GROUP BY COALESCE(NULLIF(TRIM(ZonaComercial),''),'(sin zona)')
                 ORDER BY suma_valor DESC LIMIT $limit"
             );
