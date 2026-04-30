@@ -101,9 +101,11 @@ final class ChatReplyEnricher
      */
     private static function summaryWithReporteUrlLine(string $summary, string $reply, array $payload): string
     {
-        $url = self::extractReportePhpUrlFromReply($reply);
+        // Prefer the tool's own reporte_url (always relative, trustworthy).
+        // Fall back to extracting from reply only if the tool didn't include one.
+        $url = trim((string) ($payload['reporte_url'] ?? ''));
         if ($url === '') {
-            $url = trim((string) ($payload['reporte_url'] ?? ''));
+            $url = self::extractReportePhpUrlFromReply($reply);
         }
         if ($url !== '') {
             return trim($summary . "\n\n" . $url);
@@ -115,6 +117,13 @@ final class ChatReplyEnricher
     private static function extractReportePhpUrlFromReply(string $reply): string
     {
         $reply = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}\x{00A0}]/u', '', $reply);
+        // Strip placeholder domains the LLM sometimes invents (example.com, localhost, 127.0.0.1…)
+        // so only the relative path survives for matching below.
+        $reply = preg_replace(
+            '/https?:\/\/(?:example\.com|localhost|127\.0\.0\.1|[a-z0-9_-]+\.example\.com)(?::\d+)?\//',
+            '',
+            $reply
+        );
         if (preg_match(
             '/(https?:\/\/[^\s<]+|(?:ventas_(?:barras_dimension|comparativo|top_productos|top_clientes_global|top_clientes_nc|mix_tdoc|barras_ruta|barras_corporativo|serie_mensual)|pareto_(?:nc_zona|clientes_zona)(?:_tabla)?|ventasgeneral_(?:buscar|resumen)(?:_tabla)?)\.php\?[^\s<>"\']+)/iu',
             $reply,
