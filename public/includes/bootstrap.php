@@ -56,7 +56,19 @@ function app_user_display_name(): string
 function app_normalize_user_role(string $r): string
 {
     $r = strtolower(trim($r));
-    return $r === 'gerente' ? 'gerencia' : $r;
+    if ($r === 'gerente') {
+        return 'gerencia';
+    }
+    if ($r === 'estrategico' || $r === 'estratégico') {
+        return 'estrategico';
+    }
+    if ($r === 'tactico' || $r === 'táctico') {
+        return 'tactico';
+    }
+    if ($r === 'usuario2') {
+        return 'tactico';
+    }
+    return $r;
 }
 
 function app_user_role(): string
@@ -73,10 +85,16 @@ function app_is_admin(): bool
     return app_user_role() === 'admin';
 }
 
-/** Roles con acceso a las vistas de tabla ventasgeneral2 (Ventas general / Ventas general 2). */
+/** Inicio por defecto en «Ventas general» (equipo comercial / gestión). */
+function app_roles_home_ventas(): array
+{
+    return ['admin', 'gerencia', 'estrategico', 'tactico', 'operativo', 'analista'];
+}
+
+/** Acceso a vistas de tabla ventasgeneral2 (incluye lector en solo lectura). */
 function app_roles_ventas_general(): array
 {
-    return ['admin', 'gerencia', 'analista', 'lector'];
+    return array_values(array_unique(array_merge(app_roles_home_ventas(), ['lector'])));
 }
 
 /**

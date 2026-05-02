@@ -148,6 +148,13 @@ try {
 
     if ($method === 'DELETE') {
         $body = json_body();
+        $purgeAll = !empty($body['purge_all']) && ($body['purge_all'] === true || $body['purge_all'] === 1 || $body['purge_all'] === '1');
+        if ($purgeAll) {
+            $st = $pdo->prepare('DELETE FROM app_chat_threads WHERE username = :u');
+            $st->execute([':u' => $username]);
+            echo json_encode(['ok' => true, 'purge_all' => true], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
         $clientId = isset($body['id']) ? trim((string) $body['id']) : '';
         if ($clientId === '') {
             http_response_code(400);

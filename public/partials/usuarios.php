@@ -12,6 +12,8 @@ $flashErr = '';
 $rolesDisponibles = [
     'admin' => 'Admin',
     'gerencia' => 'Gerencia',
+    'estrategico' => 'Estratégico',
+    'tactico' => 'Táctico',
     'analista' => 'Analista',
     'lector' => 'Lector',
 ];

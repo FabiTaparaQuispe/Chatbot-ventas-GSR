@@ -8,7 +8,7 @@ $pageParam = $_GET['page'] ?? null;
 $page = is_string($pageParam) ? $pageParam : '';
 if ($page === '') {
     $r = app_user_role();
-    $page = in_array($r, ['admin', 'gerencia', 'analista'], true) ? 'ventas' : 'chatbot';
+    $page = in_array($r, app_roles_home_ventas(), true) ? 'ventas' : 'chatbot';
 }
 /** La vista estática de gráficos ya no existe; los informes están en el asistente (chatbot). */
 if ($page === 'graficos') {
@@ -16,17 +16,20 @@ if ($page === 'graficos') {
     exit;
 }
 
-$allowedPages = ['ventas', 'ventasgeneral2', 'chatbot', 'historial_preguntas', 'usuarios'];
+$allowedPages = ['ventas', 'ventasgeneral2', 'chatbot', 'historial_preguntas', 'usuarios', 'gestion_usuarios'];
 if (!in_array($page, $allowedPages, true)) {
     $page = 'ventas';
 }
 
 // Alcances por rol (control simple por página).
 // - lector: chatbot + tabla ventas (solo lectura) + historial propio
-// - analista: ventas + chatbot + historial propio
-// - gerencia / admin: igual + usuarios (solo admin)
+// - tactico / analista / estrategico / gerencia / admin: ventas + chatbot + historial; usuarios solo admin
 if ($page === 'usuarios') {
     app_require_role('admin');
+} elseif ($page === 'gestion_usuarios') {
+    app_require_role('estrategico');
+} elseif ($page === 'historial_preguntas') {
+    app_require_role('estrategico');
 } elseif ($page === 'ventas' || $page === 'ventasgeneral2') {
     app_require_role(app_roles_ventas_general());
 }
@@ -36,10 +39,11 @@ $pageTitle = match ($page) {
     'chatbot' => 'Chatbot',
     'historial_preguntas' => 'Preguntas al chatbot',
     'usuarios' => 'Usuarios',
+    'gestion_usuarios' => 'Creación de usuarios',
     'ventasgeneral2' => 'Ventas general 2',
     default => 'Ventas general',
 };
-$loadVentasAssets = $page === 'ventas' || $page === 'ventasgeneral2' || $page === 'usuarios';
+$loadVentasAssets = $page === 'ventas' || $page === 'ventasgeneral2' || $page === 'usuarios' || $page === 'gestion_usuarios';
 $skipFloatingChat = $page === 'chatbot';
 $bodyClass = $page === 'chatbot' ? 'app-page-chatbot' : ($page === 'historial_preguntas' ? 'app-page-historial-chat' : '');
 
@@ -55,6 +59,8 @@ if ($page === 'chatbot') {
     require __DIR__ . '/partials/historial_preguntas.php';
 } elseif ($page === 'usuarios') {
     require __DIR__ . '/partials/usuarios.php';
+} elseif ($page === 'gestion_usuarios') {
+    require __DIR__ . '/partials/gestion_usuarios.php';
 } else {
     require __DIR__ . '/partials/ventasgeneral.php';
 }

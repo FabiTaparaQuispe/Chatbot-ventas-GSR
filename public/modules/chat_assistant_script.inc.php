@@ -943,6 +943,83 @@ declare(strict_types=1);
         return threads[0] && threads[0].id ? threads[0].id : '';
     }
 
+    function purgeLocalVentasChatStorageForCurrentUser() {
+        try {
+            const prefix = NS;
+            const toRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && k.startsWith(prefix)) {
+                    toRemove.push(k);
+                }
+            }
+            for (let j = 0; j < toRemove.length; j++) {
+                try {
+                    localStorage.removeItem(toRemove[j]);
+                } catch (e) { /* ignore */ }
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    async function serverPurgeAllThreadsForUser() {
+        const res = await fetch(THREADS_API, {
+            method: 'DELETE',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ purge_all: true }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data || data.ok !== true) {
+            const msg = (data && data.error) ? String(data.error) : ('HTTP ' + res.status);
+            throw new Error(msg);
+        }
+        return true;
+    }
+
+    function resetAssistantStateAfterStorageClear() {
+        threads = [];
+        activeThreadId = '';
+        setActiveThreadId('');
+        clearUiChat();
+        if (input) {
+            input.value = '';
+            autosizeInput();
+        }
+    }
+
+    function clearLocalAssistantCacheAndReload() {
+        if (!window.confirm('Se borrarán borradores, favoritos locales, chats en caché y preferencias del asistente guardadas en ESTE navegador. Si tenés chats guardados en el servidor, se volverán a descargar después.\n\n¿Continuar?')) {
+            return;
+        }
+        closeHeadMenu();
+        closeThreadsDrawer();
+        purgeLocalVentasChatStorageForCurrentUser();
+        resetAssistantStateAfterStorageClear();
+        loadHistory();
+        renderVentasFaqSelect();
+    }
+
+    async function purgeServerThreadsAndLocalThenReload() {
+        if (!window.confirm('Se eliminarán TODAS tus conversaciones del asistente en la base de datos del servidor y la copia local en este navegador. La lista «Preguntas al chatbot» quedará vacía hasta nuevas consultas.\n\n¿Seguro?')) {
+            return;
+        }
+        if (!window.confirm('Confirmación final: borrar todo el historial de chat en servidor y navegador.')) {
+            return;
+        }
+        closeHeadMenu();
+        closeThreadsDrawer();
+        try {
+            await serverPurgeAllThreadsForUser();
+        } catch (e) {
+            window.alert('No se pudo borrar en el servidor: ' + (e.message || e) + '. Revisá la conexión o probá de nuevo.');
+            return;
+        }
+        purgeLocalVentasChatStorageForCurrentUser();
+        resetAssistantStateAfterStorageClear();
+        loadHistory();
+        renderVentasFaqSelect();
+    }
+
     function loadHistory() {
         threads = loadThreads();
         migrateLegacyHistoryIfAny();
@@ -1107,6 +1184,18 @@ declare(strict_types=1);
         menuPrefs.addEventListener('click', function () {
             closeHeadMenu();
             openPrefsDialog();
+        });
+    }
+    const menuClearLocal = document.getElementById('ventasChatMenuClearLocal');
+    const menuPurgeAll = document.getElementById('ventasChatMenuPurgeAll');
+    if (menuClearLocal) {
+        menuClearLocal.addEventListener('click', function () {
+            clearLocalAssistantCacheAndReload();
+        });
+    }
+    if (menuPurgeAll) {
+        menuPurgeAll.addEventListener('click', function () {
+            purgeServerThreadsAndLocalThenReload();
         });
     }
     document.addEventListener('click', function (ev) {

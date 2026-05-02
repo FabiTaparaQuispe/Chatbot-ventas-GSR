@@ -57,7 +57,14 @@ $currentPage = $currentPage ?? 'ventas';
                         <span>Usuarios</span>
                     </a>
                     <?php endif; ?>
+                    <?php if ($role === 'estrategico'): ?>
+                    <a href="index.php?page=gestion_usuarios" class="app-nav-link<?= $currentPage === 'gestion_usuarios' ? ' app-nav-link-active' : '' ?>">
+                        <i class="fas fa-user-cog" aria-hidden="true"></i>
+                        <span>Creación de usuarios</span>
+                    </a>
+                    <?php endif; ?>
                 </nav>
+                <?php if ($role === 'estrategico'): ?>
                 <p class="app-sidebar-section-label" role="presentation">Registro</p>
                 <nav class="app-sidebar-nav app-sidebar-nav--sub" aria-label="Registro de consultas al chatbot">
                     <a href="index.php?page=historial_preguntas" class="app-nav-link<?= $currentPage === 'historial_preguntas' ? ' app-nav-link-active' : '' ?>">
@@ -65,6 +72,7 @@ $currentPage = $currentPage ?? 'ventas';
                         <span>Preguntas al chatbot</span>
                     </a>
                 </nav>
+                <?php endif; ?>
             </div>
         </div>
     </div>

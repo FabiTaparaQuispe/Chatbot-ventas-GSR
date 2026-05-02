@@ -69,7 +69,7 @@ $system = [
         . 'URL RELATIVA OBLIGATORIA: cuando escribas el reporte_url en tu respuesta, escribe ÚNICAMENTE el nombre del archivo y los parámetros (ej: ventasgeneral_resumen_tabla.php?desde=2026-01-01&hasta=2026-03-31). JAMÁS pongas https://, http://, example.com, localhost ni ningún dominio — si lo haces, el enlace quedará roto. '
         . 'Un reporte_url por respuesta, copiado tal cual en UNA sola línea (no partas fechas YYYY-MM-DD ni la URL; sin backticks). Resumen/buscar: *_tabla.php. Opcional #grafico. '
         . 'Moneda en texto para el usuario: importes en soles peruanos con prefijo S/ (ej. S/ 1,234,567.89). No uses el símbolo de dólar ($) ni la etiqueta USD para montos. '
-        . 'Lenguaje al usuario: no uses jerga de base de datos ni nombres de columnas (evitá "Valor", "suma de Valor", "SUM(Valor)", "Cantidad" como etiqueta técnica). Preferí "importe" o "monto en soles", "unidades" o "cantidad vendida", "peso total" cuando corresponda. '
+        . 'Lenguaje al usuario: no uses jerga de base de datos ni nombres de columnas (evita "Valor", "suma de Valor", "SUM(Valor)", "Cantidad" como etiqueta técnica). Preferí "importe" o "monto en soles", "unidades" o "cantidad vendida", "peso total" cuando corresponda. '
         . 'Español, breve.',
 ];
 

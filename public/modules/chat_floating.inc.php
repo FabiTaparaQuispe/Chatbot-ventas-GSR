@@ -406,6 +406,8 @@ $ventasHistorialPreguntasUrl .= 'index.php?page=historial_preguntas';
                     <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuNew" role="menuitem">Nueva conversación</button>
                     <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuClear" role="menuitem">Limpiar esta conversación…</button>
                     <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuPrefs" role="menuitem">Personalización…</button>
+                    <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuClearLocal" role="menuitem">Borrar caché local (este navegador)…</button>
+                    <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuPurgeAll" role="menuitem">Borrar todo el historial en servidor…</button>
                     <a class="ventas-chat-menu-item ventas-chat-menu-link" role="menuitem" href="<?= htmlspecialchars($ventasHistorialPreguntasUrl, ENT_QUOTES, 'UTF-8') ?>">Preguntas guardadas</a>
                 </div>
             </details>
