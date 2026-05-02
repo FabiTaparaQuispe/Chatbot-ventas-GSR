@@ -207,7 +207,7 @@ final class VentasGeneralReportesGraficos
                 MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,
                 COUNT(*) AS lineas,
                 COALESCE(SUM(Valor),0) AS suma_valor
-            FROM ventasgeneral
+            FROM ventasgeneral2
             WHERE FechaContable BETWEEN :d1 AND :d2 AND {$tdoc}
             GROUP BY CodigoCliente
             ORDER BY lineas DESC, suma_valor ASC

@@ -39,3 +39,72 @@ function app_require_login(): void
     }
 }
 
+function app_user_username(): string
+{
+    return (string) ($_SESSION['usuario'] ?? '');
+}
+
+function app_user_display_name(): string
+{
+    $v = (string) ($_SESSION['display_name'] ?? '');
+    return trim($v);
+}
+
+function app_user_role(): string
+{
+    $r = strtolower(trim((string) ($_SESSION['role'] ?? '')));
+    return $r !== '' ? $r : 'lector';
+}
+
+function app_is_admin(): bool
+{
+    return app_user_role() === 'admin';
+}
+
+/**
+ * Requiere que el usuario tenga uno de los roles permitidos.
+ * Si no coincide, redirige al inicio.
+ *
+ * @param string|array<int,string> $roles
+ */
+function app_require_role(string|array $roles): void
+{
+    app_require_login();
+    $r = app_user_role();
+    $allowed = is_array($roles) ? $roles : [$roles];
+    $allowed = array_map(static fn($x) => strtolower(trim((string) $x)), $allowed);
+    if ($r === '' || !in_array($r, $allowed, true)) {
+        header('Location: ' . app_public_base() . 'index.php');
+        exit;
+    }
+}
+
+function app_csrf_token(): string
+{
+    $t = (string) ($_SESSION['csrf_token'] ?? '');
+    if ($t !== '') {
+        return $t;
+    }
+    try {
+        $t = bin2hex(random_bytes(32));
+    } catch (Throwable) {
+        $t = bin2hex((string) microtime(true) . ':' . (string) mt_rand());
+    }
+    $_SESSION['csrf_token'] = $t;
+    return $t;
+}
+
+function app_check_csrf(): void
+{
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        return;
+    }
+    $sent = (string) ($_POST['csrf_token'] ?? '');
+    $real = (string) ($_SESSION['csrf_token'] ?? '');
+    if ($sent === '' || $real === '' || !hash_equals($real, $sent)) {
+        http_response_code(400);
+        echo 'Solicitud inválida (CSRF).';
+        exit;
+    }
+}
+

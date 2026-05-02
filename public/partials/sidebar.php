@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 $usuario = $_SESSION['usuario'] ?? '';
+$role = app_user_role();
 $currentPage = $currentPage ?? 'ventas';
 
 ?>
@@ -40,21 +41,31 @@ $currentPage = $currentPage ?? 'ventas';
                     </div>
                 </div>
                 <nav class="app-sidebar-nav" aria-label="Principal">
+                    <?php if (in_array($role, ['admin', 'gerencia', 'analista'], true)): ?>
                     <a href="index.php?page=ventas" class="app-nav-link<?= $currentPage === 'ventas' ? ' app-nav-link-active' : '' ?>">
                         <i class="fas fa-table" aria-hidden="true"></i>
                         <span>Ventas general</span>
                     </a>
+                    <?php endif; ?>
                     <a href="index.php?page=chatbot" class="app-nav-link<?= $currentPage === 'chatbot' ? ' app-nav-link-active' : '' ?>">
                         <i class="fas fa-comments" aria-hidden="true"></i>
                         <span>Chatbot</span>
                     </a>
+                    <?php if ($role === 'admin'): ?>
+                    <a href="index.php?page=usuarios" class="app-nav-link<?= $currentPage === 'usuarios' ? ' app-nav-link-active' : '' ?>">
+                        <i class="fas fa-users" aria-hidden="true"></i>
+                        <span>Usuarios</span>
+                    </a>
+                    <?php endif; ?>
                 </nav>
                 <p class="app-sidebar-section-label" role="presentation">Registro</p>
                 <nav class="app-sidebar-nav app-sidebar-nav--sub" aria-label="Registro de consultas al chatbot">
+                    <?php if (in_array($role, ['admin', 'gerencia'], true)): ?>
                     <a href="index.php?page=historial_preguntas" class="app-nav-link<?= $currentPage === 'historial_preguntas' ? ' app-nav-link-active' : '' ?>">
                         <i class="fas fa-list-ul" aria-hidden="true"></i>
                         <span>Preguntas al chatbot</span>
                     </a>
+                    <?php endif; ?>
                 </nav>
             </div>
         </div>

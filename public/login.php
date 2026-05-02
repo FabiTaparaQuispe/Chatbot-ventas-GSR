@@ -17,20 +17,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         try {
             $pdo = ventas_pdo();
-            $st = $pdo->prepare('SELECT password_hash, is_active FROM app_users WHERE username = :u LIMIT 1');
+            $st = $pdo->prepare('SELECT password_hash, is_active, role, display_name FROM app_users WHERE username = :u LIMIT 1');
             $st->execute([':u' => $u]);
             $row = $st->fetch(PDO::FETCH_ASSOC) ?: null;
             $ok = false;
+            $role = '';
+            $displayName = '';
             if ($row && (int) ($row['is_active'] ?? 0) === 1) {
                 $hash = (string) ($row['password_hash'] ?? '');
                 $ok = $hash !== '' && password_verify($c, $hash);
                 if ($ok) {
                     $pdo->prepare('UPDATE app_users SET last_login_at = NOW() WHERE username = :u')->execute([':u' => $u]);
+                    $role = strtolower(trim((string) ($row['role'] ?? '')));
+                    $displayName = trim((string) ($row['display_name'] ?? ''));
                 }
             }
             if ($ok) {
                 $_SESSION['active'] = true;
                 $_SESSION['usuario'] = $u;
+                $_SESSION['role'] = $role;
+                $_SESSION['display_name'] = $displayName;
                 header('Location: ' . app_public_base() . 'index.php');
                 exit;
             }
