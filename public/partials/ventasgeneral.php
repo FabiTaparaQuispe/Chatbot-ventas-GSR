@@ -3,20 +3,20 @@ declare(strict_types=1);
 ?>
 
 <div class="page-head">
-    <h1>Ventas general</h1>
+    <h1><?= ($currentPage ?? '') === 'ventasgeneral2' ? 'Ventas general 2' : 'Ventas general' ?></h1>
 </div>
 
 <div class="card-filtros-demo">
-    <button type="button" class="card-filtros-demo__head" id="btnToggleFiltrosDemo" aria-expanded="false" aria-controls="contenidoFiltrosDemo">
+    <button type="button" class="card-filtros-demo__head" id="btnToggleFiltrosDemo" aria-expanded="true" aria-controls="contenidoFiltrosDemo">
         <div class="card-filtros-demo__head-left">
             <span class="card-filtros-demo__emoji" aria-hidden="true">🔎</span>
             <span class="card-filtros-demo__title">Filtros de búsqueda</span>
         </div>
-        <svg id="iconoFiltrosDemo" class="card-filtros-demo__chev" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+        <svg id="iconoFiltrosDemo" class="card-filtros-demo__chev card-filtros-demo__chev--open" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
     </button>
-    <div id="contenidoFiltrosDemo" class="card-filtros-demo__body hidden">
+    <div id="contenidoFiltrosDemo" class="card-filtros-demo__body">
         <div class="filters-block filters-block--inner">
             <div class="filter-row filter-row--periodo">
                 <div class="filter-field">

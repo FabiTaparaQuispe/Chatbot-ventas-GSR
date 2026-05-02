@@ -47,5 +47,6 @@ CREATE TABLE IF NOT EXISTS app_chat_messages (
 
 -- Usuario de ejemplo (cambia el hash por uno real si quieres).
 -- Para generar un hash: en PHP -> password_hash('tu_clave', PASSWORD_DEFAULT)
--- INSERT INTO app_users (username, password_hash, display_name, role) VALUES ('gerente', '$2y$10$...', 'Gerente', 'gerente');
+-- INSERT INTO app_users (username, password_hash, display_name, role) VALUES ('gerente', '$2y$10$...', 'Gerente', 'gerencia');
+-- (Rol canónico: admin | gerencia | analista | lector. Si quedó 'gerente' en BD, la app lo trata como gerencia al iniciar sesión.)
 

@@ -63,6 +63,9 @@ SQL;
     }
 }
 
+$historialBackPage = in_array(app_user_role(), app_roles_ventas_general(), true) ? 'ventas' : 'chatbot';
+$historialBackLabel = $historialBackPage === 'ventas' ? 'Volver a Ventas general' : 'Volver al Chatbot';
+
 function historial_preview(string $text, int $max = 220): string
 {
     $text = trim(preg_replace('/\s+/u', ' ', $text));
@@ -86,7 +89,7 @@ function historial_preview(string $text, int $max = 220): string
 ?>
 <div class="app-historial-chat">
     <header class="app-historial-chat-head">
-        <a href="index.php?page=ventas" class="app-historial-chat-back" aria-label="Volver a Ventas general" title="Volver">
+        <a href="index.php?page=<?= htmlspecialchars($historialBackPage, ENT_QUOTES, 'UTF-8') ?>" class="app-historial-chat-back" aria-label="<?= htmlspecialchars($historialBackLabel, ENT_QUOTES, 'UTF-8') ?>" title="Volver">
             <i class="fas fa-arrow-left" aria-hidden="true"></i>
         </a>
         <div class="app-historial-chat-head-text">

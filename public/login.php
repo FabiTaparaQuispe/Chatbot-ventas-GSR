@@ -29,6 +29,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($ok) {
                     $pdo->prepare('UPDATE app_users SET last_login_at = NOW() WHERE username = :u')->execute([':u' => $u]);
                     $role = strtolower(trim((string) ($row['role'] ?? '')));
+                    $role = app_normalize_user_role($role);
+                    if ($role === '') {
+                        $role = 'lector';
+                    }
                     $displayName = trim((string) ($row['display_name'] ?? ''));
                 }
             }

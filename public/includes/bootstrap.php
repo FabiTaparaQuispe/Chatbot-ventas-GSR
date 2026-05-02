@@ -50,15 +50,33 @@ function app_user_display_name(): string
     return trim($v);
 }
 
+/**
+ * Alinea variantes guardadas en BD con los roles que usa la app (p. ej. schema de ejemplo usa "gerente").
+ */
+function app_normalize_user_role(string $r): string
+{
+    $r = strtolower(trim($r));
+    return $r === 'gerente' ? 'gerencia' : $r;
+}
+
 function app_user_role(): string
 {
     $r = strtolower(trim((string) ($_SESSION['role'] ?? '')));
-    return $r !== '' ? $r : 'lector';
+    if ($r === '') {
+        return 'lector';
+    }
+    return app_normalize_user_role($r);
 }
 
 function app_is_admin(): bool
 {
     return app_user_role() === 'admin';
+}
+
+/** Roles con acceso a las vistas de tabla ventasgeneral2 (Ventas general / Ventas general 2). */
+function app_roles_ventas_general(): array
+{
+    return ['admin', 'gerencia', 'analista', 'lector'];
 }
 
 /**

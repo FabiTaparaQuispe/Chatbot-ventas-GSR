@@ -185,7 +185,7 @@ $csrf = app_csrf_token();
                     $id = (int) ($u['id'] ?? 0);
                     $username = (string) ($u['username'] ?? '');
                     $displayName = (string) ($u['display_name'] ?? '');
-                    $role = strtolower(trim((string) ($u['role'] ?? '')));
+                    $role = app_normalize_user_role((string) ($u['role'] ?? ''));
                     $active = (int) ($u['is_active'] ?? 0) === 1;
                     $last = (string) ($u['last_login_at'] ?? '');
                     $created = (string) ($u['created_at'] ?? '');

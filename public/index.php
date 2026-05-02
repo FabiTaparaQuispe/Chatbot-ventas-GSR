@@ -16,22 +16,19 @@ if ($page === 'graficos') {
     exit;
 }
 
-$allowedPages = ['ventas', 'chatbot', 'historial_preguntas', 'usuarios'];
+$allowedPages = ['ventas', 'ventasgeneral2', 'chatbot', 'historial_preguntas', 'usuarios'];
 if (!in_array($page, $allowedPages, true)) {
     $page = 'ventas';
 }
 
 // Alcances por rol (control simple por página).
-// - lector: solo chatbot
-// - analista: ventas + chatbot
-// - gerencia: ventas + chatbot + historial
-// - admin: todo
+// - lector: chatbot + tabla ventas (solo lectura) + historial propio
+// - analista: ventas + chatbot + historial propio
+// - gerencia / admin: igual + usuarios (solo admin)
 if ($page === 'usuarios') {
     app_require_role('admin');
-} elseif ($page === 'historial_preguntas') {
-    app_require_role(['admin', 'gerencia']);
-} elseif ($page === 'ventas') {
-    app_require_role(['admin', 'gerencia', 'analista']);
+} elseif ($page === 'ventas' || $page === 'ventasgeneral2') {
+    app_require_role(app_roles_ventas_general());
 }
 
 $currentPage = $page;
@@ -39,9 +36,10 @@ $pageTitle = match ($page) {
     'chatbot' => 'Chatbot',
     'historial_preguntas' => 'Preguntas al chatbot',
     'usuarios' => 'Usuarios',
+    'ventasgeneral2' => 'Ventas general 2',
     default => 'Ventas general',
 };
-$loadVentasAssets = $page === 'ventas' || $page === 'usuarios';
+$loadVentasAssets = $page === 'ventas' || $page === 'ventasgeneral2' || $page === 'usuarios';
 $skipFloatingChat = $page === 'chatbot';
 $bodyClass = $page === 'chatbot' ? 'app-page-chatbot' : ($page === 'historial_preguntas' ? 'app-page-historial-chat' : '');
 
