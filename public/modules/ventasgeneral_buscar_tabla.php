@@ -70,7 +70,7 @@ $pdfName = 'ventasgeneral_buscar_' . date('Y-m-d_His') . '.pdf';
     <main>
         <div class="wrap-dark">
             <div class="reporte-toolbar">
-                <button type="button" class="btn-pdf" id="btn-pdf-buscar">Descargar PDF</button>
+                <button type="button" class="btn btn-primary" id="btn-pdf-buscar">Descargar PDF</button>
             </div>
             <div id="reporte-pdf-root">
                 <h2 class="pdf-h2">Líneas de ventasgeneral</h2>
@@ -78,24 +78,26 @@ $pdfName = 'ventasgeneral_buscar_' . date('Y-m-d_His') . '.pdf';
                 <?php if ($rows === []) { ?>
                     <p>Sin filas.</p>
                 <?php } else { ?>
-                <table>
-                    <thead>
-                        <tr>
-                            <?php foreach (array_keys($rows[0]) as $col) { ?>
-                            <th><?= htmlspecialchars((string) $col, ENT_QUOTES, 'UTF-8') ?></th>
+                <div class="table-wrapper overflow-x-auto productos-dt-skin">
+                    <table class="data-table config-table display stripe">
+                        <thead>
+                            <tr>
+                                <?php foreach (array_keys($rows[0]) as $col) { ?>
+                                <th><?= htmlspecialchars((string) $col, ENT_QUOTES, 'UTF-8') ?></th>
+                                <?php } ?>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($rows as $r) { ?>
+                            <tr>
+                                <?php foreach ($r as $v) { ?>
+                                <td><?= htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8') ?></td>
+                                <?php } ?>
+                            </tr>
                             <?php } ?>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($rows as $r) { ?>
-                        <tr>
-                            <?php foreach ($r as $v) { ?>
-                            <td><?= htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8') ?></td>
-                            <?php } ?>
-                        </tr>
-                        <?php } ?>
-                    </tbody>
-                </table>
+                        </tbody>
+                    </table>
+                </div>
                 <?php } ?>
             </div>
         </div>

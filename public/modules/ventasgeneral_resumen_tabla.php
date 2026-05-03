@@ -101,31 +101,33 @@ $pdfName = 'resumen_ventasgeneral_' . $d1 . '_' . $d2 . '.pdf';
     <main>
         <div class="wrap-dark">
             <div class="reporte-toolbar">
-                <button type="button" class="btn-pdf" id="btn-pdf-resumen">Descargar PDF</button>
+                <button type="button" class="btn btn-primary" id="btn-pdf-resumen">Descargar PDF</button>
             </div>
             <div id="reporte-pdf-root">
                 <h2 class="pdf-h2">Agregados del periodo</h2>
                 <p class="pdf-meta">FechaContable entre las fechas indicadas (filtros opcionales aplicados).</p>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>N°</th>
-                            <th>Filas</th>
-                            <th>Importe total</th>
-                            <th>Cantidad total</th>
-                            <th>Peso total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>1</td>
-                            <td><?= htmlspecialchars((string) ($row['filas'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><?= number_format((float) ($row['suma_valor'] ?? 0), 2, '.', ',') ?></td>
-                            <td><?= number_format((float) ($row['suma_cantidad'] ?? 0), 2, '.', ',') ?></td>
-                            <td><?= number_format((float) ($row['suma_peso'] ?? 0), 2, '.', ',') ?></td>
-                        </tr>
-                    </tbody>
-                </table>
+                <div class="table-wrapper overflow-x-auto productos-dt-skin">
+                    <table class="data-table config-table display stripe">
+                        <thead>
+                            <tr>
+                                <th>N°</th>
+                                <th>Filas</th>
+                                <th>Importe total</th>
+                                <th>Cantidad total</th>
+                                <th>Peso total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>1</td>
+                                <td><?= htmlspecialchars((string) ($row['filas'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td><?= number_format((float) ($row['suma_valor'] ?? 0), 2, '.', ',') ?></td>
+                                <td><?= number_format((float) ($row['suma_cantidad'] ?? 0), 2, '.', ',') ?></td>
+                                <td><?= number_format((float) ($row['suma_peso'] ?? 0), 2, '.', ',') ?></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </main>
