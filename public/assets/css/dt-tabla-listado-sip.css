@@ -262,7 +262,15 @@ html[data-theme="dark"] #tablaVentasWrapper .view-toggle-btn.active:hover {
     color: #fff !important;
 }
 
-/* Scroll horizontal para tabla ventas general (scrollX: true) */
+/* Tabla usuarios (gestión): una sola tabla HTML; scroll horizontal en el contenedor
+   (no usar scrollX de DataTables aquí — duplica thead y suele “mover” columnas). */
+#tablaUsuariosWrapper .productos-dt-skin .table-wrapper {
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Scroll horizontal DataTables (scrollX: true) — ventas general */
 #tablaVentasWrapper .dataTables_scrollWrapper {
     width: 100%;
 }
@@ -270,12 +278,18 @@ html[data-theme="dark"] #tablaVentasWrapper .view-toggle-btn.active:hover {
     overflow: hidden !important;
     border-radius: 0.75rem 0.75rem 0 0;
 }
+#tablaVentasWrapper .dataTables_scrollHead table {
+    margin-bottom: 0 !important;
+    border-collapse: collapse !important;
+}
+#tablaVentasWrapper .dataTables_scrollBody table {
+    border-collapse: collapse !important;
+}
 #tablaVentasWrapper .dataTables_scrollBody {
     overflow-x: auto !important;
     overflow-y: hidden !important;
     border-radius: 0 0 0.75rem 0.75rem;
 }
-/* Scrollbar delgado en webkit */
 #tablaVentasWrapper .dataTables_scrollBody::-webkit-scrollbar {
     height: 6px;
 }

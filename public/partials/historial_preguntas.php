@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-app_require_role('estrategico');
+app_require_role(['estrategico', 'administrador']);
 
 $usuario  = trim((string) ($_SESSION['usuario'] ?? ''));
 $rows     = [];

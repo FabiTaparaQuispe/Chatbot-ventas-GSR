@@ -185,7 +185,9 @@ if ($usuario !== '') {
                     <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuPrefs" role="menuitem">Personalización…</button>
                     <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuClearLocal" role="menuitem">Borrar caché local (este navegador)…</button>
                     <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuPurgeAll" role="menuitem">Borrar todo el historial en servidor…</button>
-                    <?php if (app_user_role() === 'estrategico'): ?>
+                    <?php
+                    $rolChat = app_user_role();
+                    if ($rolChat === 'estrategico' || $rolChat === 'administrador'): ?>
                     <a class="ventas-chat-menu-item ventas-chat-menu-link" role="menuitem" href="<?= htmlspecialchars($ventasHistorialPreguntasUrl, ENT_QUOTES, 'UTF-8') ?>">Preguntas guardadas</a>
                     <?php endif; ?>
                 </div>

@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-app_require_role('estrategico');
+app_require_role('administrador');
 app_check_csrf();
 
 $pdo = ventas_pdo();
@@ -9,11 +9,22 @@ $flashOk = '';
 $flashErr = '';
 $myUsername = app_user_username();
 
-$rolesDisponibles = [
+/** Roles gestionados en esta pantalla (listado y edición). */
+$rolesGestionTabla = [
+    'administrador' => 'Administrador',
+    'estrategico'   => 'Estratégico',
+    'tactico'       => 'Táctico',
+    'operativo'     => 'Operativo',
+];
+
+/** Solo estratégico, táctico y operativo al crear usuario (administrador no por formulario). */
+$rolesCrearUsuario = [
     'estrategico' => 'Estratégico',
     'tactico'     => 'Táctico',
     'operativo'   => 'Operativo',
 ];
+
+$rolesSqlIn = "'administrador','estrategico','tactico','operativo'";
 
 $accion = (string) ($_POST['accion'] ?? '');
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion !== '') {
@@ -30,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion !== '') {
             if (!preg_match('/^[a-zA-Z0-9._@-]{3,120}$/', $username)) {
                 throw new RuntimeException('El usuario debe tener 3–120 caracteres (letras, números, punto, guion, @ o _).');
             }
-            if (!isset($rolesDisponibles[$role])) {
+            if (!isset($rolesCrearUsuario[$role])) {
                 throw new RuntimeException('Rol inválido.');
             }
             if (strlen($password) < 6) {
@@ -53,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion !== '') {
             if ($id <= 0) {
                 throw new RuntimeException('Usuario inválido.');
             }
-            $st = $pdo->prepare("UPDATE app_users SET is_active = :a WHERE id = :id AND role IN ('estrategico','tactico','operativo')");
+            $st = $pdo->prepare("UPDATE app_users SET is_active = :a WHERE id = :id AND role IN ($rolesSqlIn)");
             $st->execute([':a' => $newActive, ':id' => $id]);
             $flashOk = 'Estado actualizado.';
 
@@ -63,10 +74,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion !== '') {
             if ($id <= 0) {
                 throw new RuntimeException('Usuario inválido.');
             }
-            if (!isset($rolesDisponibles[$role])) {
+            if (!isset($rolesGestionTabla[$role])) {
                 throw new RuntimeException('Rol inválido.');
             }
-            $st = $pdo->prepare("UPDATE app_users SET role = :r WHERE id = :id AND role IN ('estrategico','tactico','operativo')");
+            $stWho = $pdo->prepare('SELECT username FROM app_users WHERE id = :id LIMIT 1');
+            $stWho->execute([':id' => $id]);
+            $targetUser = (string) ($stWho->fetchColumn() ?: '');
+            if ($targetUser !== '' && $targetUser === $myUsername) {
+                throw new RuntimeException('No puede cambiar su propio rol desde esta pantalla.');
+            }
+            $st = $pdo->prepare("UPDATE app_users SET role = :r WHERE id = :id AND role IN ($rolesSqlIn)");
             $st->execute([':r' => $role, ':id' => $id]);
             $flashOk = 'Rol actualizado.';
 
@@ -80,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion !== '') {
                 throw new RuntimeException('La contraseña debe tener al menos 6 caracteres.');
             }
             $hash = password_hash($password, PASSWORD_DEFAULT);
-            $st = $pdo->prepare("UPDATE app_users SET password_hash = :h WHERE id = :id AND role IN ('estrategico','tactico','operativo')");
+            $st = $pdo->prepare("UPDATE app_users SET password_hash = :h WHERE id = :id AND role IN ($rolesSqlIn)");
             $st->execute([':h' => $hash, ':id' => $id]);
             $flashOk = 'Contraseña actualizada.';
 
@@ -95,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion !== '') {
             if ($targetUsername === $myUsername) {
                 throw new RuntimeException('No puede eliminarse a sí mismo.');
             }
-            $st = $pdo->prepare("DELETE FROM app_users WHERE id = :id AND role IN ('estrategico','tactico','operativo')");
+            $st = $pdo->prepare("DELETE FROM app_users WHERE id = :id AND role IN ($rolesSqlIn)");
             $st->execute([':id' => $id]);
             $flashOk = 'Usuario eliminado.';
 
@@ -110,16 +127,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $accion !== '') {
 $users = $pdo->query(
     "SELECT id, username, display_name, role, is_active, last_login_at, created_at
      FROM app_users
-     WHERE role IN ('estrategico','tactico','operativo')
+     WHERE role IN ($rolesSqlIn)
      ORDER BY created_at DESC, id DESC"
 )->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
 $csrf = app_csrf_token();
 
 $roleBadgeClass = [
-    'estrategico' => 'gu-badge--estrategico',
-    'tactico'     => 'gu-badge--tactico',
-    'operativo'   => 'gu-badge--operativo',
+    'administrador' => 'gu-badge--administrador',
+    'estrategico'   => 'gu-badge--estrategico',
+    'tactico'       => 'gu-badge--tactico',
+    'operativo'     => 'gu-badge--operativo',
 ];
 ?>
 
@@ -132,9 +150,11 @@ $roleBadgeClass = [
     font-weight:600; letter-spacing:.02em; white-space:nowrap;
     border:1px solid transparent;
 }
+.gu-badge--administrador { background:rgba(234,88,12,.12); color:#c2410c; border-color:rgba(234,88,12,.35); }
 .gu-badge--estrategico { background:rgba(59,130,246,.15); color:#2563eb; border-color:rgba(59,130,246,.3); }
 .gu-badge--tactico     { background:rgba(168,85,247,.15);  color:#7c3aed; border-color:rgba(168,85,247,.3); }
 .gu-badge--operativo   { background:rgba(16,185,129,.15);  color:#059669; border-color:rgba(16,185,129,.3); }
+[data-theme="dark"] .gu-badge--administrador { background:rgba(234,88,12,.2); color:#fdba74; border-color:rgba(234,88,12,.45); }
 [data-theme="dark"] .gu-badge--estrategico { background:rgba(59,130,246,.2); color:#93c5fd; border-color:rgba(59,130,246,.4); }
 [data-theme="dark"] .gu-badge--tactico     { background:rgba(168,85,247,.2);  color:#c4b5fd; border-color:rgba(168,85,247,.4); }
 [data-theme="dark"] .gu-badge--operativo   { background:rgba(16,185,129,.2);  color:#6ee7b7; border-color:rgba(16,185,129,.4); }
@@ -150,9 +170,11 @@ $roleBadgeClass = [
     transition:box-shadow .15s;
 }
 .gu-role-select:focus { outline:none; box-shadow:0 0 0 2px rgba(59,130,246,.4); }
+.gu-role-select.gu-badge--administrador { background-color:rgba(234,88,12,.12); color:#c2410c; border-color:rgba(234,88,12,.35); }
 .gu-role-select.gu-badge--estrategico { background-color:rgba(59,130,246,.15); color:#2563eb; border-color:rgba(59,130,246,.3); }
 .gu-role-select.gu-badge--tactico     { background-color:rgba(168,85,247,.15);  color:#7c3aed; border-color:rgba(168,85,247,.3); }
 .gu-role-select.gu-badge--operativo   { background-color:rgba(16,185,129,.15);  color:#059669; border-color:rgba(16,185,129,.3); }
+[data-theme="dark"] .gu-role-select.gu-badge--administrador { background-color:rgba(234,88,12,.2); color:#fdba74; border-color:rgba(234,88,12,.45); }
 [data-theme="dark"] .gu-role-select.gu-badge--estrategico { background-color:rgba(59,130,246,.2); color:#93c5fd; border-color:rgba(59,130,246,.4); }
 [data-theme="dark"] .gu-role-select.gu-badge--tactico     { background-color:rgba(168,85,247,.2);  color:#c4b5fd; border-color:rgba(168,85,247,.4); }
 [data-theme="dark"] .gu-role-select.gu-badge--operativo   { background-color:rgba(16,185,129,.2);  color:#6ee7b7; border-color:rgba(16,185,129,.4); }
@@ -229,7 +251,7 @@ $roleBadgeClass = [
 
 <div class="page-head">
     <h1>Creación de usuarios</h1>
-    <p style="margin:0; color: var(--muted);">Gestión de usuarios con roles estratégico, táctico y operativo.</p>
+    <p style="margin:0; color: var(--muted);">Solo el rol administrador accede aquí. Usuarios de la app: administrador, estratégico, táctico y operativo.</p>
 </div>
 
 <?php if ($flashOk !== ''): ?>
@@ -273,7 +295,7 @@ $roleBadgeClass = [
                 <div class="filter-field">
                     <label for="gu_role">Rol</label>
                     <select id="gu_role" name="role">
-                        <?php foreach ($rolesDisponibles as $k => $label): ?>
+                        <?php foreach ($rolesCrearUsuario as $k => $label): ?>
                             <option value="<?= htmlspecialchars($k, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></option>
                         <?php endforeach; ?>
                     </select>
@@ -346,7 +368,7 @@ $roleBadgeClass = [
                         $created     = (string) ($u['created_at'] ?? '');
                         $isSelf      = ($username === $myUsername);
                         $badgeClass  = $roleBadgeClass[$role] ?? '';
-                        $roleLabel   = $rolesDisponibles[$role] ?? ucfirst($role);
+                        $roleLabel   = $rolesGestionTabla[$role] ?? ucfirst($role);
                     ?>
                     <tr>
                         <td><?= $nro ?></td>
@@ -359,9 +381,9 @@ $roleBadgeClass = [
                                 <input type="hidden" name="id" value="<?= $id ?>">
                                 <select name="role"
                                         class="gu-role-select <?= htmlspecialchars($badgeClass, ENT_QUOTES, 'UTF-8') ?>"
-                                        onchange="guUpdateSelectStyle(this); this.form.submit();"
+                                        <?= $isSelf ? 'disabled title="No puede cambiar su propio rol desde aquí"' : 'onchange="guUpdateSelectStyle(this); this.form.submit();"' ?>
                                         aria-label="Cambiar rol">
-                                    <?php foreach ($rolesDisponibles as $k => $lbl): ?>
+                                    <?php foreach ($rolesGestionTabla as $k => $lbl): ?>
                                         <option value="<?= htmlspecialchars($k, ENT_QUOTES, 'UTF-8') ?>" <?= $k === $role ? 'selected' : '' ?>>
                                             <?= htmlspecialchars($lbl, ENT_QUOTES, 'UTF-8') ?>
                                         </option>
@@ -470,8 +492,8 @@ $roleBadgeClass = [
 
     window.guOpenModal = guOpenModal;
     window.guUpdateSelectStyle = function (sel) {
-        var badges = ['gu-badge--estrategico', 'gu-badge--tactico', 'gu-badge--operativo'];
-        var map = { estrategico: 'gu-badge--estrategico', tactico: 'gu-badge--tactico', operativo: 'gu-badge--operativo' };
+        var badges = ['gu-badge--administrador', 'gu-badge--estrategico', 'gu-badge--tactico', 'gu-badge--operativo'];
+        var map = { administrador: 'gu-badge--administrador', estrategico: 'gu-badge--estrategico', tactico: 'gu-badge--tactico', operativo: 'gu-badge--operativo' };
         badges.forEach(function (c) { sel.classList.remove(c); });
         var cls = map[sel.value];
         if (cls) sel.classList.add(cls);
@@ -513,7 +535,7 @@ $extraScripts .= <<<'GUJS'
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
-    var roleBadgeLabel = { estrategico:'Estratégico', tactico:'Táctico', operativo:'Operativo' };
+    var roleBadgeLabel = { administrador:'Administrador', estrategico:'Estratégico', tactico:'Táctico', operativo:'Operativo' };
 
     function rebuildUsuariosCards() {
         if (!guTable) return;
@@ -614,8 +636,7 @@ $extraScripts .= <<<'GUJS'
             serverSide: false,
             searching: true,
             ordering: true,
-            scrollX: true,
-            scrollCollapse: true,
+            /* Sin scrollX: evita thead/tbody duplicados que desalinean columnas; el scroll va en .table-wrapper */
             pageLength: 20,
             lengthMenu: [[20,25,50,100],[20,25,50,100]],
             dom: '<"dt-top-row"lf>rt<"dt-bottom-row"ip>',
@@ -657,6 +678,11 @@ $extraScripts .= <<<'GUJS'
         if ($(window).width() < 768) {
             $('#tablaUsuariosWrapper').attr('data-vista', 'iconos');
         }
+
+        $(window).on('resize orientationchange', function () {
+            if (!guTable) return;
+            try { guTable.columns.adjust(); } catch (e) {}
+        });
 
         syncVistaUsuarios();
     });

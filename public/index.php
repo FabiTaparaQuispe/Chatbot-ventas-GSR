@@ -23,13 +23,14 @@ if (!in_array($page, $allowedPages, true)) {
 
 // Alcances por rol (control simple por página).
 // - lector: chatbot + tabla ventas (solo lectura) + historial propio
-// - tactico / analista / estrategico / gerencia / admin: ventas + chatbot + historial; usuarios solo admin
+// - tactico / analista / estrategico / gerencia / admin / administrador: ventas + chatbot; usuarios legacy solo admin
+// - Creación de usuarios (app_users): solo rol administrador
 if ($page === 'usuarios') {
     app_require_role('admin');
 } elseif ($page === 'gestion_usuarios') {
-    app_require_role('estrategico');
+    app_require_role('administrador');
 } elseif ($page === 'historial_preguntas') {
-    app_require_role('estrategico');
+    app_require_role(['estrategico', 'administrador']);
 } elseif ($page === 'ventas' || $page === 'ventasgeneral2') {
     app_require_role(app_roles_ventas_general());
 }
