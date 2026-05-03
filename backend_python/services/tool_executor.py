@@ -1,0 +1,724 @@
+import json
+import re
+from datetime import date, timedelta
+from urllib.parse import urlencode
+
+MAX_LIMIT = 100
+DEFAULT_LIMIT = 50
+
+
+def _parse_date(val, key='fecha', required=True):
+    if val is None or val == '':
+        if required:
+            raise ValueError(f'Falta parámetro de fecha: {key}')
+        return None
+    s = str(val).strip()
+    try:
+        d = date.fromisoformat(s)
+        if d.strftime('%Y-%m-%d') != s:
+            raise ValueError()
+    except Exception:
+        raise ValueError(f'Fecha inválida (use YYYY-MM-DD): {key}')
+    return s
+
+
+def _parse_date_range(args, from_key='fecha_desde', to_key='fecha_hasta'):
+    d1 = _parse_date(args.get(from_key), from_key)
+    d2 = _parse_date(args.get(to_key), to_key)
+    if d1 > d2:
+        raise ValueError(f'{from_key} no puede ser mayor que {to_key}')
+    return d1, d2
+
+
+def _int_arg(v, default, min_val, max_val):
+    if v is None or v == '':
+        return default
+    try:
+        n = int(v)
+    except (ValueError, TypeError):
+        return default
+    return max(min_val, min(max_val, n))
+
+
+def _clamp_limit(n, default=DEFAULT_LIMIT):
+    if n is None:
+        return default
+    return max(1, min(MAX_LIMIT, int(n)))
+
+
+def _dimension(v):
+    d = str(v or 'precio').lower().strip()
+    if d not in ('precio', 'comercial'):
+        raise ValueError('dimension debe ser precio o comercial')
+    return d
+
+
+def _col_etiqueta(dimension):
+    if dimension == 'precio':
+        return "COALESCE(NULLIF(TRIM(DescripcionZonaPrecio),''),'(sin zona precio)')"
+    if dimension == 'comercial':
+        return "COALESCE(NULLIF(TRIM(ZonaComercial),''),'(sin zona comercial)')"
+    if dimension == 'ruta':
+        return "COALESCE(NULLIF(TRIM(RutaComercial),''),'(sin ruta)')"
+    if dimension == 'corporativo':
+        return "COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'(sin corporativo)')"
+    raise ValueError('dimension inválida')
+
+
+def _qs(params):
+    return urlencode({k: v for k, v in params.items() if v is not None and v != ''})
+
+
+def _q(conn, sql, params):
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        return cur.fetchall()
+
+
+def _q1(conn, sql, params):
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        return cur.fetchone()
+
+
+def _scalar(conn, sql, params):
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        row = cur.fetchone()
+        if row is None:
+            return None
+        return list(row.values())[0]
+
+
+def sql_interpolate(sql, params):
+    out = sql
+    for k, v in sorted(params.items(), key=lambda x: -len(str(x[0]))):
+        ph = k if k.startswith('%s') else k
+        literal = _literal(v)
+        out = out.replace(k, literal, 1)
+    return out
+
+
+def _literal(v):
+    if v is None:
+        return 'NULL'
+    if isinstance(v, bool):
+        return '1' if v else '0'
+    if isinstance(v, (int, float)):
+        return str(v)
+    s = str(v).replace('\\', '\\\\').replace("'", "\\'")
+    return f"'{s}'"
+
+
+class SqlInterpolator:
+    def __init__(self):
+        self._traces = []
+
+    def record(self, sql, params):
+        interp = sql
+        for k, v in sorted(params.items(), key=lambda x: -len(str(x[0]))):
+            interp = interp.replace(k, _literal(v))
+        self._traces.append(interp)
+
+    def pull(self):
+        t = self._traces[:]
+        self._traces.clear()
+        return t
+
+
+class ToolExecutor:
+    def __init__(self, conn):
+        self._conn = conn
+        self._sql_traces = []
+
+    def pull_sql_traces(self):
+        t = self._sql_traces[:]
+        self._sql_traces.clear()
+        return t
+
+    def execute(self, name, args):
+        try:
+            dispatch = {
+                'ventasgeneral_resumen': self._resumen,
+                'ventasgeneral_buscar': self._buscar,
+                'ventasgeneral_pareto_nc_zonaprecio': self._pareto_nc,
+                'ventasgeneral_top_clientes_zona_precio': self._top_clientes_zona,
+                'ventasgeneral_barras_ventas_dimension': self._barras_dimension,
+                'ventasgeneral_comparativo_periodos': self._comparativo,
+                'ventasgeneral_top_productos': self._top_productos,
+                'ventasgeneral_top_clientes_globales': self._top_clientes_global,
+                'ventasgeneral_top_clientes_nota_credito': self._top_clientes_nc,
+                'ventasgeneral_mix_tdoc': self._mix_tdoc,
+                'ventasgeneral_barras_ruta_comercial': self._barras_ruta,
+                'ventasgeneral_barras_corporativo': self._barras_corporativo,
+                'ventasgeneral_serie_mensual_valor': self._serie_mensual,
+                'ventasgeneral_proyeccion_ventas': self._proyeccion,
+            }
+            fn = dispatch.get(name)
+            if fn is None:
+                result = {'error': f'Función no reconocida: {name}'}
+            else:
+                result = fn(args)
+        except Exception as e:
+            result = {'error': str(e)}
+
+        traces = result.pop('_sql_traces', [])
+        for t in (traces or []):
+            if isinstance(t, dict) and 'sql' in t and 'params' in t:
+                interp = t['sql']
+                for k, v in sorted(t['params'].items(), key=lambda x: -len(str(x[0]))):
+                    interp = interp.replace(k, _literal(v))
+                self._sql_traces.append(interp)
+            elif isinstance(t, str):
+                self._sql_traces.append(t)
+
+        return json.dumps(result, ensure_ascii=False, default=str)
+
+    def _resumen(self, args):
+        d1, d2 = _parse_date_range(args)
+        sql = ('SELECT COUNT(*) AS filas, COALESCE(SUM(Valor),0) AS suma_valor,'
+               ' COALESCE(SUM(Cantidad),0) AS suma_cantidad, COALESCE(SUM(Peso),0) AS suma_peso'
+               ' FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s')
+        params = {'d1': d1, 'd2': d2}
+
+        zona = str(args.get('zona_comercial') or '').strip()
+        if zona:
+            sql += ' AND ZonaComercial LIKE %(zona)s'
+            params['zona'] = f'%{zona}%'
+        cod = str(args.get('cod_cliente') or '').strip()
+        if cod:
+            sql += ' AND CodigoCliente = %(cod)s'
+            params['cod'] = cod
+        pref_z = str(args.get('prefijo_descri_zona_precio') or '').strip().upper()
+        if pref_z:
+            sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(prefzp)s"
+            params['prefzp'] = pref_z + '%'
+        prov = str(args.get('provincia') or '').strip()
+        if prov:
+            sql += ' AND Provincia LIKE %(prov)s'
+            params['prov'] = f'%{prov}%'
+        tdoc = str(args.get('tipo_documento') or '').strip()
+        if tdoc:
+            sql += ' AND TipoDocumento LIKE %(tdoc)s'
+            params['tdoc'] = f'%{tdoc}%'
+
+        row = _q1(self._conn, sql, params) or {}
+        q = {'fecha_desde': d1, 'fecha_hasta': d2}
+        if zona:
+            q['zona_comercial'] = zona
+        if cod:
+            q['cod_cliente'] = cod
+        if pref_z:
+            q['prefijo_descri_zona_precio'] = pref_z
+        if prov:
+            q['provincia'] = prov
+        if tdoc:
+            q['tipo_documento'] = tdoc
+
+        return {
+            'tabla': 'ventasgeneral',
+            'periodo': {'desde': d1, 'hasta': d2},
+            'agregados': {k: (float(v) if v is not None else 0) if k != 'filas' else int(v or 0) for k, v in row.items()},
+            'reporte_url': 'ventasgeneral_resumen_tabla.php?' + _qs(q),
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _buscar(self, args):
+        limit_v = args.get('limit')
+        offset_v = args.get('offset')
+        limit = _clamp_limit(int(limit_v) if limit_v is not None and str(limit_v) != '' else None)
+        offset = max(0, int(offset_v) if offset_v is not None and str(offset_v) != '' else 0)
+
+        sql = ('SELECT id, FechaContable, CodigoCoorporativo, NombreCoorporativo, CodigoCliente,'
+               ' NombreCliente, CodigoDocumento, TipoDocumento, SerieDocumento, NumeroDocumento,'
+               ' NumeroFactura, CodigoItem, GlosaDetalle, Cantidad, Peso, Valor,'
+               ' ZonaComercial, DescripcionZonaPrecio, RutaComercial, Provincia, LineaComercial'
+               ' FROM ventasgeneral2 WHERE 1=1')
+        params = {}
+
+        fd = _parse_date(args.get('fecha_desde'), 'fecha_desde', required=False)
+        fh = _parse_date(args.get('fecha_hasta'), 'fecha_hasta', required=False)
+        if fd and fh:
+            if fd > fh:
+                raise ValueError('fecha_desde no puede ser mayor que fecha_hasta')
+            sql += ' AND FechaContable BETWEEN %(fd)s AND %(fh)s'
+            params['fd'] = fd
+            params['fh'] = fh
+        elif fd:
+            sql += ' AND FechaContable >= %(fd)s'
+            params['fd'] = fd
+        elif fh:
+            sql += ' AND FechaContable <= %(fh)s'
+            params['fh'] = fh
+
+        nom = str(args.get('nombre_cliente') or '').strip()
+        if nom:
+            sql += ' AND NombreCliente LIKE %(nom)s'
+            params['nom'] = f'%{nom}%'
+        ndoc = str(args.get('numero_doc') or '').strip()
+        if ndoc:
+            sql += ' AND NumeroFactura LIKE %(ndoc)s'
+            params['ndoc'] = f'%{ndoc}%'
+        item = str(args.get('cod_item') or '').strip()
+        if item:
+            sql += ' AND CodigoItem = %(item)s'
+            params['item'] = item
+        tdoc = str(args.get('tdoc') or '').strip()
+        if tdoc:
+            if len(tdoc) > 4:
+                raise ValueError('tdoc demasiado largo')
+            sql += ' AND CodigoDocumento = %(tdoc)s'
+            params['tdoc'] = tdoc
+        pref_z = str(args.get('prefijo_descri_zona_precio') or '').strip().upper()
+        if pref_z:
+            sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(prefzp)s"
+            params['prefzp'] = pref_z + '%'
+        prov = str(args.get('provincia') or '').strip()
+        if prov:
+            sql += ' AND Provincia LIKE %(prov)s'
+            params['prov'] = f'%{prov}%'
+        tdoctipo = str(args.get('tipo_documento') or '').strip()
+        if tdoctipo:
+            sql += ' AND TipoDocumento LIKE %(tdoctipo)s'
+            params['tdoctipo'] = f'%{tdoctipo}%'
+
+        sql += f' ORDER BY FechaContable DESC, id DESC LIMIT {limit} OFFSET {offset}'
+        rows = _q(self._conn, sql, params)
+
+        tab_args = {k: str(v) for k, v in {
+            'fecha_desde': fd, 'fecha_hasta': fh, 'nombre_cliente': nom,
+            'numero_doc': ndoc, 'cod_item': item, 'tdoc': tdoc,
+            'prefijo_descri_zona_precio': pref_z, 'provincia': prov,
+            'tipo_documento': tdoctipo, 'limit': limit, 'offset': offset,
+        }.items() if v is not None and str(v) != ''}
+
+        return {
+            'tabla': 'ventasgeneral',
+            'count_devuelto': len(rows),
+            'limit': limit,
+            'offset': offset,
+            'filas': [dict(r) for r in rows],
+            'reporte_url': 'ventasgeneral_buscar_tabla.php?' + _qs(tab_args),
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _pareto_nc(self, args):
+        d1, d2 = _parse_date_range(args)
+        max_z = _int_arg(args.get('max_zonas'), 100, 1, 200)
+        sql = ("SELECT COALESCE(NULLIF(TRIM(DescripcionZonaPrecio),''),'(sin zona)') AS zona,"
+               " COUNT(*) AS lineas_nc,"
+               " COALESCE(SUM(ABS(Valor)),0) AS impacto_abs_valor"
+               " FROM ventasgeneral2"
+               " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s AND CodigoDocumento = '07'"
+               " GROUP BY COALESCE(NULLIF(TRIM(DescripcionZonaPrecio),''),'(sin zona)')"
+               f" ORDER BY impacto_abs_valor DESC LIMIT {max_z}")
+        params = {'d1': d1, 'd2': d2}
+        raw = _q(self._conn, sql, params)
+        total = sum(float(r.get('impacto_abs_valor') or 0) for r in raw)
+        cum = 0.0
+        filas = []
+        hasta80 = 0
+        for i, r in enumerate(raw):
+            imp = float(r.get('impacto_abs_valor') or 0)
+            pct = (imp / total * 100) if total else 0.0
+            cum += pct
+            filas.append({
+                'zona': str(r.get('zona') or ''),
+                'lineas_nc': int(r.get('lineas_nc') or 0),
+                'impacto_abs_valor': imp,
+                'pct_del_total': round(pct, 2),
+                'pct_acumulado': round(cum, 2),
+            })
+            if hasta80 == 0 and cum >= 80.0:
+                hasta80 = i + 1
+        if hasta80 == 0 and filas:
+            hasta80 = len(filas)
+        q = _qs({'desde': d1, 'hasta': d2, 'max': max_z})
+        return {
+            'tabla': 'ventasgeneral',
+            'criterio_nc': "TDoc = '07' (notas de crédito en ETL ventasgeneral)",
+            'agrupacion': 'DescripcionZonaPrecio',
+            'periodo': {'desde': d1, 'hasta': d2},
+            'total_impacto_nc_valor_abs': total,
+            'filas_pareto': filas,
+            'zonas_hasta_80pct_aprox': hasta80,
+            'reporte_url': 'pareto_nc_zona.php?' + q,
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _top_clientes_zona(self, args):
+        d1, d2 = _parse_date_range(args)
+        pref = str(args.get('prefijo_descri_zona_precio') or '').strip().upper()
+        if not pref:
+            raise ValueError('Falta prefijo_descri_zona_precio (ej. LAJOYA)')
+        top = _int_arg(args.get('top_n'), 10, 1, 100)
+        like = pref + '%'
+
+        sql_total = ("SELECT COALESCE(SUM(Valor), 0) AS total_valor FROM ventasgeneral2"
+                     " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+                     " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio, ''))) LIKE %(pref)s")
+        p_total = {'d1': d1, 'd2': d2, 'pref': like}
+        total_row = _q1(self._conn, sql_total, p_total) or {}
+        total_zona = float(total_row.get('total_valor') or 0)
+
+        sql = ("SELECT CodigoCliente,"
+               " MAX(COALESCE(NULLIF(TRIM(NombreCliente), ''), '(sin nombre)')) AS nombre_cliente,"
+               " COALESCE(SUM(Valor), 0) AS suma_valor, COUNT(*) AS lineas_venta"
+               " FROM ventasgeneral2"
+               " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+               " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio, ''))) LIKE %(pref)s"
+               " GROUP BY CodigoCliente"
+               f" ORDER BY suma_valor DESC LIMIT {top}")
+        params = {'d1': d1, 'd2': d2, 'pref': like}
+        raw = _q(self._conn, sql, params)
+
+        cum = 0.0
+        filas = []
+        hasta80 = 0
+        for i, r in enumerate(raw):
+            sv = float(r.get('suma_valor') or 0)
+            pct = (sv / total_zona * 100) if total_zona else 0.0
+            cum += pct
+            filas.append({
+                'cod_cliente': str(r.get('CodigoCliente') or ''),
+                'nombre_cliente': str(r.get('nombre_cliente') or ''),
+                'suma_valor': sv,
+                'lineas_venta': int(r.get('lineas_venta') or 0),
+                'pct_del_total_zona': round(pct, 2),
+                'pct_acumulado': round(cum, 2),
+            })
+            if hasta80 == 0 and cum >= 80.0:
+                hasta80 = i + 1
+        if hasta80 == 0 and filas:
+            hasta80 = len(filas)
+
+        q = _qs({'desde': d1, 'hasta': d2, 'prefijo': pref, 'top': top})
+        return {
+            'tabla': 'ventasgeneral',
+            'criterio': 'SUM(Valor) por CodigoCliente; solo líneas con DescripcionZonaPrecio LIKE prefijo%',
+            'agrupacion': 'CodigoCliente (NombreCliente)',
+            'periodo': {'desde': d1, 'hasta': d2},
+            'prefijo_descri_zona_precio': pref,
+            'total_valor_zona': total_zona,
+            'filas_ranking': filas,
+            'clientes_hasta_80pct_aprox': hasta80,
+            'reporte_url': 'pareto_clientes_zona.php?' + q,
+            '_sql_traces': [
+                {'sql': sql_total, 'params': p_total},
+                {'sql': sql, 'params': params},
+            ],
+        }
+
+    def _barras_dimension(self, args):
+        d1, d2 = _parse_date_range(args)
+        dim = _dimension(args.get('dimension', 'precio'))
+        top = _int_arg(args.get('top_n'), 20, 1, 100)
+        expr = _col_etiqueta(dim)
+        sql = (f"SELECT {expr} AS etiqueta, COUNT(*) AS lineas,"
+               " COALESCE(SUM(Valor),0) AS suma_valor,"
+               " COALESCE(SUM(Cantidad),0) AS suma_quantidade, COALESCE(SUM(Peso),0) AS suma_peso"
+               " FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+               f" GROUP BY {expr} ORDER BY suma_valor DESC LIMIT {top}")
+        params = {'d1': d1, 'd2': d2}
+        raw = _q(self._conn, sql, params)
+        total_row = _q1(self._conn,
+            'SELECT COALESCE(SUM(Valor),0) AS t FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s',
+            params)
+        total = float((total_row or {}).get('t') or 0)
+        filas = []
+        for r in raw:
+            sv = float(r.get('suma_valor') or 0)
+            filas.append({
+                'etiqueta': str(r.get('etiqueta') or ''),
+                'lineas': int(r.get('lineas') or 0),
+                'suma_valor': sv,
+                'suma_cantidad': float(r.get('suma_quantidade') or 0),
+                'suma_peso': float(r.get('suma_peso') or 0),
+                'pct_del_total': round(sv / total * 100, 2) if total else 0.0,
+            })
+        q = _qs({'desde': d1, 'hasta': d2, 'dim': dim, 'top': top})
+        return {
+            'tabla': 'ventasgeneral',
+            'tipo': f'barras_por_{dim}',
+            'periodo': {'desde': d1, 'hasta': d2},
+            'total_valor_periodo': total,
+            'filas': filas,
+            'reporte_url': 'ventas_barras_dimension.php?' + q,
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _comparativo(self, args):
+        a1, a2 = _parse_date_range(args, 'fecha_desde_a', 'fecha_hasta_a')
+        b1, b2 = _parse_date_range(args, 'fecha_desde_b', 'fecha_hasta_b')
+        dim = _dimension(args.get('dimension', 'precio'))
+        top = _int_arg(args.get('top_n'), 15, 1, 80)
+        expr = _col_etiqueta(dim)
+        sql = (f"SELECT etiqueta, SUM(va) AS valor_a, SUM(vb) AS valor_b FROM ("
+               f"  SELECT {expr} AS etiqueta, COALESCE(SUM(Valor),0) AS va, 0 AS vb"
+               f"  FROM ventasgeneral2 WHERE FechaContable BETWEEN %(a1)s AND %(a2)s GROUP BY {expr}"
+               f"  UNION ALL"
+               f"  SELECT {expr}, 0, COALESCE(SUM(Valor),0)"
+               f"  FROM ventasgeneral2 WHERE FechaContable BETWEEN %(b1)s AND %(b2)s GROUP BY {expr}"
+               f") u GROUP BY etiqueta HAVING ABS(SUM(va)) + ABS(SUM(vb)) > 0"
+               f" ORDER BY GREATEST(ABS(SUM(va)), ABS(SUM(vb))) DESC LIMIT {top}")
+        params = {'a1': a1, 'a2': a2, 'b1': b1, 'b2': b2}
+        raw = _q(self._conn, sql, params)
+        filas = []
+        for r in raw:
+            va = float(r.get('valor_a') or 0)
+            vb = float(r.get('valor_b') or 0)
+            filas.append({
+                'etiqueta': str(r.get('etiqueta') or ''),
+                'valor_periodo_a': va,
+                'valor_periodo_b': vb,
+                'delta': round(vb - va, 2),
+            })
+        q = _qs({'a_desde': a1, 'a_hasta': a2, 'b_desde': b1, 'b_hasta': b2, 'dim': dim, 'top': top})
+        return {
+            'tabla': 'ventasgeneral',
+            'tipo': 'comparativo_periodos',
+            'periodo_a': {'desde': a1, 'hasta': a2},
+            'periodo_b': {'desde': b1, 'hasta': b2},
+            'dimension': dim,
+            'filas': filas,
+            'reporte_url': 'ventas_comparativo.php?' + q,
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _top_productos(self, args):
+        d1, d2 = _parse_date_range(args)
+        top = _int_arg(args.get('top_n'), 15, 1, 100)
+        sql = ("SELECT CodigoItem AS cod_item,"
+               " MAX(COALESCE(NULLIF(TRIM(GlosaDetalle),''),'(sin glosa)')) AS glosa,"
+               " COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor,"
+               " COALESCE(SUM(Cantidad),0) AS suma_cantidad"
+               " FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+               f" GROUP BY CodigoItem ORDER BY suma_valor DESC LIMIT {top}")
+        params = {'d1': d1, 'd2': d2}
+        rows = _q(self._conn, sql, params)
+        q = _qs({'desde': d1, 'hasta': d2, 'top': top})
+        return {
+            'tabla': 'ventasgeneral',
+            'tipo': 'top_productos',
+            'periodo': {'desde': d1, 'hasta': d2},
+            'filas': [dict(r) for r in rows],
+            'reporte_url': 'ventas_top_productos.php?' + q,
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _top_clientes_global(self, args):
+        d1, d2 = _parse_date_range(args)
+        top = _int_arg(args.get('top_n'), 10, 1, 100)
+        sql = ("SELECT CodigoCliente AS cod_cliente,"
+               " MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
+               " COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor"
+               " FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+               f" GROUP BY CodigoCliente ORDER BY suma_valor DESC LIMIT {top}")
+        params = {'d1': d1, 'd2': d2}
+        raw = _q(self._conn, sql, params)
+        total_row = _q1(self._conn,
+            'SELECT COALESCE(SUM(Valor),0) AS t FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s',
+            params)
+        total = float((total_row or {}).get('t') or 0)
+        cum = 0.0
+        filas = []
+        for r in raw:
+            sv = float(r.get('suma_valor') or 0)
+            pct = sv / total * 100 if total else 0.0
+            cum += pct
+            filas.append({
+                'cod_cliente': str(r.get('cod_cliente') or ''),
+                'nombre_cliente': str(r.get('nombre_cliente') or ''),
+                'lineas': int(r.get('lineas') or 0),
+                'suma_valor': sv,
+                'pct_del_total': round(pct, 2),
+                'pct_acumulado': round(cum, 2),
+            })
+        q = _qs({'desde': d1, 'hasta': d2, 'top': top})
+        return {
+            'tabla': 'ventasgeneral',
+            'tipo': 'top_clientes_global',
+            'periodo': {'desde': d1, 'hasta': d2},
+            'total_valor': total,
+            'filas': filas,
+            'reporte_url': 'ventas_top_clientes_global.php?' + q,
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _top_clientes_nc(self, args):
+        d1, d2 = _parse_date_range(args)
+        top = _int_arg(args.get('top_n'), 10, 1, 100)
+        tdoc_cond = "COALESCE(NULLIF(TRIM(CodigoDocumento),''),'') = '07'"
+        sql = (f"SELECT CodigoCliente AS cod_cliente,"
+               f" MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
+               f" COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor"
+               f" FROM ventasgeneral2"
+               f" WHERE FechaContable BETWEEN %(d1)s AND %(d2)s AND {tdoc_cond}"
+               f" GROUP BY CodigoCliente ORDER BY lineas DESC, suma_valor ASC LIMIT {top}")
+        params = {'d1': d1, 'd2': d2}
+        raw = _q(self._conn, sql, params)
+        sql_tot = (f"SELECT COUNT(*) AS n, COALESCE(SUM(Valor),0) AS v"
+                   f" FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s AND {tdoc_cond}")
+        tot_row = _q1(self._conn, sql_tot, params) or {}
+        total_lineas = int(tot_row.get('n') or 0)
+        total_valor_nc = float(tot_row.get('v') or 0)
+        cum = 0.0
+        filas = []
+        for r in raw:
+            ln = int(r.get('lineas') or 0)
+            pct = ln / total_lineas * 100 if total_lineas else 0.0
+            cum += pct
+            filas.append({
+                'cod_cliente': str(r.get('cod_cliente') or ''),
+                'nombre_cliente': str(r.get('nombre_cliente') or ''),
+                'lineas': ln,
+                'suma_valor': float(r.get('suma_valor') or 0),
+                'pct_lineas_del_total': round(pct, 2),
+                'pct_lineas_acumulado': round(cum, 2),
+            })
+        q = _qs({'desde': d1, 'hasta': d2, 'top': top})
+        return {
+            'tabla': 'ventasgeneral',
+            'criterio': 'CodigoDocumento = 07; ranking por COUNT(*) por CodigoCliente (notas de crédito)',
+            'periodo': {'desde': d1, 'hasta': d2},
+            'total_lineas_nc': total_lineas,
+            'total_valor_nc': total_valor_nc,
+            'filas': filas,
+            'reporte_url': 'ventas_top_clientes_nc.php?' + q,
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _mix_tdoc(self, args):
+        d1, d2 = _parse_date_range(args)
+        sql = ("SELECT COALESCE(NULLIF(TRIM(CodigoDocumento),''),'(sin TDoc)') AS tdoc,"
+               " COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor"
+               " FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+               " GROUP BY COALESCE(NULLIF(TRIM(CodigoDocumento),''),'(sin TDoc)')"
+               " ORDER BY suma_valor DESC")
+        params = {'d1': d1, 'd2': d2}
+        rows = _q(self._conn, sql, params)
+        total = sum(float(r.get('suma_valor') or 0) for r in rows)
+        filas = []
+        for r in rows:
+            sv = float(r.get('suma_valor') or 0)
+            filas.append({
+                'tdoc': str(r.get('tdoc') or ''),
+                'lineas': int(r.get('lineas') or 0),
+                'suma_valor': sv,
+                'pct_del_total': round(sv / total * 100, 2) if total else 0.0,
+            })
+        q = _qs({'desde': d1, 'hasta': d2})
+        return {
+            'tabla': 'ventasgeneral',
+            'tipo': 'mix_tdoc',
+            'periodo': {'desde': d1, 'hasta': d2},
+            'total_valor': total,
+            'filas': filas,
+            'reporte_url': 'ventas_mix_tdoc.php?' + q,
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _barras_ruta(self, args):
+        d1, d2 = _parse_date_range(args)
+        top = _int_arg(args.get('top_n'), 15, 1, 100)
+        expr = _col_etiqueta('ruta')
+        sql = (f"SELECT {expr} AS ruta, COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor"
+               f" FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+               f" GROUP BY {expr} ORDER BY suma_valor DESC LIMIT {top}")
+        params = {'d1': d1, 'd2': d2}
+        rows = _q(self._conn, sql, params)
+        q = _qs({'desde': d1, 'hasta': d2, 'top': top})
+        return {
+            'tabla': 'ventasgeneral',
+            'tipo': 'barras_ruta',
+            'periodo': {'desde': d1, 'hasta': d2},
+            'filas': [dict(r) for r in rows],
+            'reporte_url': 'ventas_barras_ruta.php?' + q,
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _barras_corporativo(self, args):
+        d1, d2 = _parse_date_range(args)
+        top = _int_arg(args.get('top_n'), 15, 1, 100)
+        expr = _col_etiqueta('corporativo')
+        sql = (f"SELECT {expr} AS nombre_coorporativo,"
+               f" MAX(COALESCE(NULLIF(TRIM(CodigoCoorporativo),''),'')) AS cod_coorporativo,"
+               f" COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor"
+               f" FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+               f" GROUP BY {expr} ORDER BY suma_valor DESC LIMIT {top}")
+        params = {'d1': d1, 'd2': d2}
+        rows = _q(self._conn, sql, params)
+        q = _qs({'desde': d1, 'hasta': d2, 'top': top})
+        return {
+            'tabla': 'ventasgeneral',
+            'tipo': 'barras_corporativo',
+            'periodo': {'desde': d1, 'hasta': d2},
+            'filas': [dict(r) for r in rows],
+            'reporte_url': 'ventas_barras_corporativo.php?' + q,
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _serie_mensual(self, args):
+        d1, d2 = _parse_date_range(args)
+        sql = ("SELECT DATE_FORMAT(FechaContable, '%Y-%m') AS mes,"
+               " COALESCE(SUM(Valor),0) AS suma_valor, COUNT(*) AS lineas"
+               " FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+               " GROUP BY DATE_FORMAT(FechaContable, '%Y-%m') ORDER BY mes")
+        params = {'d1': d1, 'd2': d2}
+        rows = _q(self._conn, sql, params)
+        q = _qs({'desde': d1, 'hasta': d2})
+        return {
+            'tabla': 'ventasgeneral',
+            'tipo': 'serie_mensual_valor',
+            'periodo': {'desde': d1, 'hasta': d2},
+            'filas': [dict(r) for r in rows],
+            'reporte_url': 'ventas_serie_mensual.php?' + q,
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _proyeccion(self, args):
+        d1, d2 = _parse_date_range(args)
+        meses = _int_arg(args.get('meses_a_proyectar'), 3, 1, 12)
+        sql = ("SELECT DATE_FORMAT(FechaContable, '%Y-%m') AS mes, SUM(Valor) AS suma_valor"
+               " FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+               " GROUP BY DATE_FORMAT(FechaContable, '%Y-%m') ORDER BY mes")
+        params = {'d1': d1, 'd2': d2}
+        filas = _q(self._conn, sql, params)
+        if len(filas) < 2:
+            raise ValueError('Se necesitan al menos 2 meses de datos históricos para proyectar')
+
+        n = len(filas)
+        sum_x = sum_y = sum_xy = sum_xx = 0.0
+        for i, r in enumerate(filas):
+            x = float(i)
+            y = float(r.get('suma_valor') or 0)
+            sum_x += x
+            sum_y += y
+            sum_xy += x * y
+            sum_xx += x * x
+        m = (n * sum_xy - sum_x * sum_y) / (n * sum_xx - sum_x * sum_x)
+        b = (sum_y - m * sum_x) / n
+
+        last_mes = str(filas[-1]['mes'])
+        y_base, mo_base = int(last_mes[:4]), int(last_mes[5:7])
+        proyecciones = []
+        for i in range(1, meses + 1):
+            mo = mo_base + i
+            yr = y_base + (mo - 1) // 12
+            mo = ((mo - 1) % 12) + 1
+            proyecciones.append({
+                'mes': f'{yr:04d}-{mo:02d}',
+                'valor_proyectado': max(0.0, m * (n + i - 1) + b),
+            })
+
+        return {
+            'tabla': 'ventasgeneral',
+            'tipo': 'proyeccion_ventas',
+            'periodo_historico': {'desde': d1, 'hasta': d2},
+            'meses_historicos': n,
+            'pendiente_tendencia': m,
+            'intercepto': b,
+            'proyecciones': proyecciones,
+            'nota': 'Proyección basada en regresión lineal simple. No considera estacionalidad ni factores externos.',
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }

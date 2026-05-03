@@ -2,19 +2,24 @@
 
 declare(strict_types=1);
 
+use OpenAI\Exceptions\ErrorException;
+
 final class GroqClient
 {
-    private const URL = 'https://api.groq.com/openai/v1/chat/completions';
     private const MAX_ITERATIONS = 10;
-    /** Reduce tokens en vueltas con herramientas (evita 413 TPM en modelos pequeños). */
-    /** Límite del JSON de herramienta hacia Groq; si es bajo, el modelo puede “inventar” nombres al no ver filas completas. */
     private const MAX_TOOL_JSON_BYTES = 14000;
     private const MAX_429_RETRIES = 5;
+
+    private \OpenAI\Client $client;
 
     public function __construct(
         private string $apiKey,
         private string $model = 'llama-3.1-8b-instant'
     ) {
+        $this->client = \OpenAI::factory()
+            ->withApiKey($apiKey)
+            ->withBaseUri('api.groq.com/openai/v1')
+            ->make();
     }
 
     /**
@@ -30,43 +35,49 @@ final class GroqClient
 
         while ($iteration < self::MAX_ITERATIONS) {
             $iteration++;
-            // Tras la 1ª respuesta, el mensaje ya incluye tool_calls + tool results: no reenviar el esquema de tools (ahorra miles de tokens).
-            $data = $this->requestCompletion($working, $iteration === 1 ? $tools : []);
-            $choice = $data['choices'][0] ?? null;
+            $response = $this->requestCompletion($working, $iteration === 1 ? $tools : []);
+
+            $choice = $response->choices[0] ?? null;
             if ($choice === null) {
                 return ['reply' => 'Respuesta vacía del modelo.', 'messages' => $working];
             }
 
-            $msg = $choice['message'] ?? [];
+            $message = $choice->message;
+            $toolCalls = $message->toolCalls ?? [];
+
             $assistantPayload = [
-                'role' => 'assistant',
-                'content' => $msg['content'] ?? null,
+                'role'    => 'assistant',
+                'content' => $message->content,
             ];
-            if (!empty($msg['tool_calls'])) {
-                $assistantPayload['tool_calls'] = $msg['tool_calls'];
+            if (!empty($toolCalls)) {
+                $assistantPayload['tool_calls'] = array_map(
+                    fn($tc) => [
+                        'id'       => $tc->id,
+                        'type'     => $tc->type,
+                        'function' => [
+                            'name'      => $tc->function->name,
+                            'arguments' => $tc->function->arguments,
+                        ],
+                    ],
+                    $toolCalls
+                );
             }
             $working[] = $assistantPayload;
 
-            $toolCalls = $msg['tool_calls'] ?? [];
-            if ($toolCalls === []) {
-                $text = is_string($msg['content'] ?? null) ? (string) $msg['content'] : '';
-                return ['reply' => $text, 'messages' => $working];
+            if (empty($toolCalls)) {
+                return ['reply' => (string) ($message->content ?? ''), 'messages' => $working];
             }
 
             foreach ($toolCalls as $tc) {
-                $id = $tc['id'] ?? '';
-                $fn = $tc['function'] ?? [];
-                $name = (string) ($fn['name'] ?? '');
-                $rawArgs = (string) ($fn['arguments'] ?? '{}');
-                $args = json_decode($rawArgs, true);
+                $args = json_decode($tc->function->arguments, true);
                 if (!is_array($args)) {
                     $args = [];
                 }
-                $toolJson = $this->clampToolJson($runTool($name, $args));
+                $toolJson = $this->clampToolJson($runTool($tc->function->name, $args));
                 $working[] = [
-                    'role' => 'tool',
-                    'tool_call_id' => $id,
-                    'content' => $toolJson,
+                    'role'         => 'tool',
+                    'tool_call_id' => $tc->id,
+                    'content'      => $toolJson,
                 ];
             }
         }
@@ -74,87 +85,55 @@ final class GroqClient
         return ['reply' => 'Se alcanzó el límite de iteraciones con herramientas.', 'messages' => $working];
     }
 
-    /**
-     * @param list<array<string, mixed>> $messages
-     * @param list<array<string, mixed>> $tools
-     * @return array<string, mixed>
-     */
-    private function requestCompletion(array $messages, array $tools): array
+    private function requestCompletion(array $messages, array $tools): \OpenAI\Responses\Chat\CreateResponse
     {
-        $payload = [
-            'model' => $this->model,
-            'messages' => $messages,
+        $params = [
+            'model'       => $this->model,
+            'messages'    => $messages,
             'temperature' => 0.2,
         ];
         if ($tools !== []) {
-            $payload['tools'] = $tools;
-            $payload['tool_choice'] = 'auto';
-        }
-
-        $body = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
-        if ($body === false) {
-            throw new RuntimeException('No se pudo codificar JSON para Groq.');
+            $params['tools']       = $tools;
+            $params['tool_choice'] = 'auto';
         }
 
         for ($attempt = 1; $attempt <= self::MAX_429_RETRIES; $attempt++) {
-            $ch = curl_init(self::URL);
-            if ($ch === false) {
-                throw new RuntimeException('curl_init falló');
-            }
-            curl_setopt_array($ch, [
-                CURLOPT_POST => true,
-                CURLOPT_HTTPHEADER => [
-                    'Content-Type: application/json',
-                    'Authorization: Bearer ' . $this->apiKey,
-                ],
-                CURLOPT_POSTFIELDS => $body,
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_CONNECTTIMEOUT => 30,
-                CURLOPT_TIMEOUT => 120,
-            ]);
-            $response = curl_exec($ch);
-            $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $err = curl_error($ch);
-            curl_close($ch);
+            try {
+                return $this->client->chat()->create($params);
+            } catch (ErrorException $e) {
+                $msg = $e->getMessage();
 
-            if ($response === false) {
-                throw new RuntimeException('Error cURL Groq: ' . $err);
-            }
-
-            $decoded = json_decode($response, true);
-            if (!is_array($decoded)) {
-                throw new RuntimeException('Respuesta Groq no JSON: ' . substr($response, 0, 500));
-            }
-
-            $errMsg = (string) ($decoded['error']['message'] ?? '');
-            if ($code === 429 && $this->isGroqDailyTokenLimit($errMsg)) {
-                throw new RuntimeException($this->groqFriendlyDailyLimitMessage($errMsg));
-            }
-
-            if ($code === 429 && $attempt < self::MAX_429_RETRIES) {
-                $sleepSec = $this->parseGroqRetrySeconds($errMsg);
-                if ($sleepSec < 1.0) {
-                    $sleepSec = min(8.0, 2.0 * $attempt);
+                if ($this->isGroqDailyTokenLimit($msg)) {
+                    throw new \RuntimeException($this->groqFriendlyDailyLimitMessage($msg));
                 }
-                usleep((int) round($sleepSec * 1_000_000));
-                continue;
-            }
 
-            if ($code >= 400) {
-                $msg = $decoded['error']['message'] ?? $response;
-                throw new RuntimeException($this->groqFriendlyHttpError($code, (string) $msg));
-            }
+                if ($this->isRateLimit($msg) && $attempt < self::MAX_429_RETRIES) {
+                    $sleepSec = $this->parseGroqRetrySeconds($msg);
+                    if ($sleepSec < 1.0) {
+                        $sleepSec = min(8.0, 2.0 * $attempt);
+                    }
+                    usleep((int) round($sleepSec * 1_000_000));
+                    continue;
+                }
 
-            return $decoded;
+                throw new \RuntimeException($this->groqFriendlyErrorMessage($msg));
+            }
         }
 
-        throw new RuntimeException('Groq: se agotaron los reintentos sin obtener una respuesta válida.');
+        throw new \RuntimeException('Groq: se agotaron los reintentos sin obtener una respuesta válida.');
     }
 
     private function isGroqDailyTokenLimit(string $message): bool
     {
         return stripos($message, 'tokens per day') !== false
             || stripos($message, 'TPD') !== false;
+    }
+
+    private function isRateLimit(string $message): bool
+    {
+        return stripos($message, 'rate_limit') !== false
+            || stripos($message, 'rate limit') !== false
+            || stripos($message, 'too many requests') !== false;
     }
 
     private function groqFriendlyDailyLimitMessage(string $raw): string
@@ -168,12 +147,12 @@ final class GroqClient
             . ' [Detalle] ' . $raw;
     }
 
-    private function groqFriendlyHttpError(int $code, string $raw): string
+    private function groqFriendlyErrorMessage(string $raw): string
     {
-        if ($code === 429) {
+        if ($this->isRateLimit($raw)) {
             return 'Groq devolvió límite de velocidad (429). Espera unos minutos o cambia de modelo en GROQ_MODEL. [Detalle] ' . $raw;
         }
-        return 'Groq HTTP ' . $code . ': ' . $raw;
+        return 'Groq error: ' . $raw;
     }
 
     private function parseGroqRetrySeconds(string $message): float
@@ -207,7 +186,7 @@ final class GroqClient
             $data[$key] = $all;
         }
         return json_encode([
-            'error' => 'respuesta_herramienta_muy_grande',
+            'error'   => 'respuesta_herramienta_muy_grande',
             'mensaje' => 'La consulta devolvió demasiados datos. Acote fechas o filtros.',
         ], JSON_UNESCAPED_UNICODE);
     }

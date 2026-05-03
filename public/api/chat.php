@@ -111,8 +111,26 @@ foreach ($messagesIn as $m) {
     if (!is_string($content)) {
         continue;
     }
+    // Eliminar bloque SQL que el servidor anexa al final de respuestas del asistente.
+    // Ese bloque es debug; no aporta contexto útil al LLM y desperdicia tokens.
+    if ($role === 'assistant' && $content !== '') {
+        $sqlMarkers = ["\n\nSELECT ", "\nSELECT ", "\n\nSentencia SQL", "\nSentencia SQL", "\n\n---\n"];
+        $cutAt = -1;
+        foreach ($sqlMarkers as $marker) {
+            $pos = strpos($content, $marker);
+            if ($pos !== false && ($cutAt < 0 || $pos < $cutAt)) {
+                $cutAt = $pos;
+            }
+        }
+        if ($cutAt > 20) {
+            $content = rtrim(substr($content, 0, $cutAt));
+        }
+    }
     if (strlen($content) > 4000) {
         $content = substr($content, 0, 4000);
+    }
+    if ($content === '') {
+        continue;
     }
     $sanitized[] = ['role' => $role, 'content' => $content];
 }

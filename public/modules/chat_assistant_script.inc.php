@@ -516,9 +516,13 @@ declare(strict_types=1);
             for (const m of (t.messages || [])) {
                 // No enviar al LLM respuestas hallucinated (Cliente 1/2/3…),
                 // pero sí mostrarlas en pantalla para que el usuario vea qué pasó.
+                // Además, limpiar bloques SQL del historial guardado para no desperdiciar tokens.
                 const isStale = m.role === 'assistant' && hasGenericClienteLabels(m.content || '');
                 if (!isStale) {
-                    history.push({ role: m.role, content: m.content });
+                    const content = m.role === 'assistant'
+                        ? (splitAssistantAnswerAndSql(m.content || '').head || m.content)
+                        : m.content;
+                    history.push({ role: m.role, content: content });
                 }
                 append(m.role, m.content);
             }
@@ -1393,9 +1397,11 @@ declare(strict_types=1);
             }
 
             // Solo guardar en history si no es una respuesta hallucinated (Cliente 1/2/3…).
-            // De esta forma no contamina el contexto de la siguiente consulta.
+            // Guardar solo el texto (sin el bloque SQL de debug) para no desperdiciar tokens
+            // ni confundir al LLM en la siguiente consulta.
             if (!hasGenericClienteLabels(reply)) {
-                history.push({ role: 'assistant', content: reply });
+                const cleanContent = splitAssistantAnswerAndSql(reply).head || reply;
+                history.push({ role: 'assistant', content: cleanContent });
             }
             saveHistory();
             if (!trimHistory()) {

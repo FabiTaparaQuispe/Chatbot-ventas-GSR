@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 define('APP_ROOT', dirname(__DIR__));
 
+require_once APP_ROOT . '/vendor/autoload.php';
+
 if (!function_exists('ventas_load_env')) {
     function ventas_load_env(string $path): void
     {
