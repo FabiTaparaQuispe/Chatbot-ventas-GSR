@@ -585,6 +585,10 @@
         const b2 = toYmd(new Date(y, 1, 0));
         const c1 = toYmd(new Date(y, 1, 1));
         const c2 = toYmd(new Date(y, 2, 0));
+        // Proyección: usa últimos 6 meses completos como historial (mínimo 2 meses requeridos).
+        const now = new Date();
+        const projDesde = toYmd(new Date(now.getFullYear(), now.getMonth() - 7, 1));
+        const projHasta = toYmd(new Date(now.getFullYear(), now.getMonth(), 0));
         return [
             { label: 'Totales del período', text: 'Del ' + desde + ' al ' + hasta + ', ¿cuáles son los totales de ventas (líneas de detalle, importe total en soles, unidades y peso)?' },
             { label: 'Top clientes (importe)', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el top 10 de clientes a nivel global por importe total facturado (soles).' },
@@ -597,7 +601,7 @@
             { label: 'Barras por ruta comercial', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el top 10 de rutas comerciales por importe total (soles).' },
             { label: 'Barras por corporativo', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el top 10 de corporativos por importe total (soles).' },
             { label: 'Comparar 2 meses', text: 'Compará el importe total (soles) por zona de precio (DescripcionZonaPrecio): período A del ' + b1 + ' al ' + b2 + ' vs período B del ' + c1 + ' al ' + c2 + ' (top 10).' },
-            { label: 'Proyección próximos 3 meses', text: 'Del ' + desde + ' al ' + hasta + ', proyectá las ventas para los próximos 3 meses basándote en la tendencia histórica.' },
+            { label: 'Proyección próximos 3 meses', text: 'Del ' + projDesde + ' al ' + projHasta + ', proyectá las ventas para los próximos 3 meses basándote en la tendencia histórica.' },
             { label: 'Totales en provincia AREQUIPA', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el resumen de ventas (líneas, importe en soles, unidades) filtrando solo la provincia de AREQUIPA.' },
             { label: 'Totales en provincia TACNA', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el resumen de ventas (líneas, importe en soles, unidades) filtrando solo la provincia de TACNA.' },
             { label: 'Solo Boletas de Venta', text: 'Del ' + desde + ' al ' + hasta + ', muéstrame el resumen de ventas considerando solo las Boletas de Venta.' },

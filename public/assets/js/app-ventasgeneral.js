@@ -121,6 +121,56 @@
     var table;
     var ventasSearchTimer = null;
     var iconosBound = false;
+    var kpiXhr = null;
+
+    function fmtNum(n) {
+        if (n === null || n === undefined) return '—';
+        return Number(n).toLocaleString('es-PE');
+    }
+
+    function fmtMoney(n) {
+        if (n === null || n === undefined) return '—';
+        var v = Number(n);
+        if (v >= 1000000) return (v / 1000000).toLocaleString('es-PE', { maximumFractionDigits: 2 }) + ' M';
+        if (v >= 1000) return (v / 1000).toLocaleString('es-PE', { maximumFractionDigits: 1 }) + ' K';
+        return v.toLocaleString('es-PE', { maximumFractionDigits: 2 });
+    }
+
+    function setKpiSkeleton(on) {
+        if (on) {
+            $('#kpiLineas, #kpiImporte, #kpiClientes, #kpiZonas').addClass('kpi-skeleton');
+        } else {
+            $('#kpiLineas, #kpiImporte, #kpiClientes, #kpiZonas').removeClass('kpi-skeleton');
+        }
+    }
+
+    function loadKPI() {
+        if (!$('#kpiCards').length) return;
+        if (kpiXhr) { try { kpiXhr.abort(); } catch (e) {} }
+        setKpiSkeleton(true);
+        var f = currentFiltros();
+        kpiXhr = $.ajax({
+            url: '/api/ventas_kpi',
+            type: 'GET',
+            dataType: 'json',
+            data: f,
+            success: function (d) {
+                kpiXhr = null;
+                setKpiSkeleton(false);
+                if (d && d.ok) {
+                    $('#kpiLineasVal').text(fmtNum(d.filas));
+                    $('#kpiImporteVal').text(fmtMoney(d.suma_valor));
+                    $('#kpiClientesVal').text(fmtNum(d.clientes));
+                    $('#kpiZonasVal').text(fmtNum(d.zonas));
+                }
+            },
+            error: function () {
+                kpiXhr = null;
+                setKpiSkeleton(false);
+                $('#kpiLineasVal, #kpiImporteVal, #kpiClientesVal, #kpiZonasVal').text('—');
+            },
+        });
+    }
 
     function currentFiltros() {
         var dr = resolvedDateFilter();
