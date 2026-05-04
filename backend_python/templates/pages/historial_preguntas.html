@@ -5,16 +5,7 @@
 .hp-head { padding: 1.25rem 1.5rem .5rem; }
 .hp-head h1 { font-size: 1.35rem; font-weight: 800; margin: 0 0 .2rem; }
 .hp-head p  { margin: 0; color: var(--muted, #6b7280); font-size: .875rem; }
-.hp-kpi-row { display: flex; gap: .75rem; flex-wrap: wrap; padding: 0 1.5rem 1rem; }
-.hp-kpi {
-    flex: 1; min-width: 130px;
-    background: var(--card-bg, #f8fafc);
-    border: 1px solid var(--border, #e2e8f0);
-    border-radius: .75rem; padding: .85rem 1rem;
-}
-[data-theme="dark"] .hp-kpi { background: var(--card-bg, #1e293b); border-color: var(--border, #334155); }
-.hp-kpi-val { font-size: 1.7rem; font-weight: 800; line-height: 1; }
-.hp-kpi-lbl { font-size: .75rem; color: var(--muted, #6b7280); margin-top: .2rem; }
+.hp-kpi-row { padding: 0 0 1rem; }
 .hp-freq-card {
     margin: 0 1.5rem 1.25rem;
     background: var(--card-bg, #f8fafc);
@@ -94,22 +85,34 @@
     {% if db_error %}
         <div class="hp-alert" role="alert">{{ db_error|e }}</div>
     {% else %}
-    <div class="hp-kpi-row">
-        <div class="hp-kpi">
-            <div class="hp-kpi-val">{{ total_preguntas }}</div>
-            <div class="hp-kpi-lbl">Preguntas totales</div>
+    <div class="hp-kpi-row dash-kpi-grid">
+        <div class="kpi-card blue">
+            <div class="kpi-icon blue"><i class="fas fa-comments" aria-hidden="true"></i></div>
+            <div class="kpi-body">
+                <div class="kpi-label">Preguntas totales</div>
+                <div class="kpi-value">{{ total_preguntas }}</div>
+            </div>
         </div>
-        <div class="hp-kpi">
-            <div class="hp-kpi-val">{{ total_usuarios }}</div>
-            <div class="hp-kpi-lbl">Usuarios activos</div>
+        <div class="kpi-card violet">
+            <div class="kpi-icon violet"><i class="fas fa-users" aria-hidden="true"></i></div>
+            <div class="kpi-body">
+                <div class="kpi-label">Usuarios activos</div>
+                <div class="kpi-value">{{ total_usuarios }}</div>
+            </div>
         </div>
-        <div class="hp-kpi">
-            <div class="hp-kpi-val">{% if total_preguntas > 0 and total_usuarios > 0 %}{{ '%.1f'|format(total_preguntas / total_usuarios) }}{% else %}—{% endif %}</div>
-            <div class="hp-kpi-lbl">Preguntas / usuario</div>
+        <div class="kpi-card emerald">
+            <div class="kpi-icon emerald"><i class="fas fa-chart-line" aria-hidden="true"></i></div>
+            <div class="kpi-body">
+                <div class="kpi-label">Preguntas / usuario</div>
+                <div class="kpi-value">{% if total_preguntas > 0 and total_usuarios > 0 %}{{ '%.1f'|format(total_preguntas / total_usuarios) }}{% else %}—{% endif %}</div>
+            </div>
         </div>
-        <div class="hp-kpi">
-            <div class="hp-kpi-val">{{ top_categoria|e }}</div>
-            <div class="hp-kpi-lbl">Categoría más frecuente</div>
+        <div class="kpi-card amber">
+            <div class="kpi-icon amber"><i class="fas fa-star" aria-hidden="true"></i></div>
+            <div class="kpi-body">
+                <div class="kpi-label">Categoría más frecuente</div>
+                <div class="kpi-value" style="font-size:1.05rem;line-height:1.3;">{{ top_categoria|e }}</div>
+            </div>
         </div>
     </div>
     {% if total_preguntas > 0 %}

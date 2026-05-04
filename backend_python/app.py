@@ -26,6 +26,8 @@ from routes.api.chat import bp as chat_bp
 from routes.api.chat_threads import bp as chat_threads_bp
 from routes.api.ventas_dt import bp as ventas_dt_bp
 from routes.api.chat_script import bp as chat_script_bp
+from routes.api.stats import bp as stats_bp
+from routes.api.ventas_kpi import bp as ventas_kpi_bp
 from routes.reports_modules import bp as reports_modules_bp
 
 app.register_blueprint(auth_bp)
@@ -34,6 +36,8 @@ app.register_blueprint(chat_bp)
 app.register_blueprint(chat_threads_bp)
 app.register_blueprint(ventas_dt_bp)
 app.register_blueprint(chat_script_bp)
+app.register_blueprint(stats_bp)
+app.register_blueprint(ventas_kpi_bp)
 app.register_blueprint(reports_modules_bp)
 
 

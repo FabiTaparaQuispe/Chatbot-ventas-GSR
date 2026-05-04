@@ -28,7 +28,6 @@ REPORT_PLACEHOLDER_SLUGS = frozenset(
         'ventas-comparativo',
         'ventas-top-productos',
         'ventas-top-clientes-global',
-        'ventas-top-clientes-nc',
         'ventas-mix-tdoc',
         'ventas-barras-ruta',
         'ventas-barras-corporativo',
@@ -326,6 +325,103 @@ def ventasgeneral_buscar_tabla():
         }
     )
     return render_template('pages/reporte_buscar_tabla.html', **ctx)
+
+
+@bp.route('/modules/reports/ventas-top-clientes-nc')
+@require_login
+def ventas_top_clientes_nc():
+    from services.db import get_connection
+
+    d1 = _parse_date_string(request.args.get('desde') or request.args.get('fecha_desde'))
+    d2 = _parse_date_string(request.args.get('hasta') or request.args.get('fecha_hasta'))
+    if not d1 or not d2 or d1 > d2:
+        return _bad('Parámetros requeridos: desde y hasta (YYYY-MM-DD).')
+
+    try:
+        top = max(1, min(50, int(request.args.get('top') or 10)))
+    except (TypeError, ValueError):
+        top = 10
+
+    tdoc_cond = "COALESCE(NULLIF(TRIM(CodigoDocumento),''),'') = '07'"
+    sql = (f"SELECT CodigoCliente AS cod_cliente,"
+           f" MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
+           f" COUNT(*) AS lineas,"
+           f" COALESCE(SUM(Valor),0) AS suma_valor,"
+           f" COALESCE(SUM(Peso),0) AS suma_peso"
+           f" FROM ventasgeneral2"
+           f" WHERE FechaContable BETWEEN :d1 AND :d2 AND {tdoc_cond}"
+           f" GROUP BY CodigoCliente ORDER BY lineas DESC, suma_valor ASC LIMIT {top}")
+    sql_tot = (f"SELECT COUNT(*) AS n,"
+               f" COALESCE(SUM(Valor),0) AS v,"
+               f" COALESCE(SUM(Peso),0) AS p"
+               f" FROM ventasgeneral2"
+               f" WHERE FechaContable BETWEEN :d1 AND :d2 AND {tdoc_cond}")
+    bind = {'d1': d1, 'd2': d2}
+
+    conn = get_connection()
+    sql_exec = _colon_params_to_pymysql(sql)
+    sql_tot_exec = _colon_params_to_pymysql(sql_tot)
+    with conn.cursor() as cur:
+        cur.execute(sql_exec, bind)
+        raw = cur.fetchall() or []
+    with conn.cursor() as cur:
+        cur.execute(sql_tot_exec, bind)
+        tot = cur.fetchone() or {}
+
+    total_lineas = int(tot.get('n') or 0)
+    total_valor = float(tot.get('v') or 0)
+    total_peso = float(tot.get('p') or 0)
+
+    cum = 0.0
+    filas = []
+    chart_labels: list = []
+    chart_lineas: list = []
+    chart_valores: list = []
+    chart_pesos: list = []
+    chart_pct_acum: list = []
+    for i, r in enumerate(raw, 1):
+        ln = int(r.get('lineas') or 0)
+        pct = ln / total_lineas * 100 if total_lineas else 0.0
+        cum += pct
+        sv = float(r.get('suma_valor') or 0)
+        sp = float(r.get('suma_peso') or 0)
+        nombre = str(r.get('nombre_cliente') or '')
+        chart_labels.append(nombre[:28])
+        chart_lineas.append(ln)
+        chart_valores.append(round(abs(sv), 2))
+        chart_pesos.append(round(abs(sp), 2))
+        chart_pct_acum.append(round(cum, 1))
+        filas.append({
+            'rank': i,
+            'cod_cliente': str(r.get('cod_cliente') or ''),
+            'nombre_cliente': nombre,
+            'lineas': ln,
+            'suma_valor': f'{sv:,.2f}',
+            'suma_peso': f'{sp:,.2f}',
+            'pct_lineas': f'{pct:.1f}',
+            'pct_acumulado': f'{cum:.1f}',
+        })
+
+    pdf_filename = f'top_clientes_nc_{d1}_{d2}.pdf'
+    ctx = _report_shell_context('Top clientes · Notas de crédito')
+    ctx.update({
+        'd1': d1,
+        'd2': d2,
+        'top': top,
+        'filas': filas,
+        'total_lineas': total_lineas,
+        'total_valor': f'{total_valor:,.2f}',
+        'total_peso': f'{total_peso:,.2f}',
+        'pdf_filename': pdf_filename,
+        'chart_data': {
+            'labels': chart_labels,
+            'lineas': chart_lineas,
+            'valores': chart_valores,
+            'pesos': chart_pesos,
+            'pct_acum': chart_pct_acum,
+        },
+    })
+    return render_template('pages/reporte_top_clientes_nc.html', **ctx)
 
 
 @bp.route('/modules/reports/<slug>')

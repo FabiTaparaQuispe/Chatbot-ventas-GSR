@@ -573,17 +573,19 @@ class ToolExecutor:
         tdoc_cond = "COALESCE(NULLIF(TRIM(CodigoDocumento),''),'') = '07'"
         sql = (f"SELECT CodigoCliente AS cod_cliente,"
                f" MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
-               f" COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor"
+               f" COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor,"
+               f" COALESCE(SUM(Peso),0) AS suma_peso"
                f" FROM ventasgeneral2"
                f" WHERE FechaContable BETWEEN %(d1)s AND %(d2)s AND {tdoc_cond}"
                f" GROUP BY CodigoCliente ORDER BY lineas DESC, suma_valor ASC LIMIT {top}")
         params = {'d1': d1, 'd2': d2}
         raw = _q(self._conn, sql, params)
-        sql_tot = (f"SELECT COUNT(*) AS n, COALESCE(SUM(Valor),0) AS v"
+        sql_tot = (f"SELECT COUNT(*) AS n, COALESCE(SUM(Valor),0) AS v, COALESCE(SUM(Peso),0) AS p"
                    f" FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s AND {tdoc_cond}")
         tot_row = _q1(self._conn, sql_tot, params) or {}
         total_lineas = int(tot_row.get('n') or 0)
         total_valor_nc = float(tot_row.get('v') or 0)
+        total_peso_nc = float(tot_row.get('p') or 0)
         cum = 0.0
         filas = []
         for r in raw:
@@ -595,6 +597,7 @@ class ToolExecutor:
                 'nombre_cliente': str(r.get('nombre_cliente') or ''),
                 'lineas': ln,
                 'suma_valor': float(r.get('suma_valor') or 0),
+                'suma_peso': float(r.get('suma_peso') or 0),
                 'pct_lineas_del_total': round(pct, 2),
                 'pct_lineas_acumulado': round(cum, 2),
             })
@@ -605,6 +608,7 @@ class ToolExecutor:
             'periodo': {'desde': d1, 'hasta': d2},
             'total_lineas_nc': total_lineas,
             'total_valor_nc': total_valor_nc,
+            'total_peso_nc': total_peso_nc,
             'filas': filas,
             'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_TOP_CLIENTES_NC, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
