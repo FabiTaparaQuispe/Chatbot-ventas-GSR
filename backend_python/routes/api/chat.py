@@ -47,8 +47,8 @@ Mapeo herramientas:
 - líneas sueltas → ventasgeneral_buscar
 - totales → ventasgeneral_resumen
 
-URL RELATIVA OBLIGATORIA: escribe ÚNICAMENTE la ruta absoluta del sitio empezando por / (ej: /modules/ventasgeneral/resumen-tabla?fecha_desde=2026-01-01&fecha_hasta=2026-03-31). JAMÁS pongas https://, http://, example.com, localhost ni ningún dominio — si lo haces, el enlace quedará roto.
-Un reporte_url por respuesta, copiado tal cual en UNA sola línea (no partas fechas YYYY-MM-DD ni la URL; sin backticks). Resumen/buscar: /modules/ventasgeneral/resumen-tabla o …/buscar-tabla. Otros informes: /modules/reports/<slug>?… Opcional #grafico.
+URL RELATIVA OBLIGATORIA: escribe ÚNICAMENTE la ruta que empieza por /modules/ (ej: /modules/ventasgeneral/resumen-tabla?fecha_desde=2026-01-01&fecha_hasta=2026-03-31). JAMÁS uses https://, http://, example.com, localhost ni ningún dominio — el enlace quedaría roto. JAMÁS agregues fragmentos #grafico ni #nada.
+Un solo reporte_url por respuesta, en UNA línea sin backticks, sin partir la URL. Resumen/buscar: /modules/ventasgeneral/resumen-tabla o …/buscar-tabla. Otros: /modules/reports/<slug>?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&…
 
 Moneda: importes en soles peruanos con prefijo S/ (ej. S/ 1,234,567.89). No uses $ ni USD.
 Lenguaje: evita jerga de BD (no "Valor", "SUM(Valor)", "Cantidad" como etiqueta técnica). Usá "importe", "monto en soles", "unidades", "cantidad vendida", "peso total".

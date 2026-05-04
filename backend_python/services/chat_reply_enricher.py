@@ -40,8 +40,44 @@ def _fmt_num(v, decimals=2) -> str:
     return s
 
 
+_FAKE_DOMAIN_RE = re.compile(
+    r'https?://(?:example\.com|localhost(?::\d+)?|127\.0\.0\.1(?::\d+)?)(?::\d+)?(/[^\s<>"\']*)',
+    re.IGNORECASE,
+)
+_HASH_FRAGMENT_RE = re.compile(r'(/modules/[^\s<>"\']+?)#\w+', re.IGNORECASE)
+
+
+def _sanitize_urls(text: str) -> str:
+    """Strip fake domains (example.com/localhost) and URL fragments from /modules/ paths."""
+    text = _FAKE_DOMAIN_RE.sub(r'\1', text)
+    text = _HASH_FRAGMENT_RE.sub(r'\1', text)
+    return text
+
+
+def _dedup_module_url(text: str) -> str:
+    """Remove a duplicate /modules/... URL line when the same URL already appears in the text."""
+    lines = text.splitlines()
+    seen_urls: set = set()
+    out = []
+    for line in lines:
+        stripped = line.strip()
+        is_url_line = bool(re.match(r'^/modules/\S+\?\S', stripped))
+        if is_url_line:
+            key = stripped.split('#')[0]
+            if key in seen_urls:
+                continue
+            seen_urls.add(key)
+        else:
+            m = re.search(r'/modules/\S+\?\S+', stripped)
+            if m:
+                key = m.group(0).split('#')[0]
+                seen_urls.add(key)
+        out.append(line)
+    return '\n'.join(out)
+
+
 def enrich_reply(reply: str, groq_messages: list) -> str:
-    reply = reply.strip()
+    reply = _sanitize_urls(reply.strip())
     payload = _last_tool_payload(groq_messages)
     if payload is None:
         if _uses_generic_labels(reply):
@@ -62,8 +98,8 @@ def enrich_reply(reply: str, groq_messages: list) -> str:
     if _looks_like_ranking(reply):
         url = str(payload.get('reporte_url') or '').strip()
         if url and not _extract_reporte_url(reply):
-            return (reply + '\n\n' + url).strip()
-        return reply
+            reply = (reply + '\n\n' + url).strip()
+        return _dedup_module_url(reply)
 
     head = summary[:120]
     if head and reply and summary[:60].lower() in reply.lower():
