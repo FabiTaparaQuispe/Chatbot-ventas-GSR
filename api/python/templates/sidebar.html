@@ -1,0 +1,71 @@
+<aside class="app-sidebar-col" id="appSidebarCol">
+    <div class="app-sidebar-card app-sidebar-card--ix2" id="appSidebarCard">
+        <div class="app-sidebar-scroll" id="appSidebarScroll">
+            <div class="app-sidebar-upper">
+                <div class="app-sidebar-top">
+                    <div class="app-sidebar-top-row">
+                        <span class="app-sidebar-brand">
+                            <span class="app-brand-icon" aria-hidden="true">🤖</span>
+                            <span class="app-brand-text">Chatbot</span>
+                        </span>
+                        <div class="app-sidebar-actions">
+                            <div class="app-sidebar-theme-pin">
+                                <button type="button" id="appBtnTheme" class="app-theme-switch" onclick="appToggleTheme()" aria-label="Cambiar tema claro u oscuro" title="Tema">
+                                    <span class="app-theme-thumb">
+                                        <i class="fas fa-sun app-theme-sun" aria-hidden="true"></i>
+                                        <i class="fas fa-moon app-theme-moon hidden" aria-hidden="true"></i>
+                                    </span>
+                                </button>
+                                <button type="button" id="appBtnSidebarPin" class="app-icon-btn app-sidebar-pin-btn app-sidebar-action-hit" onclick="appToggleSidebarPin()" aria-pressed="false" aria-label="Fijar menú expandido" title="Fijar menú lateral">
+                                    <i class="fas fa-lock-open app-sidebar-pin-icon" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                            <details class="app-user-wrap">
+                                <summary class="app-icon-btn app-sidebar-action-hit" aria-label="Usuario">
+                                    <i class="fas fa-user" aria-hidden="true"></i>
+                                </summary>
+                                <div class="app-user-menu">
+                                    <div class="app-user-menu-header">{{ usuario|e }}</div>
+                                    <a href="/logout.php" class="app-user-out">Salir</a>
+                                </div>
+                            </details>
+                        </div>
+                    </div>
+                </div>
+                <nav class="app-sidebar-nav" aria-label="Principal">
+                    {% if role in roles_ventas_general %}
+                    <a href="/index.php?page=ventas" class="app-nav-link{% if current_page == 'ventas' %} app-nav-link-active{% endif %}">
+                        <i class="fas fa-table" aria-hidden="true"></i>
+                        <span>Ventas general</span>
+                    </a>
+                    {% endif %}
+                    <a href="/index.php?page=chatbot" class="app-nav-link{% if current_page == 'chatbot' %} app-nav-link-active{% endif %}">
+                        <i class="fas fa-comments" aria-hidden="true"></i>
+                        <span>Chatbot</span>
+                    </a>
+                    {% if role == 'admin' %}
+                    <a href="/index.php?page=usuarios" class="app-nav-link{% if current_page == 'usuarios' %} app-nav-link-active{% endif %}">
+                        <i class="fas fa-users" aria-hidden="true"></i>
+                        <span>Usuarios</span>
+                    </a>
+                    {% endif %}
+                    {% if role == 'administrador' %}
+                    <a href="/index.php?page=gestion_usuarios" class="app-nav-link{% if current_page == 'gestion_usuarios' %} app-nav-link-active{% endif %}">
+                        <i class="fas fa-user-cog" aria-hidden="true"></i>
+                        <span>Creación de usuarios</span>
+                    </a>
+                    {% endif %}
+                </nav>
+                {% if role in ['estrategico', 'administrador'] %}
+                <p class="app-sidebar-section-label" role="presentation">Registro</p>
+                <nav class="app-sidebar-nav app-sidebar-nav--sub" aria-label="Registro de consultas al chatbot">
+                    <a href="/index.php?page=historial_preguntas" class="app-nav-link{% if current_page == 'historial_preguntas' %} app-nav-link-active{% endif %}">
+                        <i class="fas fa-list-ul" aria-hidden="true"></i>
+                        <span>Preguntas al chatbot</span>
+                    </a>
+                </nav>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</aside>

@@ -1,21 +1,12 @@
-from flask import Blueprint, render_template, request, session, redirect, url_for
-from werkzeug.security import check_password_hash
+from flask import Blueprint, render_template, request, session, redirect
+
 from services.db import get_connection
+from services.passwords import verify_password
+from services.roles import normalize_user_role
 
 bp = Blueprint('auth', __name__)
 
 VALID_ROLES = {'admin', 'administrador', 'gerencia', 'estrategico', 'tactico', 'operativo', 'analista', 'lector'}
-
-
-def normalize_role(r: str) -> str:
-    r = r.lower().strip()
-    if r == 'gerente':
-        return 'gerencia'
-    if r in ('estratégico',):
-        return 'estrategico'
-    if r in ('táctico', 'usuario2'):
-        return 'tactico'
-    return r
 
 
 @bp.route('/login', methods=['GET', 'POST'])
@@ -44,11 +35,11 @@ def login():
                 display_name = ''
                 if row and int(row.get('is_active') or 0) == 1:
                     h = str(row.get('password_hash') or '')
-                    if h and check_password_hash(h, c):
+                    if h and verify_password(c, h):
                         ok = True
                         with conn.cursor() as cur:
                             cur.execute('UPDATE app_users SET last_login_at = NOW() WHERE username = %s', (u,))
-                        role = normalize_role(str(row.get('role') or ''))
+                        role = normalize_user_role(str(row.get('role') or ''))
                         if not role:
                             role = 'lector'
                         display_name = str(row.get('display_name') or '').strip()

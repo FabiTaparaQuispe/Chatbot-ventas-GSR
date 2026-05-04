@@ -33,8 +33,8 @@ Si hay filas de ranking/top, escribe primero la lista numerada (1. nombre: N lí
 COMPARATIVO ESTRICTO: cuando el usuario pide comparar dos períodos (dos meses, A vs B, enero vs febrero, etc.) DEBES llamar UNA SOLA VEZ a ventasgeneral_comparativo_periodos con periodo_a_desde, periodo_a_hasta, periodo_b_desde, periodo_b_hasta. NUNCA llames ventasgeneral_barras_ventas_dimension dos veces ni calcules tú mismo la diferencia — el resultado sería inventado.
 
 Mapeo herramientas:
-- más NC por cliente → ventasgeneral_top_clientes_nota_credito (URL: ventas_top_clientes_nc.php?desde=&hasta=&top=)
-- pareto NC por zona → ventasgeneral_pareto_nc_zonaprecio (pareto_nc_zona.php, no por cliente)
+- más NC por cliente → ventasgeneral_top_clientes_nota_credito (URL: /modules/reports/ventas-top-clientes-nc?desde=&hasta=&top=)
+- pareto NC por zona → ventasgeneral_pareto_nc_zonaprecio (/modules/reports/pareto-nc-zona?…, no por cliente)
 - top compra global → ventasgeneral_top_clientes_globales
 - top por zona precio → ventasgeneral_top_clientes_zona_precio
 - barras dimensión → ventasgeneral_barras_ventas_dimension
@@ -47,8 +47,8 @@ Mapeo herramientas:
 - líneas sueltas → ventasgeneral_buscar
 - totales → ventasgeneral_resumen
 
-URL RELATIVA OBLIGATORIA: escribe ÚNICAMENTE el nombre del archivo y los parámetros (ej: ventasgeneral_resumen_tabla.php?desde=2026-01-01&hasta=2026-03-31). JAMÁS pongas https://, http://, example.com, localhost ni ningún dominio — si lo haces, el enlace quedará roto.
-Un reporte_url por respuesta, copiado tal cual en UNA sola línea (no partas fechas YYYY-MM-DD ni la URL; sin backticks). Resumen/buscar: *_tabla.php. Opcional #grafico.
+URL RELATIVA OBLIGATORIA: escribe ÚNICAMENTE la ruta absoluta del sitio empezando por / (ej: /modules/ventasgeneral/resumen-tabla?fecha_desde=2026-01-01&fecha_hasta=2026-03-31). JAMÁS pongas https://, http://, example.com, localhost ni ningún dominio — si lo haces, el enlace quedará roto.
+Un reporte_url por respuesta, copiado tal cual en UNA sola línea (no partas fechas YYYY-MM-DD ni la URL; sin backticks). Resumen/buscar: /modules/ventasgeneral/resumen-tabla o …/buscar-tabla. Otros informes: /modules/reports/<slug>?… Opcional #grafico.
 
 Moneda: importes en soles peruanos con prefijo S/ (ej. S/ 1,234,567.89). No uses $ ni USD.
 Lenguaje: evita jerga de BD (no "Valor", "SUM(Valor)", "Cantidad" como etiqueta técnica). Usá "importe", "monto en soles", "unidades", "cantidad vendida", "peso total".
@@ -56,16 +56,23 @@ Español, breve."""
 
 
 def _unify_pareto_links(reply: str) -> str:
-    if not reply or not re.search(r'pareto_(?:clientes|nc)_zona\.php\?', reply, re.IGNORECASE):
+    if not reply or not re.search(
+        r'pareto_(?:clientes|nc)_zona\.php\?|/modules/reports/pareto-(?:nc-zona|clientes-zona)\?',
+        reply,
+        re.IGNORECASE,
+    ):
         return reply
     reply = re.sub(
         r'\s*(?:Y la tabla[^\n]*\n)?\s*pareto_(?:clientes|nc)_zona_tabla\.php\?[^\s<>"\']+',
-        '', reply, flags=re.IGNORECASE | re.UNICODE
+        '',
+        reply,
+        flags=re.IGNORECASE | re.UNICODE,
     )
     reply = re.sub(r'\n{3,}', '\n\n', reply)
     return reply.strip()
 
 
+@bp.route('/api/chat', methods=['POST'])
 @bp.route('/api/chat.php', methods=['POST'])
 def chat():
     data = request.get_json(silent=True)

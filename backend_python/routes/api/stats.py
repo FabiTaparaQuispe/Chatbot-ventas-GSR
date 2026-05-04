@@ -15,6 +15,7 @@ def _parse_ymd(s):
         return None
 
 
+@bp.route('/api/stats')
 @bp.route('/api/stats.php')
 def stats():
     type_ = request.args.get('type', '')

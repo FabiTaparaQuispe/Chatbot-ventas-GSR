@@ -1,0 +1,30 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+    <h1>Resultados · ventasgeneral</h1>
+    <p class="page-lead">{{ total_filas }} fila(s) · límite de consulta {{ limit }}{% if offset %} · offset {{ offset }}{% endif %}.</p>
+</div>
+
+<div class="card-filtros-demo reporte-informe-panel">
+    <div class="table-wrapper overflow-x-auto productos-dt-skin">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    {% for h in headers %}
+                    <th>{{ h }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in filas %}
+                <tr>
+                    {% for h in headers %}
+                    <td>{{ d.get(h) if d.get(h) is not none else '' }}</td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

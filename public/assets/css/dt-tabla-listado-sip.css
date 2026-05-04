@@ -199,12 +199,14 @@ html[data-theme="dark"] .dataTables_wrapper .dataTables_paginate .paginate_butto
     color: var(--text, #e4e4e7) !important;
 }
 
-/* Ventas: toggle Lista/Iconos con el mismo azul del header de tabla */
-#tablaVentasWrapper .view-toggle-group {
+/* Ventas / gestión usuarios: toggle Lista/Iconos (mismo azul que header de tabla) */
+#tablaVentasWrapper .view-toggle-group,
+#tablaUsuariosWrapper .view-toggle-group {
     margin-bottom: 0;
     align-items: center;
 }
-#tablaVentasWrapper .view-toggle-btn {
+#tablaVentasWrapper .view-toggle-btn,
+#tablaUsuariosWrapper .view-toggle-btn {
     min-height: 2.25rem;
     box-sizing: border-box;
     display: inline-flex;
@@ -220,43 +222,51 @@ html[data-theme="dark"] .dataTables_wrapper .dataTables_paginate .paginate_butto
     cursor: pointer;
     transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
-#tablaVentasWrapper .view-toggle-btn i {
+#tablaVentasWrapper .view-toggle-btn i,
+#tablaUsuariosWrapper .view-toggle-btn i {
     font-size: 1.125rem;
     line-height: 1;
     margin-right: 0.4rem;
 }
-#tablaVentasWrapper .view-toggle-btn:hover:not(.active) {
+#tablaVentasWrapper .view-toggle-btn:hover:not(.active),
+#tablaUsuariosWrapper .view-toggle-btn:hover:not(.active) {
     background: #f3f4f6;
     color: #111827;
 }
-#tablaVentasWrapper .view-toggle-btn.active {
+#tablaVentasWrapper .view-toggle-btn.active,
+#tablaUsuariosWrapper .view-toggle-btn.active {
     background: #2563eb !important;
     color: #fff !important;
     border-color: #2563eb !important;
     background-image: none !important;
 }
-#tablaVentasWrapper .view-toggle-btn.active:hover {
+#tablaVentasWrapper .view-toggle-btn.active:hover,
+#tablaUsuariosWrapper .view-toggle-btn.active:hover {
     background: #1d4ed8 !important;
     border-color: #1d4ed8 !important;
     color: #fff !important;
 }
 
-html[data-theme="dark"] #tablaVentasWrapper .view-toggle-btn {
+html[data-theme="dark"] #tablaVentasWrapper .view-toggle-btn,
+html[data-theme="dark"] #tablaUsuariosWrapper .view-toggle-btn {
     background: var(--surface, #18181b) !important;
     border-color: var(--border, #3f3f46) !important;
     color: var(--text, #f4f4f5) !important;
     background-image: none !important;
 }
-html[data-theme="dark"] #tablaVentasWrapper .view-toggle-btn:hover:not(.active) {
+html[data-theme="dark"] #tablaVentasWrapper .view-toggle-btn:hover:not(.active),
+html[data-theme="dark"] #tablaUsuariosWrapper .view-toggle-btn:hover:not(.active) {
     background: var(--surface-2, #27272a) !important;
     color: var(--text, #f4f4f5) !important;
 }
-html[data-theme="dark"] #tablaVentasWrapper .view-toggle-btn.active {
+html[data-theme="dark"] #tablaVentasWrapper .view-toggle-btn.active,
+html[data-theme="dark"] #tablaUsuariosWrapper .view-toggle-btn.active {
     background: #2563eb !important;
     color: #fff !important;
     border-color: #2563eb !important;
 }
-html[data-theme="dark"] #tablaVentasWrapper .view-toggle-btn.active:hover {
+html[data-theme="dark"] #tablaVentasWrapper .view-toggle-btn.active:hover,
+html[data-theme="dark"] #tablaUsuariosWrapper .view-toggle-btn.active:hover {
     background: #1d4ed8 !important;
     border-color: #1d4ed8 !important;
     color: #fff !important;

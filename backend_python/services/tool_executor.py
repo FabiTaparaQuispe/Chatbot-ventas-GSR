@@ -3,6 +3,23 @@ import re
 from datetime import date, timedelta
 from urllib.parse import urlencode
 
+from services.urlmap import (
+    REPORT_SLUG_PARETO_CLIENTES_ZONA,
+    REPORT_SLUG_PARETO_NC_ZONA,
+    REPORT_SLUG_VENTAS_BARRAS_CORPORATIVO,
+    REPORT_SLUG_VENTAS_BARRAS_DIMENSION,
+    REPORT_SLUG_VENTAS_BARRAS_RUTA,
+    REPORT_SLUG_VENTAS_COMPARATIVO,
+    REPORT_SLUG_VENTAS_MIX_TDOC,
+    REPORT_SLUG_VENTAS_SERIE_MENSUAL,
+    REPORT_SLUG_VENTAS_TOP_CLIENTES_GLOBAL,
+    REPORT_SLUG_VENTAS_TOP_CLIENTES_NC,
+    REPORT_SLUG_VENTAS_TOP_PRODUCTOS,
+    REPORT_VENTASGENERAL_BUSCAR_TABLA,
+    REPORT_VENTASGENERAL_RESUMEN_TABLA,
+    report_slug_url,
+)
+
 MAX_LIMIT = 100
 DEFAULT_LIMIT = 50
 
@@ -67,6 +84,11 @@ def _col_etiqueta(dimension):
 
 def _qs(params):
     return urlencode({k: v for k, v in params.items() if v is not None and v != ''})
+
+
+def _report_canonical(path: str, params: dict) -> str:
+    q = _qs(params)
+    return path + ('?' + q if q else '')
 
 
 def _q(conn, sql, params):
@@ -219,7 +241,7 @@ class ToolExecutor:
             'tabla': 'ventasgeneral',
             'periodo': {'desde': d1, 'hasta': d2},
             'agregados': {k: (float(v) if v is not None else 0) if k != 'filas' else int(v or 0) for k, v in row.items()},
-            'reporte_url': 'ventasgeneral_resumen_tabla.php?' + _qs(q),
+            'reporte_url': _report_canonical(REPORT_VENTASGENERAL_RESUMEN_TABLA, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
@@ -298,7 +320,7 @@ class ToolExecutor:
             'limit': limit,
             'offset': offset,
             'filas': [dict(r) for r in rows],
-            'reporte_url': 'ventasgeneral_buscar_tabla.php?' + _qs(tab_args),
+            'reporte_url': _report_canonical(REPORT_VENTASGENERAL_BUSCAR_TABLA, tab_args),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
@@ -342,7 +364,7 @@ class ToolExecutor:
             'total_impacto_nc_valor_abs': total,
             'filas_pareto': filas,
             'zonas_hasta_80pct_aprox': hasta80,
-            'reporte_url': 'pareto_nc_zona.php?' + q,
+            'reporte_url': report_slug_url(REPORT_SLUG_PARETO_NC_ZONA, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
@@ -402,7 +424,7 @@ class ToolExecutor:
             'total_valor_zona': total_zona,
             'filas_ranking': filas,
             'clientes_hasta_80pct_aprox': hasta80,
-            'reporte_url': 'pareto_clientes_zona.php?' + q,
+            'reporte_url': report_slug_url(REPORT_SLUG_PARETO_CLIENTES_ZONA, q),
             '_sql_traces': [
                 {'sql': sql_total, 'params': p_total},
                 {'sql': sql, 'params': params},
@@ -443,7 +465,7 @@ class ToolExecutor:
             'periodo': {'desde': d1, 'hasta': d2},
             'total_valor_periodo': total,
             'filas': filas,
-            'reporte_url': 'ventas_barras_dimension.php?' + q,
+            'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_BARRAS_DIMENSION, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
@@ -481,7 +503,7 @@ class ToolExecutor:
             'periodo_b': {'desde': b1, 'hasta': b2},
             'dimension': dim,
             'filas': filas,
-            'reporte_url': 'ventas_comparativo.php?' + q,
+            'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_COMPARATIVO, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
@@ -502,7 +524,7 @@ class ToolExecutor:
             'tipo': 'top_productos',
             'periodo': {'desde': d1, 'hasta': d2},
             'filas': [dict(r) for r in rows],
-            'reporte_url': 'ventas_top_productos.php?' + q,
+            'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_TOP_PRODUCTOS, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
@@ -541,7 +563,7 @@ class ToolExecutor:
             'periodo': {'desde': d1, 'hasta': d2},
             'total_valor': total,
             'filas': filas,
-            'reporte_url': 'ventas_top_clientes_global.php?' + q,
+            'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_TOP_CLIENTES_GLOBAL, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
@@ -584,7 +606,7 @@ class ToolExecutor:
             'total_lineas_nc': total_lineas,
             'total_valor_nc': total_valor_nc,
             'filas': filas,
-            'reporte_url': 'ventas_top_clientes_nc.php?' + q,
+            'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_TOP_CLIENTES_NC, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
@@ -614,7 +636,7 @@ class ToolExecutor:
             'periodo': {'desde': d1, 'hasta': d2},
             'total_valor': total,
             'filas': filas,
-            'reporte_url': 'ventas_mix_tdoc.php?' + q,
+            'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_MIX_TDOC, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
@@ -633,7 +655,7 @@ class ToolExecutor:
             'tipo': 'barras_ruta',
             'periodo': {'desde': d1, 'hasta': d2},
             'filas': [dict(r) for r in rows],
-            'reporte_url': 'ventas_barras_ruta.php?' + q,
+            'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_BARRAS_RUTA, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
@@ -654,7 +676,7 @@ class ToolExecutor:
             'tipo': 'barras_corporativo',
             'periodo': {'desde': d1, 'hasta': d2},
             'filas': [dict(r) for r in rows],
-            'reporte_url': 'ventas_barras_corporativo.php?' + q,
+            'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_BARRAS_CORPORATIVO, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
@@ -672,7 +694,7 @@ class ToolExecutor:
             'tipo': 'serie_mensual_valor',
             'periodo': {'desde': d1, 'hasta': d2},
             'filas': [dict(r) for r in rows],
-            'reporte_url': 'ventas_serie_mensual.php?' + q,
+            'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_SERIE_MENSUAL, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 

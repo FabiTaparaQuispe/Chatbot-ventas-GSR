@@ -6,3 +6,50 @@ Press CTRL+C to quit
  * Restarting with stat
  * Debugger is active!
  * Debugger PIN: 125-146-517
+127.0.0.1 - - [03/May/2026 16:24:27] "GET /login HTTP/1.1" 200 -
+127.0.0.1 - - [03/May/2026 16:24:37] "GET /login HTTP/1.1" 200 -
+127.0.0.1 - - [03/May/2026 16:24:45] "POST /api/chat.php HTTP/1.1" 200 -
+127.0.0.1 - - [03/May/2026 16:24:56] "POST /api/chat.php HTTP/1.1" 200 -
+127.0.0.1 - - [03/May/2026 16:25:03] "GET / HTTP/1.1" 302 -
+127.0.0.1 - - [03/May/2026 16:25:11] "GET /api/ventasgeneral_dt.php?draw=1&start=0&length=5 HTTP/1.1" 200 -
+127.0.0.1 - - [03/May/2026 16:25:22] "GET /modules/chat_assistant_script.php?u=testuser HTTP/1.1" 200 -
+127.0.0.1 - - [03/May/2026 17:34:04] "GET / HTTP/1.1" 302 -
+127.0.0.1 - - [03/May/2026 17:34:04] "GET /login HTTP/1.1" 200 -
+127.0.0.1 - - [03/May/2026 17:34:04] "GET /assets/js/theme.js HTTP/1.1" 200 -
+127.0.0.1 - - [03/May/2026 17:34:04] "GET /assets/css/app.css HTTP/1.1" 200 -
+127.0.0.1 - - [03/May/2026 17:34:15] "GET / HTTP/1.1" 302 -
+127.0.0.1 - - [03/May/2026 17:34:15] "GET /login HTTP/1.1" 200 -
+127.0.0.1 - - [03/May/2026 17:34:15] "GET /assets/css/app.css HTTP/1.1" 304 -
+127.0.0.1 - - [03/May/2026 17:34:15] "GET /assets/js/theme.js HTTP/1.1" 304 -
+127.0.0.1 - - [03/May/2026 17:34:23] "GET / HTTP/1.1" 302 -
+127.0.0.1 - - [03/May/2026 17:34:23] "GET /login HTTP/1.1" 200 -
+127.0.0.1 - - [03/May/2026 17:34:23] "GET /assets/css/app.css HTTP/1.1" 200 -
+127.0.0.1 - - [03/May/2026 17:34:23] "GET /assets/js/theme.js HTTP/1.1" 200 -
+127.0.0.1 - - [03/May/2026 17:34:26] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [03/May/2026 17:34:55] "POST /login HTTP/1.1" 200 -
+127.0.0.1 - - [03/May/2026 17:34:55] "GET /assets/css/app.css HTTP/1.1" 304 -
+127.0.0.1 - - [03/May/2026 17:34:55] "GET /assets/js/theme.js HTTP/1.1" 304 -
+127.0.0.1 - - [03/May/2026 17:35:32] "GET /assets/css/app.css HTTP/1.1" 304 -
+127.0.0.1 - - [03/May/2026 17:35:32] "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 -
+127.0.0.1 - - [03/May/2026 17:36:04] "POST /login HTTP/1.1" 200 -
+127.0.0.1 - - [03/May/2026 17:36:04] "GET /assets/css/app.css HTTP/1.1" 304 -
+127.0.0.1 - - [03/May/2026 17:36:04] "GET /assets/js/theme.js HTTP/1.1" 304 -
+127.0.0.1 - - [03/May/2026 17:36:04] "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 -
+127.0.0.1 - - [03/May/2026 17:36:48] "POST /login HTTP/1.1" 200 -
+127.0.0.1 - - [03/May/2026 17:36:48] "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 -
+127.0.0.1 - - [03/May/2026 17:36:48] "GET /assets/css/app.css HTTP/1.1" 304 -
+127.0.0.1 - - [03/May/2026 17:36:48] "GET /assets/js/theme.js HTTP/1.1" 304 -
+127.0.0.1 - - [03/May/2026 17:38:00] "GET /login HTTP/1.1" 200 -
+127.0.0.1 - - [03/May/2026 17:38:01] "GET /assets/css/app.css HTTP/1.1" 304 -
+127.0.0.1 - - [03/May/2026 17:38:01] "GET /assets/js/theme.js HTTP/1.1" 304 -
+127.0.0.1 - - [03/May/2026 17:38:01] "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 -
+ * Detected change in 'C:\\xampp\\htdocs\\chatbotVentasGeneral\\Chatbot-ventas-GSR\\backend_python\\routes\\auth.py', reloading
+ * Restarting with stat
+Traceback (most recent call last):
+  File "C:\xampp\htdocs\chatbotVentasGeneral\Chatbot-ventas-GSR\backend_python\app.py", line 36, in <module>
+    from routes.auth import bp as auth_bp
+  File "C:\xampp\htdocs\chatbotVentasGeneral\Chatbot-ventas-GSR\backend_python\routes\auth.py", line 4, in <module>
+    from services.passwords import verify_password
+  File "C:\xampp\htdocs\chatbotVentasGeneral\Chatbot-ventas-GSR\backend_python\services\passwords.py", line 5, in <module>
+    from passlib.context import CryptContext
+ModuleNotFoundError: No module named 'passlib'

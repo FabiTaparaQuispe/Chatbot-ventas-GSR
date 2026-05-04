@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="/">
+    <title>{{ page_title|e }} — {{ app_name|e }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400,500,600,700;1,9..40,400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    {% if load_ventas_assets %}
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+    <link rel="stylesheet" href="/assets/css/dashboard-vista-tabla-iconos.css">
+    <link rel="stylesheet" href="/assets/css/dt-tabla-listado-sip.css">
+    {% endif %}
+    <link rel="stylesheet" href="/assets/css/app.css">
+    <script>
+    (function () {
+        function readCookieTheme() {
+            try {
+                var m = document.cookie.match(/(?:^|; )ix2-theme=([^;]*)/);
+                return m ? decodeURIComponent(m[1]).toLowerCase().trim() : '';
+            } catch (e) { return ''; }
+        }
+        var mode = null;
+        try {
+            var qs = new URLSearchParams(window.location.search || '');
+            var q = (qs.get('ix2_theme') || '').toLowerCase();
+            if (q === 'dark' || q === 'light') mode = q;
+        } catch (e1) {}
+        if (mode == null) {
+            var ct = readCookieTheme();
+            if (ct === 'dark' || ct === 'light') mode = ct;
+        }
+        if (mode == null) {
+            try {
+                var st = localStorage.getItem('ix2-theme');
+                if (st === 'dark' || st === 'light') mode = st;
+            } catch (e2) {}
+        }
+        if (mode == null) {
+            mode = (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+        }
+        var d = document.documentElement;
+        d.setAttribute('data-theme', mode);
+        d.style.colorScheme = mode === 'dark' ? 'dark' : 'light';
+    })();
+    </script>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="{{ body_class|e }}">
+<button type="button" class="app-sidebar-backdrop" id="appSidebarBackdrop" aria-hidden="true" tabindex="-1" aria-label="Cerrar menú"></button>
+<div class="app-layout">
+    {% include "sidebar.html" %}
+    <div class="app-main">
+        <header class="app-mobile-bar">
+            <button type="button" class="app-icon-btn" id="appOpenSidebar" aria-label="Abrir menú">
+                <i class="fas fa-bars" aria-hidden="true"></i>
+            </button>
+            <span class="app-mobile-title">{{ page_title|e }}</span>
+        </header>
+        <main class="app-content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</div>
+{% if not skip_floating_chat %}
+{% set historial_url = '/index.php?page=historial_preguntas' %}
+{% include "partials/chat_floating.html" %}
+{% endif %}
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+{% if load_ventas_assets %}
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="/assets/js/pagination-iconos.js"></script>
+{% endif %}
+<script src="/assets/js/theme.js"></script>
+<script src="/assets/js/sidebar-pin.js"></script>
+{% if chat_script %}
+<script>
+window.__VENTAS_CHAT = {{ chat_config | tojson }};
+</script>
+<script src="/assets/js/chat_assistant.js"></script>
+{% endif %}
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

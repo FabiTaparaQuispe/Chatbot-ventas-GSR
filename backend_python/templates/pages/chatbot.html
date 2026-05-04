@@ -92,7 +92,7 @@
                     <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuPrefs" role="menuitem">Personalización…</button>
                     <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuClearLocal" role="menuitem">Borrar caché local (este navegador)…</button>
                     <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuPurgeAll" role="menuitem">Borrar todo el historial en servidor…</button>
-                    {% if role in ('estrategico', 'administrador') %}
+                    {% if role in ('admin', 'estrategico', 'administrador') %}
                     <a class="ventas-chat-menu-item ventas-chat-menu-link" role="menuitem" href="/?page=historial_preguntas">Preguntas guardadas</a>
                     {% endif %}
                 </div>
@@ -148,7 +148,4 @@
         </aside>
     </div>
 </div>
-
-<script>window.VENTAS_CHAT_FULL = true;</script>
-<script src="/modules/chat_assistant_script.php?u={{ ventas_chat_user_key | urlencode }}"></script>
 {% endblock %}

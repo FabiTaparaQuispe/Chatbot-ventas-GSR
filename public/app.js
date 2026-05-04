@@ -4,7 +4,7 @@ const msgEl = document.getElementById("msg");
 const sendBtn = document.getElementById("send");
 const chipsMount = document.getElementById("chips");
 
-const API_URL = new URL("api/chat.php", window.location.href).href;
+const API_URL = new URL("api/chat", window.location.href).href;
 
 const history = [];
 

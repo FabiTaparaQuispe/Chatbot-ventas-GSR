@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ventas Chatbot — Python</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f1f5f9; padding: 0.1rem 0.35rem; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Ventas Chatbot</h1>
+  <p>La aplicación documentada corre con <strong>Flask</strong> en la carpeta <code>backend_python/</code>.</p>
+  <ol>
+    <li>Configure un archivo <code>.env</code> en la raíz del repositorio (variables de BD, <code>GROQ_API_KEY</code>, <code>FLASK_SECRET</code>; puede usar <code>api/python/.env.example</code> como guía de nombres).</li>
+    <li>Instale dependencias: <code>cd backend_python</code> y <code>pip install -r requirements.txt</code>.</li>
+    <li>Arranque: <code>python -m flask --app app run --host 127.0.0.1 --port 5000</code>.</li>
+    <li>Abra <a href="http://127.0.0.1:5000/">http://127.0.0.1:5000/</a> o <a href="http://127.0.0.1:5000/login">http://127.0.0.1:5000/login</a> (también acepta <code>/login.php</code> por compatibilidad).</li>
+  </ol>
+  <p>En <code>api/python/</code> hay una variante FastAPI; el flujo principal del repo es el de Flask anterior.</p>
+</body>
+</html>

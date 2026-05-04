@@ -1245,6 +1245,193 @@ body.app-sidebar-open .app-sidebar-backdrop {
     background: var(--surface);
 }
 
+/* Informes bajo /modules/… servidos por Flask (mismo shell que el resto de la app) */
+.reporte-informe-panel {
+    padding: 1rem 1.25rem 1.25rem;
+}
+.reporte-informe-panel .reporte-informe-toolbar {
+    padding-bottom: 1rem;
+}
+.reporte-informe-panel .reporte-informe-title {
+    margin: 0 0 0.35rem;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text);
+}
+.reporte-informe-panel .reporte-informe-meta {
+    margin: 0 0 1rem;
+    font-size: 0.9rem;
+    color: var(--muted);
+    line-height: 1.45;
+}
+.reporte-informe-panel #reporte-pdf-root table.data-table tbody td {
+    padding: 0.65rem 0.85rem;
+}
+.page-head .page-lead {
+    margin: 0.35rem 0 0;
+    font-size: 0.95rem;
+    color: var(--muted);
+    max-width: 52rem;
+    line-height: 1.45;
+}
+
+/* Creación de usuarios (gestión): roles en pastilla, acciones alineadas */
+.gestion-crear-head-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.5rem;
+    background: rgba(124, 58, 237, 0.12);
+    color: #7c3aed;
+    font-size: 0.95rem;
+}
+html[data-theme="dark"] .gestion-crear-head-icon {
+    background: rgba(167, 139, 250, 0.15);
+    color: #c4b5fd;
+}
+.gestion-role-wrap {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    padding: 0.2rem 0.5rem 0.2rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+}
+.gestion-role-wrap select.gestion-role-select {
+    margin: 0;
+    max-width: 11rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    padding: 0.2rem 0.15rem;
+}
+.gestion-role-wrap select.gestion-role-select:disabled {
+    cursor: not-allowed;
+    opacity: 0.85;
+}
+.gestion-role-wrap--operativo {
+    background: #d1fae7;
+    border-color: #6ee7b7;
+    color: #065f46;
+}
+.gestion-role-wrap--tactico {
+    background: #ede9fe;
+    border-color: #c4b5fd;
+    color: #5b21b6;
+}
+.gestion-role-wrap--estrategico {
+    background: #cffafe;
+    border-color: #67e8f9;
+    color: #0e7490;
+}
+.gestion-role-wrap--administrador {
+    background: #ffedd5;
+    border-color: #fdba74;
+    color: #9a3412;
+}
+.gestion-role-wrap--default {
+    background: var(--surface-2, #f1f5f9);
+    border-color: var(--border, #e2e8f0);
+    color: var(--text, #0f172a);
+}
+html[data-theme="dark"] .gestion-role-wrap--operativo {
+    background: rgba(16, 185, 129, 0.18);
+    border-color: rgba(52, 211, 153, 0.45);
+    color: #a7f3d0;
+}
+html[data-theme="dark"] .gestion-role-wrap--tactico {
+    background: rgba(139, 92, 246, 0.2);
+    border-color: rgba(167, 139, 250, 0.45);
+    color: #ddd6fe;
+}
+html[data-theme="dark"] .gestion-role-wrap--estrategico {
+    background: rgba(6, 182, 212, 0.2);
+    border-color: rgba(34, 211, 238, 0.4);
+    color: #a5f3fc;
+}
+html[data-theme="dark"] .gestion-role-wrap--administrador {
+    background: rgba(251, 146, 60, 0.18);
+    border-color: rgba(251, 146, 60, 0.45);
+    color: #fed7aa;
+}
+html[data-theme="dark"] .gestion-role-wrap--default {
+    background: var(--surface-2, #27272a);
+    border-color: var(--border, #3f3f46);
+    color: var(--text, #f4f4f5);
+}
+.gestion-acciones-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.65rem;
+}
+.gestion-acciones-row .gestion-reset-inline {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+}
+.gestion-acciones-row input[type="password"] {
+    min-width: 8.5rem;
+    max-width: 11rem;
+    padding: 0.35rem 0.5rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--input-border, #cbd5e1);
+    background: var(--input-bg, #f8fafc);
+    font-size: 0.8125rem;
+}
+html[data-theme="dark"] .gestion-acciones-row input[type="password"] {
+    background: var(--input-bg);
+    border-color: var(--input-border);
+    color: var(--text);
+}
+.btn-gestion-key {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.btn-gestion-danger {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: #dc2626;
+    color: #fff !important;
+    border: 1px solid #b91c1c;
+    padding: 0.4rem 0.75rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    font: inherit;
+}
+.btn-gestion-danger:hover {
+    background: #b91c1c;
+    border-color: #991b1b;
+}
+.gestion-user-card .gestion-card-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    margin-top: 0.25rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #e4e4e7;
+}
+html[data-theme="dark"] .gestion-user-card .gestion-card-actions {
+    border-top-color: var(--border, #3f3f46);
+}
+.gestion-user-card .gestion-reset-inline {
+    width: 100%;
+}
+.gestion-user-card .gestion-reset-inline input[type="password"] {
+    flex: 1;
+    min-width: 0;
+}
+
 /* Encabezado azul como referencia (se aplica por id específico) */
 table.data-table {
     width: 100% !important;
@@ -1361,7 +1548,7 @@ html[data-theme="dark"] .login-panel {
     background: var(--bg);
 }
 
-/* Overrides para utilidades Tailwind usadas en login.php */
+/* Overrides para utilidades Tailwind usadas en la pantalla de login */
 html[data-theme="dark"] body.login-page .login-panel,
 html[data-theme="dark"] body.login-page .login-sip-panel {
     color: var(--text);

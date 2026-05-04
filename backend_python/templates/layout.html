@@ -11,6 +11,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     {% if load_ventas_assets %}
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+    {% endif %}
+    {% if load_ventas_assets or load_listado_skin %}
     <link rel="stylesheet" href="/assets/css/dashboard-vista-tabla-iconos.css">
     <link rel="stylesheet" href="/assets/css/dt-tabla-listado-sip.css">
     {% endif %}
@@ -83,6 +85,12 @@
 {% if load_ventas_assets %}
 <script src="/assets/js/app-ventasgeneral.js"></script>
 {% endif %}
+<script>window.VENTAS_CHAT_FULL = {{ (page == 'chatbot')|tojson }};</script>
+<script>
+window.__VENTAS_CHAT = window.__VENTAS_CHAT || {};
+Object.assign(window.__VENTAS_CHAT, {{ chat_assistant_config|tojson }});
+</script>
+<script src="/assets/js/chat_assistant.js" defer></script>
 {% block extra_scripts %}{% endblock %}
 </body>
 </html>

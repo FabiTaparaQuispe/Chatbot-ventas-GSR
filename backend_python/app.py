@@ -19,6 +19,30 @@ app.secret_key = os.getenv('FLASK_SECRET', 'cambiar-en-produccion-usar-valor-ale
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
+# Rutas JSON/HTML específicas primero (antes del catch-all /modules/…)
+from routes.auth import bp as auth_bp
+from routes.pages import bp as pages_bp
+from routes.api.chat import bp as chat_bp
+from routes.api.chat_threads import bp as chat_threads_bp
+from routes.api.ventas_dt import bp as ventas_dt_bp
+from routes.api.chat_script import bp as chat_script_bp
+from routes.reports_modules import bp as reports_modules_bp
+
+app.register_blueprint(auth_bp)
+app.register_blueprint(pages_bp)
+app.register_blueprint(chat_bp)
+app.register_blueprint(chat_threads_bp)
+app.register_blueprint(ventas_dt_bp)
+app.register_blueprint(chat_script_bp)
+app.register_blueprint(reports_modules_bp)
+
+
+@app.teardown_appcontext
+def _teardown_db_conn(_exc):
+    from services.db import close_request_connection
+
+    close_request_connection()
+
 
 @app.route('/assets/<path:filename>')
 def serve_assets(filename):
@@ -27,25 +51,12 @@ def serve_assets(filename):
 
 @app.route('/modules/<path:filename>')
 def serve_modules_static(filename):
+    from flask import abort
+
     if filename.endswith('.php'):
-        from flask import abort
         abort(404)
     return send_from_directory(os.path.join(PUBLIC_DIR, 'modules'), filename)
 
-
-from routes.auth import bp as auth_bp
-from routes.pages import bp as pages_bp
-from routes.api.chat import bp as chat_bp
-from routes.api.chat_threads import bp as chat_threads_bp
-from routes.api.ventas_dt import bp as ventas_dt_bp
-from routes.api.chat_script import bp as chat_script_bp
-
-app.register_blueprint(auth_bp)
-app.register_blueprint(pages_bp)
-app.register_blueprint(chat_bp)
-app.register_blueprint(chat_threads_bp)
-app.register_blueprint(ventas_dt_bp)
-app.register_blueprint(chat_script_bp)
 
 if __name__ == '__main__':
     port = int(os.getenv('FLASK_PORT', 5000))

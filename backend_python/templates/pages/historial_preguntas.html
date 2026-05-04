@@ -1,10 +1,193 @@
 {% extends "layout.html" %}
 {% block content %}
-<div class="page-head">
-    <h1>Preguntas al chatbot</h1>
-</div>
-<p class="text-gray-500 mt-2">Historial de consultas al asistente (últimas 600 preguntas).</p>
-<div id="historialContent" class="mt-4">
-    <p class="text-gray-400">Cargando historial…</p>
+<style>
+.hp-wrap { max-width: 100%; }
+.hp-head { padding: 1.25rem 1.5rem .5rem; }
+.hp-head h1 { font-size: 1.35rem; font-weight: 800; margin: 0 0 .2rem; }
+.hp-head p  { margin: 0; color: var(--muted, #6b7280); font-size: .875rem; }
+.hp-kpi-row { display: flex; gap: .75rem; flex-wrap: wrap; padding: 0 1.5rem 1rem; }
+.hp-kpi {
+    flex: 1; min-width: 130px;
+    background: var(--card-bg, #f8fafc);
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: .75rem; padding: .85rem 1rem;
+}
+[data-theme="dark"] .hp-kpi { background: var(--card-bg, #1e293b); border-color: var(--border, #334155); }
+.hp-kpi-val { font-size: 1.7rem; font-weight: 800; line-height: 1; }
+.hp-kpi-lbl { font-size: .75rem; color: var(--muted, #6b7280); margin-top: .2rem; }
+.hp-freq-card {
+    margin: 0 1.5rem 1.25rem;
+    background: var(--card-bg, #f8fafc);
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: .875rem; overflow: hidden;
+}
+[data-theme="dark"] .hp-freq-card { background: var(--card-bg, #1e293b); border-color: var(--border, #334155); }
+.hp-freq-title {
+    font-size: .8rem; font-weight: 700; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--muted, #6b7280);
+    padding: .75rem 1rem .5rem;
+}
+.hp-freq-row {
+    display: grid;
+    grid-template-columns: 9rem 3rem 3.5rem 1fr;
+    align-items: center; gap: .5rem;
+    padding: .38rem 1rem;
+    border-top: 1px solid var(--border, #e2e8f0);
+    font-size: .83rem;
+}
+[data-theme="dark"] .hp-freq-row { border-color: var(--border, #334155); }
+.hp-freq-cat  { font-weight: 600; }
+.hp-freq-n    { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.hp-freq-pct  { text-align: right; color: var(--muted, #6b7280); font-size: .78rem; }
+.hp-freq-bar-wrap { height: 7px; background: var(--border, #e2e8f0); border-radius: 999px; overflow: hidden; }
+.hp-freq-bar  { height: 100%; border-radius: 999px; transition: width .4s ease; }
+.hp-table-section { padding: 0 1.5rem 1.5rem; }
+.hp-table-section h2 { font-size: .95rem; font-weight: 700; margin: 0 0 .75rem; }
+.hp-table-wrap { overflow-x: auto; }
+.hp-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.hp-table thead th {
+    background: var(--card-bg, #f1f5f9);
+    padding: .55rem .75rem; text-align: left;
+    font-size: .75rem; font-weight: 700;
+    letter-spacing: .03em; text-transform: uppercase;
+    color: var(--muted, #6b7280);
+    border-bottom: 1px solid var(--border, #e2e8f0);
+    white-space: nowrap;
+}
+[data-theme="dark"] .hp-table thead th {
+    background: var(--card-bg, #0f172a);
+    border-color: var(--border, #334155);
+}
+.hp-table tbody td {
+    padding: .5rem .75rem;
+    border-bottom: 1px solid var(--border, #f1f5f9);
+    vertical-align: top;
+}
+[data-theme="dark"] .hp-table tbody td { border-color: var(--border, #1e293b); }
+.hp-table tbody tr:hover td { background: var(--hover-bg, rgba(0,0,0,.03)); }
+.hp-td-num { color: var(--muted, #9ca3af); font-weight: 600; width: 2.5rem; }
+.hp-td-user { white-space: nowrap; font-weight: 600; }
+.hp-td-cat .hp-cat-pill {
+    display: inline-block; padding: .15rem .55rem;
+    border-radius: 999px; font-size: .72rem; font-weight: 700;
+    white-space: nowrap;
+}
+.hp-td-date { white-space: nowrap; color: var(--muted, #6b7280); }
+.hp-td-q    { max-width: 260px; }
+.hp-td-a    { max-width: 220px; color: var(--muted, #6b7280); }
+.hp-td-link a { color: var(--accent, #2563eb); text-decoration: none; font-weight: 600; }
+.hp-td-link a:hover { text-decoration: underline; }
+.hp-alert {
+    margin: 1rem 1.5rem;
+    padding: .9rem 1rem;
+    background: rgba(239,68,68,.08);
+    border-left: 4px solid rgba(239,68,68,.6);
+    border-radius: .5rem; font-size: .875rem;
+}
+.hp-empty { padding: 1.5rem; color: var(--muted, #6b7280); font-size: .9rem; }
+</style>
+<div class="hp-wrap">
+    <div class="hp-head">
+        <h1><i class="fas fa-chart-bar" style="color:var(--accent,#2563eb);margin-right:.5rem;" aria-hidden="true"></i>Preguntas al chatbot</h1>
+        <p>Registro global de consultas realizadas por todos los usuarios.</p>
+    </div>
+    {% if db_error %}
+        <div class="hp-alert" role="alert">{{ db_error|e }}</div>
+    {% else %}
+    <div class="hp-kpi-row">
+        <div class="hp-kpi">
+            <div class="hp-kpi-val">{{ total_preguntas }}</div>
+            <div class="hp-kpi-lbl">Preguntas totales</div>
+        </div>
+        <div class="hp-kpi">
+            <div class="hp-kpi-val">{{ total_usuarios }}</div>
+            <div class="hp-kpi-lbl">Usuarios activos</div>
+        </div>
+        <div class="hp-kpi">
+            <div class="hp-kpi-val">{% if total_preguntas > 0 and total_usuarios > 0 %}{{ '%.1f'|format(total_preguntas / total_usuarios) }}{% else %}—{% endif %}</div>
+            <div class="hp-kpi-lbl">Preguntas / usuario</div>
+        </div>
+        <div class="hp-kpi">
+            <div class="hp-kpi-val">{{ top_categoria|e }}</div>
+            <div class="hp-kpi-lbl">Categoría más frecuente</div>
+        </div>
+    </div>
+    {% if total_preguntas > 0 %}
+    <div class="hp-freq-card">
+        <div class="hp-freq-title">Frecuencia por tipo de pregunta</div>
+        {% for cat, cnt in stats.items() %}
+            {% if cnt > 0 %}
+            {% set pct = ((cnt / total_preguntas * 100)|round(0)|int) %}
+            {% set color = colores.get(cat, '#6b7280') %}
+        <div class="hp-freq-row">
+            <span class="hp-freq-cat">{{ cat|e }}</span>
+            <span class="hp-freq-n">{{ cnt }}</span>
+            <span class="hp-freq-pct">{{ pct }}%</span>
+            <div class="hp-freq-bar-wrap">
+                <div class="hp-freq-bar" style="width:{{ pct }}%;background:{{ color }};"></div>
+            </div>
+        </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+    <div class="hp-table-section">
+        <h2>Detalle de preguntas <span style="font-weight:400;color:var(--muted,#6b7280);font-size:.85em;">(últimas {{ historial_rows|length }})</span></h2>
+        {% if historial_rows|length == 0 %}
+            <p class="hp-empty">Aún no hay preguntas guardadas.</p>
+        {% else %}
+        <div class="hp-table-wrap">
+            <table class="hp-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Usuario</th>
+                        <th>Categoría</th>
+                        <th>Fecha</th>
+                        <th>Pregunta</th>
+                        <th>Respuesta (extracto)</th>
+                        <th>Chat</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for r in historial_rows %}
+                    {% set pregunta = r.pregunta|string %}
+                    {% set extracto = r.respuesta_extracto|string if r.respuesta_extracto else '' %}
+                    {% set fecha = r.preguntado_en|string %}
+                    {% set thread_id = r.thread_id|string %}
+                    {% set uname = r.usuario|string %}
+                    {% set titulo = r.chat_titulo|string if r.chat_titulo else '' %}
+                    {% set cat = clasificar(pregunta) %}
+                    {% set cat_color = colores.get(cat, '#6b7280') %}
+                    {% if thread_id %}
+                    {% set href_chat = url_for('pages.index', page='chatbot') ~ '&thread=' ~ (thread_id|urlencode) %}
+                    {% else %}
+                    {% set href_chat = url_for('pages.index', page='chatbot') %}
+                    {% endif %}
+                <tr>
+                    <td class="hp-td-num">{{ loop.index }}</td>
+                    <td class="hp-td-user">{{ uname|e }}</td>
+                    <td class="hp-td-cat">
+                        <span class="hp-cat-pill" style="background:{{ cat_color }}22;color:{{ cat_color }};border:1px solid {{ cat_color }}44;">
+                            {{ cat|e }}
+                        </span>
+                    </td>
+                    <td class="hp-td-date"><time datetime="{{ fecha|e }}">{{ fecha|e }}</time></td>
+                    <td class="hp-td-q" title="{{ pregunta|e }}">{{ preview(pregunta, 200)|e }}</td>
+                    <td class="hp-td-a" title="{{ extracto|e }}">{{ preview(extracto, 130)|e }}</td>
+                    <td class="hp-td-link">
+                        <a href="{{ href_chat|e }}">Abrir</a>
+                        {% if titulo %}
+                        <br><small style="color:var(--muted,#9ca3af);" title="{{ titulo|e }}">{{ preview(titulo, 28)|e }}</small>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

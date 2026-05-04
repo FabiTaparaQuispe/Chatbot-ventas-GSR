@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ browser_title|e }}</title>
+    <script>
+    (function () {
+        try {
+            var m = document.cookie.match(/(?:^|; )ix2-theme=([^;]*)/);
+            var mode = m ? decodeURIComponent(m[1]).toLowerCase().trim() : '';
+            if (mode !== 'dark' && mode !== 'light') mode = localStorage.getItem('ix2-theme') || '';
+            if (mode !== 'dark' && mode !== 'light') mode = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', mode);
+            document.documentElement.style.colorScheme = mode === 'dark' ? 'dark' : 'light';
+        } catch (e) {}
+    })();
+    </script>
+    <link rel="stylesheet" href="/assets/css/app.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+    <style>
+        body { margin: 0; }
+        .reporte-modulo-main { padding: 1rem; max-width: 1100px; margin: 0 auto; }
+        .page-head .reporte-inline-meta { margin: 0.35rem 0 0; color: var(--muted, #64748b); font-size: 0.9rem; }
+        .reporte-toolbar { display: flex; gap: 0.65rem; margin: 0 0 1rem; }
+        #reporte-pdf-root table.data-table tbody td { padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border, #e2e8f0); }
+        .reporte-page { display: flex; flex-direction: column; gap: 1.25rem; }
+        .reporte-chart-section { background: var(--surface, #fff); border: 1px solid var(--border, #e2e8f0); border-radius: 0.75rem; padding: 1rem 1.25rem; }
+        .chart-inner { position: relative; height: min(55vh, 420px); }
+    </style>
+</head>
+<body>
+    <main class="reporte-modulo-main">
+        <div class="reporte-page">
+            <div class="page-head">
+                <h1>{{ h1|e }}</h1>
+                <p class="reporte-inline-meta">{{ meta|e }}</p>
+            </div>
+            <div class="tabla-listado-wrapper">
+                <div class="reporte-toolbar"><button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button></div>
+                <div id="reporte-pdf-root">
+                    <h2 class="pdf-h2">{{ pdf_h2|e }}</h2>
+                    <div class="table-wrapper overflow-x-auto productos-dt-skin">
+                        <table class="data-table config-table display stripe">
+                            <thead><tr>{% for th in table_headers %}<th>{{ th|e }}</th>{% endfor %}</tr></thead>
+                            <tbody>
+                            {% for row in table_rows %}
+                                <tr>{% for cell in row %}<td>{{ cell|e }}</td>{% endfor %}</tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <section class="reporte-chart-section" aria-label="Gráfico">
+                <h3 class="reporte-chart-heading">Gráfico</h3>
+                <div class="chart-inner"><canvas id="ch"></canvas></div>
+            </section>
+        </div>
+    </main>
+    <script>
+    (function () {
+        var payload = {{ chart_payload | tojson }};
+        var done = false;
+        function build() {
+            if (done || !window.Chart) return;
+            var ctx = document.getElementById('ch');
+            if (!ctx || !payload.labels) return;
+            new Chart(ctx, {
+                type: 'line',
+                data: { labels: payload.labels, datasets: [{ label: 'Importe', data: payload.valores, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.2)', fill: true, tension: 0.2 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1' } } },
+                    scales: { x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' } }, y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' } } } },
+            });
+            done = true;
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
+        else build();
+    })();
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+    <script src="/assets/js/reporte_pdf.js"></script>
+    <script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_name|tojson }});</script>
+</body>
+</html>

@@ -49,14 +49,14 @@
                         <span>Usuarios</span>
                     </a>
                     {% endif %}
-                    {% if role == 'administrador' %}
+                    {% if role in ('admin', 'administrador') %}
                     <a href="/?page=gestion_usuarios" class="app-nav-link{% if page == 'gestion_usuarios' %} app-nav-link-active{% endif %}">
                         <i class="fas fa-user-cog" aria-hidden="true"></i>
                         <span>Creación de usuarios</span>
                     </a>
                     {% endif %}
                 </nav>
-                {% if role in ('estrategico', 'administrador') %}
+                {% if role in ('admin', 'estrategico', 'administrador') %}
                 <p class="app-sidebar-section-label" role="presentation">Registro</p>
                 <nav class="app-sidebar-nav app-sidebar-nav--sub" aria-label="Registro de consultas al chatbot">
                     <a href="/?page=historial_preguntas" class="app-nav-link{% if page == 'historial_preguntas' %} app-nav-link-active{% endif %}">

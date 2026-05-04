@@ -1,0 +1,12 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+    <h1>Informe</h1>
+    <p class="page-lead">Ruta: <code>/modules/reports/{{ report_slug|e }}</code>{% if report_query %}<span style="color:var(--muted);"> · parámetros en la URL</span>{% endif %}</p>
+</div>
+<div class="card-filtros-demo reporte-informe-panel">
+    <p style="margin:0 0 0.75rem; color: var(--text);">Este tipo de informe gráfico aún se está portando desde el módulo antiguo. Los datos del chat y las consultas SQL siguen siendo válidos.</p>
+    <p style="margin:0;"><a class="btn btn-primary" href="{{ url_for('pages.index', page='ventas') }}">Ir a Ventas general</a>
+    <a class="btn btn-ghost" href="{{ url_for('pages.index', page='chatbot') }}">Volver al chatbot</a></p>
+</div>
+{% endblock %}

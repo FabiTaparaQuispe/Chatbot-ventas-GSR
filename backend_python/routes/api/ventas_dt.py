@@ -1,6 +1,11 @@
-from flask import Blueprint, request, jsonify
-from services.db import get_connection
+import logging
 from datetime import date
+
+from flask import Blueprint, jsonify, request
+
+from services.db import get_connection
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('api_ventas_dt', __name__)
 
@@ -18,17 +23,24 @@ def _parse_ymd(s: str):
     return None
 
 
-def _utf8_str(v) -> str:
+def _text_cell(v) -> str:
+    """Convierte celda a texto JSON; corrige mojibake UTF-8 leído como Latin-1 (ej. CAMPIÃ'A → CAMPIÑA)."""
     if v is None:
         return ''
-    try:
-        s = str(v)
-        s.encode('utf-8')
+    s = str(v)
+    if not s:
+        return ''
+    # Solo intentar si hay secuencias típicas de UTF-8 mal interpretado como latin1
+    if 'Ã' not in s and 'Â' not in s:
         return s
-    except Exception:
-        return str(v).encode('utf-8', errors='replace').decode('utf-8')
+    try:
+        fixed = s.encode('latin-1').decode('utf-8')
+        return fixed if fixed else s
+    except (UnicodeDecodeError, UnicodeEncodeError):
+        return s
 
 
+@bp.route('/api/ventasgeneral', methods=['GET'])
 @bp.route('/api/ventasgeneral_dt.php', methods=['GET'])
 def ventas_dt():
     draw = int(request.args.get('draw') or 0)
@@ -88,10 +100,13 @@ def ventas_dt():
             cur.execute('SELECT COUNT(*) AS n FROM ventasgeneral2' + where, search_params)
             records_filtered = int((cur.fetchone() or {}).get('n') or 0)
 
-        sql = ('SELECT FechaContable, CodigoCliente, NombreCliente, NumeroFactura, CodigoItem,'
-               ' GlosaDetalle, Cantidad, Valor, ZonaComercial, TipoDocumento, Provincia, LineaComercial'
-               ' FROM ventasgeneral2' + where +
-               f' ORDER BY FechaContable DESC, id DESC LIMIT {length} OFFSET {start}')
+        # Orden estable sin depender de columna `id` (en algunas BD la tabla no tiene PK `id`).
+        sql = (
+            'SELECT FechaContable, CodigoCliente, NombreCliente, NumeroFactura, CodigoItem,'
+            ' GlosaDetalle, Cantidad, Valor, ZonaComercial, TipoDocumento, Provincia, LineaComercial'
+            ' FROM ventasgeneral2' + where
+            + f' ORDER BY FechaContable DESC, NumeroFactura DESC, CodigoItem DESC LIMIT {length} OFFSET {start}'
+        )
 
         with conn.cursor() as cur:
             cur.execute(sql, search_params)
@@ -101,18 +116,18 @@ def ventas_dt():
         for i, r in enumerate(rows):
             data.append([
                 str(start + i + 1),
-                _utf8_str(r.get('FechaContable')),
-                _utf8_str(r.get('CodigoCliente')),
-                _utf8_str(r.get('NombreCliente')),
-                _utf8_str(r.get('NumeroFactura')),
-                _utf8_str(r.get('CodigoItem')),
-                _utf8_str(r.get('GlosaDetalle')),
-                _utf8_str(r.get('Cantidad')),
-                _utf8_str(r.get('Valor')),
-                _utf8_str(r.get('ZonaComercial')),
-                _utf8_str(r.get('TipoDocumento')),
-                _utf8_str(r.get('Provincia')),
-                _utf8_str(r.get('LineaComercial')),
+                _text_cell(r.get('FechaContable')),
+                _text_cell(r.get('CodigoCliente')),
+                _text_cell(r.get('NombreCliente')),
+                _text_cell(r.get('NumeroFactura')),
+                _text_cell(r.get('CodigoItem')),
+                _text_cell(r.get('GlosaDetalle')),
+                _text_cell(r.get('Cantidad')),
+                _text_cell(r.get('Valor')),
+                _text_cell(r.get('ZonaComercial')),
+                _text_cell(r.get('TipoDocumento')),
+                _text_cell(r.get('Provincia')),
+                _text_cell(r.get('LineaComercial')),
             ])
 
         return jsonify({
@@ -122,6 +137,7 @@ def ventas_dt():
             'data': data,
         })
     except Exception as e:
+        logger.exception('ventasgeneral_dt')
         return jsonify({
             'draw': draw,
             'recordsTotal': 0,

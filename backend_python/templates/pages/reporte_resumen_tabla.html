@@ -1,0 +1,44 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+    <h1>Resumen agregados · ventasgeneral</h1>
+    <p class="page-lead">FechaContable del <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong>{% if filtros_texto %}. {{ filtros_texto }}{% endif %}.</p>
+</div>
+
+<div class="card-filtros-demo reporte-informe-panel">
+    <div class="reporte-informe-toolbar">
+        <button type="button" class="btn btn-primary" id="btn-pdf-resumen">Descargar PDF</button>
+    </div>
+    <div id="reporte-pdf-root">
+        <h2 class="reporte-informe-title">Agregados del periodo</h2>
+        <p class="reporte-informe-meta">Totales sobre líneas de detalle con los filtros aplicados (si los hay).</p>
+        <div class="table-wrapper overflow-x-auto productos-dt-skin">
+            <table class="data-table config-table display stripe">
+                <thead>
+                    <tr>
+                        <th>N°</th>
+                        <th>Filas</th>
+                        <th>Importe total</th>
+                        <th>Cantidad total</th>
+                        <th>Peso total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>1</td>
+                        <td>{{ r_filas }}</td>
+                        <td>{{ r_valor }}</td>
+                        <td>{{ r_cant }}</td>
+                        <td>{{ r_peso }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/reporte_pdf.js"></script>
+<script>ventasBindPdfDownload('btn-pdf-resumen', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
+{% endblock %}

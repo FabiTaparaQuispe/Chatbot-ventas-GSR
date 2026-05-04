@@ -107,8 +107,9 @@ def _extract_reporte_url(reply: str) -> str:
         '', reply
     )
     m = re.search(
-        r'(https?://[^\s<]+|(?:ventas_(?:barras_dimension|comparativo|top_productos|top_clientes_global|top_clientes_nc|mix_tdoc|barras_ruta|barras_corporativo|serie_mensual)|pareto_(?:nc_zona|clientes_zona)(?:_tabla)?|ventasgeneral_(?:buscar|resumen)(?:_tabla)?)\.php\?[^\s<>"\']+)',
-        reply, re.IGNORECASE
+        r'(https?://[^\s<]+|/modules/[^\s<]+\?[^\s<>"\']+|(?:ventas_(?:barras_dimension|comparativo|top_productos|top_clientes_global|top_clientes_nc|mix_tdoc|barras_ruta|barras_corporativo|serie_mensual)|pareto_(?:nc_zona|clientes_zona)(?:_tabla)?|ventasgeneral_(?:buscar|resumen)(?:_tabla)?)\.php\?[^\s<>"\']+)',
+        reply,
+        re.IGNORECASE,
     )
     if m:
         return m.group(1).rstrip('),.;\'"` ')

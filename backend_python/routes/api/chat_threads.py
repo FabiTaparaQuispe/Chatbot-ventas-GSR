@@ -13,6 +13,7 @@ def _require_login():
     return None, username
 
 
+@bp.route('/api/chat_threads', methods=['GET', 'POST', 'DELETE'])
 @bp.route('/api/chat_threads.php', methods=['GET', 'POST', 'DELETE'])
 def chat_threads():
     err_resp = _require_login()

@@ -1,3 +1,21 @@
+from services.urlmap import (
+    REPORT_SLUG_PARETO_CLIENTES_ZONA,
+    REPORT_SLUG_PARETO_NC_ZONA,
+    REPORT_SLUG_VENTAS_BARRAS_CORPORATIVO,
+    REPORT_SLUG_VENTAS_BARRAS_DIMENSION,
+    REPORT_SLUG_VENTAS_BARRAS_RUTA,
+    REPORT_SLUG_VENTAS_COMPARATIVO,
+    REPORT_SLUG_VENTAS_MIX_TDOC,
+    REPORT_SLUG_VENTAS_SERIE_MENSUAL,
+    REPORT_SLUG_VENTAS_TOP_CLIENTES_GLOBAL,
+    REPORT_SLUG_VENTAS_TOP_CLIENTES_NC,
+    REPORT_SLUG_VENTAS_TOP_PRODUCTOS,
+    REPORT_VENTASGENERAL_BUSCAR_TABLA,
+    REPORT_VENTASGENERAL_RESUMEN_TABLA,
+    REPORTS_PREFIX,
+)
+
+
 def ventas_tool_definitions():
     d = {'type': 'string'}
     d_opt = {'type': 'string', 'description': 'YYYY-MM-DD'}
@@ -10,7 +28,7 @@ def ventas_tool_definitions():
     return [
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_resumen',
-            'description': 'Totales ventasgeneral (filas, suma Valor/Cantidad/Peso) con filtros opcionales. reporte_url=ventasgeneral_resumen_tabla.php',
+            'description': f'Totales ventasgeneral (filas, suma Valor/Cantidad/Peso) con filtros opcionales. reporte_url={REPORT_VENTASGENERAL_RESUMEN_TABLA}?…',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt,
                 'zona_comercial': d, 'cod_cliente': d,
@@ -19,7 +37,7 @@ def ventas_tool_definitions():
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_buscar',
-            'description': 'Filas individuales ventasgeneral (máx 100). Usar para buscar líneas concretas, no para totales. reporte_url=ventasgeneral_buscar_tabla.php',
+            'description': f'Filas individuales ventasgeneral (máx 100). Usar para buscar líneas concretas, no para totales. reporte_url={REPORT_VENTASGENERAL_BUSCAR_TABLA}?…',
             'parameters': {'type': 'object', 'properties': {
                 'nombre_cliente': d, 'numero_doc': d, 'cod_item': d, 'tdoc': d,
                 'prefijo_descri_zona_precio': pref, 'fecha_desde': d_opt, 'fecha_hasta': d_opt,
@@ -28,14 +46,14 @@ def ventas_tool_definitions():
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_pareto_nc_zonaprecio',
-            'description': 'Pareto de notas de crédito (TDoc=07) agrupado por DescripcionZonaPrecio. reporte_url=pareto_nc_zona.php',
+            'description': f'Pareto de notas de crédito (TDoc=07) agrupado por DescripcionZonaPrecio. reporte_url={REPORTS_PREFIX}{REPORT_SLUG_PARETO_NC_ZONA}?…',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'max_zonas': dn,
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_top_clientes_zona_precio',
-            'description': 'Top clientes por SUM(Valor) dentro de una zona de precio (prefijo obligatorio). reporte_url=pareto_clientes_zona.php',
+            'description': f'Top clientes por SUM(Valor) dentro de una zona de precio (prefijo obligatorio). reporte_url={REPORTS_PREFIX}{REPORT_SLUG_PARETO_CLIENTES_ZONA}?…',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt,
                 'prefijo_descri_zona_precio': pref, 'top_n': dn,
@@ -43,14 +61,14 @@ def ventas_tool_definitions():
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_barras_ventas_dimension',
-            'description': 'Ranking de zonas por SUM(Valor) en una dimensión. NO usar dos veces para comparar períodos — usar ventasgeneral_comparativo_periodos. reporte_url=ventas_barras_dimension.php',
+            'description': f'Ranking de zonas por SUM(Valor) en una dimensión. NO usar dos veces para comparar períodos — usar ventasgeneral_comparativo_periodos. reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_BARRAS_DIMENSION}?…',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'dimension': dim, 'top_n': dn,
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_comparativo_periodos',
-            'description': 'Compara SUM(Valor) entre dos períodos en la misma dimensión. Llamar UNA sola vez con los cuatro rangos. reporte_url=ventas_comparativo.php',
+            'description': f'Compara SUM(Valor) entre dos períodos en la misma dimensión. Llamar UNA sola vez con los cuatro rangos. reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_COMPARATIVO}?…',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde_a': d_opt, 'fecha_hasta_a': d_opt,
                 'fecha_desde_b': d_opt, 'fecha_hasta_b': d_opt,
@@ -59,49 +77,49 @@ def ventas_tool_definitions():
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_top_productos',
-            'description': 'Top productos por SUM(Valor). reporte_url=ventas_top_productos.php',
+            'description': f'Top productos por SUM(Valor). reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_TOP_PRODUCTOS}?…',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'top_n': dn,
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_top_clientes_globales',
-            'description': 'Top clientes global por SUM(Valor), sin filtro de zona. reporte_url=ventas_top_clientes_global.php',
+            'description': f'Top clientes global por SUM(Valor), sin filtro de zona. reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_TOP_CLIENTES_GLOBAL}?…',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'top_n': dn,
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_top_clientes_nota_credito',
-            'description': 'Top clientes por cantidad de líneas TDoc=07 (NC/devoluciones). Solo usar cuando el usuario pide explícitamente notas de crédito. reporte_url=ventas_top_clientes_nc.php',
+            'description': f'Top clientes por cantidad de líneas TDoc=07 (NC/devoluciones). Solo usar cuando el usuario pide explícitamente notas de crédito. reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_TOP_CLIENTES_NC}?…',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'top_n': dn,
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_mix_tdoc',
-            'description': 'Mix de SUM(Valor) por tipo de documento (TDoc). reporte_url=ventas_mix_tdoc.php',
+            'description': f'Mix de SUM(Valor) por tipo de documento (TDoc). reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_MIX_TDOC}?…',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt,
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_barras_ruta_comercial',
-            'description': 'Ranking de rutas comerciales por SUM(Valor). reporte_url=ventas_barras_ruta.php',
+            'description': f'Ranking de rutas comerciales por SUM(Valor). reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_BARRAS_RUTA}?…',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'top_n': dn,
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_barras_corporativo',
-            'description': 'Ranking de corporativos (NombreCoorporativo) por SUM(Valor). reporte_url=ventas_barras_corporativo.php',
+            'description': f'Ranking de corporativos (NombreCoorporativo) por SUM(Valor). reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_BARRAS_CORPORATIVO}?…',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'top_n': dn,
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_serie_mensual_valor',
-            'description': 'Serie de SUM(Valor) agrupada por mes. reporte_url=ventas_serie_mensual.php',
+            'description': f'Serie de SUM(Valor) agrupada por mes. reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_SERIE_MENSUAL}?…',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt,
             }, 'required': ['fecha_desde', 'fecha_hasta']},

@@ -1,0 +1,81 @@
+{% extends "layout_shell.html" %}
+{% block extra_head %}
+<link rel="stylesheet" href="/assets/css/chatbot-drawer.css">
+{% endblock %}
+{% block content %}
+<div class="chatbot-page" id="ventasChatPanel">
+    <header class="chatbot-topbar">
+        <a href="/index.php?page=ventas" class="chatbot-back" aria-label="Volver a Ventas general" title="Volver">
+            <i class="fas fa-arrow-left" aria-hidden="true"></i>
+        </a>
+        <span class="chatbot-topbar-title">Asistente de ventas</span>
+        <div class="chatbot-topbar-actions">
+            <button type="button" id="ventasChatThreadsBtn" class="chatbot-icon-btn" title="Conversaciones recientes" aria-label="Conversaciones recientes">💬</button>
+            <button type="button" id="ventasChatClear" class="chatbot-icon-btn" title="Limpiar conversación" aria-label="Limpiar conversación">⌫</button>
+            <details class="ventas-chat-head-menu" id="ventasChatHeadMenu">
+                <summary class="chatbot-icon-btn ventas-chat-menu-summary" aria-label="Más opciones" title="Más">⋮</summary>
+                <div class="ventas-chat-menu-panel ventas-chat-menu-panel--page" role="menu">
+                    <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuNew" role="menuitem">Nueva conversación</button>
+                    <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuClear" role="menuitem">Limpiar esta conversación…</button>
+                    <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuPrefs" role="menuitem">Personalización…</button>
+                    <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuClearLocal" role="menuitem">Borrar caché local (este navegador)…</button>
+                    <button type="button" class="ventas-chat-menu-item" id="ventasChatMenuPurgeAll" role="menuitem">Borrar todo el historial en servidor…</button>
+                    {% if role in ['estrategico', 'administrador'] %}
+                    <a class="ventas-chat-menu-item ventas-chat-menu-link" role="menuitem" href="/index.php?page=historial_preguntas">Preguntas guardadas</a>
+                    {% endif %}
+                </div>
+            </details>
+        </div>
+    </header>
+    <div class="chatbot-body">
+        <div class="chatbot-center">
+            <div id="chatbotHero" class="chatbot-hero">
+                <p class="chatbot-greet">Hola{{ nom_corto|e }}</p>
+                <h1 class="chatbot-hero-title">¿Por dónde empezamos?</h1>
+            </div>
+            <div id="ventasChatLog" class="chatbot-log" aria-live="polite"></div>
+        </div>
+    </div>
+    <div class="chatbot-surface">
+        <details class="ventas-chat-shortcuts chatbot-shortcuts">
+            <summary>Consejos para tu consulta</summary>
+            <ul>
+                <li><strong>Fechas</strong>: indica desde qué día y hasta qué día te interesa (por ejemplo <em>1 de marzo al 31 de marzo de 2026</em>, o también <em>2026-03-01</em> y <em>2026-03-31</em>). Si falta eso, el asistente te lo preguntará antes de sacar números.</li>
+                <li><strong>Zona o mercado</strong>: si quieres acotar por región, usa el mismo nombre corto que suele aparecer en tus listas o facturas (como AQP, TACNA o MOQUEGUA). No filtramos por “ciudad” aparte; va por esa zona comercial.</li>
+                <li><strong>Notas de crédito o devoluciones</strong>: solo las ponemos en primer plano en rankings especiales si lo pides explícitamente en tu mensaje.</li>
+            </ul>
+        </details>
+        <div class="ventas-chat-chips-wrap chatbot-faq-wrap">
+            <label for="ventasChatFaqSelect" class="ventas-chat-faq-label">Preguntas frecuentes</label>
+            <select id="ventasChatFaqSelect" class="ventas-chat-faq-select" aria-label="Seleccionar pregunta frecuente"></select>
+        </div>
+        <div class="chatbot-composer">
+            <textarea id="ventasChatInput" rows="1" placeholder="Escribe tu pregunta sobre ventas, fechas, clientes, productos…"></textarea>
+            <div class="chatbot-composer-row">
+                <button type="button" id="ventasChatMic" class="ventas-chat-mic-btn-full" aria-label="Dictado por voz" title="Dictado por voz" aria-pressed="false">🎙 Dictar</button>
+                <button type="button" id="ventasChatSend" class="btn btn-primary chatbot-send">Enviar</button>
+            </div>
+        </div>
+        <p id="ventasChatError" class="ventas-chat-err" hidden></p>
+    </div>
+    <div id="ventasChatThreadsDrawer" class="ventas-chat-drawer-full" hidden>
+        <div class="ventas-chat-drawer-backdrop" data-action="close" aria-hidden="true"></div>
+        <aside class="ventas-chat-drawer-panel" aria-label="Conversaciones recientes">
+            <div class="ventas-chat-drawer-head">
+                <div class="ventas-chat-drawer-head-top">
+                    <p class="ventas-chat-drawer-title">Conversaciones recientes</p>
+                    <div class="ventas-chat-drawer-tools">
+                        <button type="button" id="ventasChatNewThread" class="ventas-chat-drawer-btn" title="Nuevo chat">Nuevo</button>
+                        <button type="button" id="ventasChatCloseThreads" class="ventas-chat-drawer-btn" title="Cerrar historial">Cerrar</button>
+                    </div>
+                </div>
+                <input id="ventasChatThreadsSearch" class="ventas-chat-drawer-search" type="search" placeholder="Buscar chats…" aria-label="Buscar chats">
+            </div>
+            <div id="ventasChatThreadsList" class="ventas-chat-drawer-list" role="list"></div>
+        </aside>
+    </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>window.VENTAS_CHAT_FULL = true;</script>
+{% endblock %}

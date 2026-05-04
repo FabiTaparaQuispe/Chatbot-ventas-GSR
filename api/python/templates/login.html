@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acceso — {{ app_name|e }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/assets/css/app.css">
+    <script>
+    (function () {
+        function readCookieTheme() {
+            try {
+                var m = document.cookie.match(/(?:^|; )ix2-theme=([^;]*)/);
+                return m ? decodeURIComponent(m[1]).toLowerCase().trim() : '';
+            } catch (e) { return ''; }
+        }
+        var mode = readCookieTheme() || (function(){ try { return localStorage.getItem('ix2-theme'); } catch(e){ return null; } })();
+        if (mode !== 'dark' && mode !== 'light') {
+            mode = (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+        }
+        var d = document.documentElement;
+        d.setAttribute('data-theme', mode);
+        d.style.colorScheme = mode === 'dark' ? 'dark' : 'light';
+    })();
+    </script>
+</head>
+<body class="login-page font-sans antialiased">
+<div class="login-split min-h-screen flex w-full">
+    <div class="login-hero" aria-hidden="false">
+        <div class="login-hero-shapes" aria-hidden="true"></div>
+        <div class="login-hero-content">
+            <div class="login-hero-card" aria-hidden="true">
+                <span style="font-size:86px; line-height:1;" role="img" aria-label="Chatbot">🤖</span>
+            </div>
+            <h2 class="login-hero-title">Chatbot</h2>
+            <p class="login-hero-co">{{ app_company|e }}</p>
+        </div>
+    </div>
+    <div class="login-panel login-sip-panel w-full flex items-center justify-center p-6 sm:p-12 relative min-h-0">
+        <div class="absolute right-4 top-4 z-20">
+            <button type="button" class="app-theme-switch login-theme-btn" id="loginBtnTheme" onclick="appToggleTheme()" aria-label="Tema">
+                <span class="app-theme-thumb">
+                    <i class="fas fa-sun app-theme-sun" aria-hidden="true"></i>
+                    <i class="fas fa-moon app-theme-moon hidden" aria-hidden="true"></i>
+                </span>
+            </button>
+        </div>
+        <div class="w-full max-w-md space-y-8 pt-6 lg:pt-0">
+            <div class="text-center lg:text-left">
+                <h1 class="text-3xl font-bold text-gray-900 mb-2 login-sip-h1">¡Bienvenido de nuevo!</h1>
+                <p class="text-gray-500">Por favor, ingresa tus credenciales para continuar.</p>
+            </div>
+            {% if error %}
+            <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{{ error|e }}</div>
+            {% endif %}
+            <form method="post" id="loginForm" class="space-y-6 mt-8" autocomplete="on">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token|e }}">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2" for="usuario">Usuario</label>
+                    <div class="relative group">
+                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                            <i class="fas fa-user text-gray-400 group-focus-within:text-blue-600 transition-colors"></i>
+                        </div>
+                        <input type="text" id="usuario" name="usuario" required autocomplete="username"
+                            class="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2" for="clave">Contraseña</label>
+                    <div class="relative group">
+                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                            <i class="fas fa-lock text-gray-400 group-focus-within:text-blue-600 transition-colors"></i>
+                        </div>
+                        <input type="password" id="clave" name="clave" required autocomplete="current-password"
+                            class="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                    </div>
+                </div>
+                <button type="submit" class="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-lg shadow-blue-600/25 transition">
+                    Entrar
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+<script src="/assets/js/theme.js"></script>
+</body>
+</html>

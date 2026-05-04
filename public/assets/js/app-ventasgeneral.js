@@ -320,7 +320,7 @@
                     provincia: f.provincia,
                 };
                 $.ajax({
-                    url: 'api/ventasgeneral_dt.php',
+                    url: '/api/ventasgeneral',
                     type: 'GET',
                     dataType: 'json',
                     data: params,
@@ -380,6 +380,9 @@
     }
 
     $(function () {
+        if (!$('#tablaVentasGeneral').length) {
+            return;
+        }
         var r = defaultRange();
         $('#vgDesde').val(r.desde);
         $('#vgHasta').val(r.hasta);
