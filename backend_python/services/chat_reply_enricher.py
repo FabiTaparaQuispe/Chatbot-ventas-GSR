@@ -190,6 +190,9 @@ def _format_payload(payload: dict) -> str:
     if not isinstance(first, dict):
         return ''
 
+    if str(payload.get('tipo') or '') == 'linea_resumen_provincia_cliente':
+        return _lines_linea_resumen_provincia(filas)
+
     if 'zona' in first and 'lineas_nc' in first and 'impacto_abs_valor' in first:
         return _lines_pareto_nc(filas)
     if 'nombre_cliente' in first and 'lineas_venta' in first and 'suma_valor' in first:
@@ -241,6 +244,19 @@ def _lines_top_nc(filas):
         ln = int(r.get('lineas') or 0)
         v = _fmt_num(r.get('suma_valor') or 0)
         out.append(f'{i}. {nom}: {ln} notas de crédito por valor de {v}')
+    return '\n'.join(out)
+
+
+def _lines_linea_resumen_provincia(filas):
+    out = []
+    for i, r in enumerate(filas, 1):
+        nom = str(r.get('nombre_cliente') or '')
+        prov = str(r.get('provincia') or '')
+        ln = int(r.get('lineas') or 0)
+        cant = _fmt_num(r.get('suma_cantidad') or 0)
+        peso = _fmt_num(r.get('suma_peso') or 0)
+        v = _fmt_num(r.get('suma_valor') or 0)
+        out.append(f'{i}. {nom} ({prov}): {ln:,} líneas, {cant} unidades, {peso} kg, S/ {v}')
     return '\n'.join(out)
 
 

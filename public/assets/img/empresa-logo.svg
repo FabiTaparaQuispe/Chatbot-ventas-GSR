@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80" viewBox="0 0 200 80" role="img" aria-label="Logo">
+  <rect width="200" height="80" rx="12" fill="#ffffff"/>
+  <rect x="14" y="14" width="52" height="52" rx="10" fill="#2563eb" opacity="0.12"/>
+  <path d="M40 22l18 8v12c0 12-8 22-18 25-10-3-18-13-18-25V30l18-8z" fill="#2563eb"/>
+  <text x="78" y="38" font-family="system-ui,Segoe UI,sans-serif" font-size="15" font-weight="700" fill="#0f172a">GRS</text>
+  <text x="78" y="56" font-family="system-ui,Segoe UI,sans-serif" font-size="9" font-weight="500" fill="#64748b">Granja Rinconada del Sur</text>
+</svg>

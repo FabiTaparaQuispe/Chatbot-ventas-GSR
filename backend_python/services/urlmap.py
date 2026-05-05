@@ -28,6 +28,10 @@ REPORT_SLUG_VENTAS_MIX_TDOC = 'ventas-mix-tdoc'
 REPORT_SLUG_VENTAS_BARRAS_RUTA = 'ventas-barras-ruta'
 REPORT_SLUG_VENTAS_BARRAS_CORPORATIVO = 'ventas-barras-corporativo'
 REPORT_SLUG_VENTAS_SERIE_MENSUAL = 'ventas-serie-mensual'
+REPORT_SLUG_VENTAS_LINEA_RESUMEN_PROVINCIA = 'ventas-linea-resumen-provincia'
+REPORT_SLUG_VENTAS_LINEA_DIARIO_PROVINCIA = 'ventas-linea-diario-provincia'
+REPORT_SLUG_VENTAS_LINEA_PRECIO_DIARIO = 'ventas-linea-precio-diario'
+REPORT_SLUG_VENTAS_LINEA_MIX_PRODUCTOS = 'ventas-linea-mix-productos'
 
 REPORTS_PREFIX = '/modules/reports/'
 

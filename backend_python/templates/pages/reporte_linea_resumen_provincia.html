@@ -1,0 +1,158 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+    <h1>{{ linea }} · Resumen por provincia y cliente</h1>
+    <p class="page-lead">FechaContable del <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong> · {{ top_lead }} · ordenado por peso descendente.</p>
+</div>
+
+<div class="reporte-page">
+    <div class="card-filtros-demo reporte-informe-panel">
+        <div class="reporte-informe-toolbar">
+            <button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button>
+        </div>
+        <div id="reporte-pdf-root">
+            <h2 class="reporte-informe-title">{{ linea }} · Ventas por provincia y cliente</h2>
+            <p class="reporte-informe-meta">
+                Período: <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong> ·
+                Total líneas: <strong>{{ total_lineas }}</strong> ·
+                Peso total: <strong>{{ total_peso }} kg</strong> ·
+                Valor total: <strong>S/ {{ total_valor }}</strong>
+            </p>
+
+            {% if filas %}
+            <div class="table-wrapper overflow-x-auto productos-dt-skin">
+                <table class="data-table config-table display stripe">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Provincia</th>
+                            <th>Nombre cliente</th>
+                            <th style="text-align:right;">Líneas</th>
+                            <th style="text-align:right;">Cantidad (un.)</th>
+                            <th style="text-align:right;">Peso (kg)</th>
+                            <th style="text-align:right;">Valor (S/)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in filas %}
+                        <tr>
+                            <td>{{ f.rank }}</td>
+                            <td>{{ f.provincia }}</td>
+                            <td>{{ f.nombre_cliente }}</td>
+                            <td style="text-align:right;">{{ f.lineas }}</td>
+                            <td style="text-align:right;">{{ f.suma_cantidad }}</td>
+                            <td style="text-align:right;">{{ f.suma_peso }}</td>
+                            <td style="text-align:right;">{{ f.suma_valor }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <th colspan="3" style="text-align:right;">Total período</th>
+                            <th style="text-align:right;">{{ total_lineas }}</th>
+                            <th style="text-align:right;">{{ total_cantidad }}</th>
+                            <th style="text-align:right;">{{ total_peso }}</th>
+                            <th style="text-align:right;">{{ total_valor }}</th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            {% else %}
+            <p style="color:var(--muted);">No se encontraron ventas para la línea "{{ linea }}" en el período seleccionado.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if filas %}
+    <section class="reporte-chart-section" aria-label="Gráfico peso por cliente">
+        <h3 class="reporte-chart-heading">Peso (kg) por cliente · Top {{ [filas|length, 20]|min }}</h3>
+        <div class="chart-inner"><canvas id="chartPeso"></canvas></div>
+    </section>
+    <section class="reporte-chart-section" aria-label="Gráfico valor por cliente">
+        <h3 class="reporte-chart-heading">Valor (S/) por cliente</h3>
+        <div class="chart-inner"><canvas id="chartValor"></canvas></div>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/reporte_pdf.js"></script>
+<script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
+<script>
+(function () {
+    var d = {{ chart_data | tojson }};
+    var SHOW = 20;
+    var labels = (d.labels || []).slice(0, SHOW);
+    var pesos  = (d.pesos  || []).slice(0, SHOW);
+    var valores= (d.valores|| []).slice(0, SHOW);
+
+    function buildCharts() {
+        if (!window.Chart || !labels.length) return;
+
+        new Chart(document.getElementById('chartPeso'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Peso (kg)',
+                    data: pesos,
+                    backgroundColor: 'rgba(34,197,94,0.65)',
+                    borderColor: 'rgba(34,197,94,1)',
+                    borderWidth: 1,
+                }],
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: '#cbd5e1', boxWidth: 14 } },
+                    tooltip: { callbacks: { label: function(ctx) {
+                        return ctx.dataset.label + ': ' + (ctx.parsed.x || 0).toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' kg';
+                    }}},
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8', callback: function(v){ return v.toLocaleString('es-PE'); } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                    y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                },
+            },
+        });
+
+        new Chart(document.getElementById('chartValor'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Valor (S/)',
+                    data: valores,
+                    backgroundColor: 'rgba(59,130,246,0.65)',
+                    borderColor: 'rgba(59,130,246,1)',
+                    borderWidth: 1,
+                }],
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: '#cbd5e1', boxWidth: 14 } },
+                    tooltip: { callbacks: { label: function(ctx) {
+                        return 'S/ ' + (ctx.parsed.x || 0).toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2});
+                    }}},
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8', callback: function(v){ return 'S/ ' + v.toLocaleString('es-PE'); } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                    y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                },
+            },
+        });
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', buildCharts);
+    else buildCharts();
+})();
+</script>
+{% endblock %}

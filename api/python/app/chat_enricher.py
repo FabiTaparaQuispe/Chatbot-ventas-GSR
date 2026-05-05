@@ -93,6 +93,21 @@ def _lines_top_nc(filas: list[dict[str, Any]]) -> str:
     return "\n".join(out)
 
 
+def _lines_linea_resumen_provincia(filas: list[dict[str, Any]]) -> str:
+    out: list[str] = []
+    for i, row in enumerate(filas, start=1):
+        nom = str(row.get("nombre_cliente") or "")
+        prov = str(row.get("provincia") or "")
+        ln = int(row.get("lineas") or 0)
+        cant = _fmt_num(row.get("suma_cantidad") or 0)
+        peso = _fmt_num(row.get("suma_peso") or 0)
+        v = _fmt_num(row.get("suma_valor") or 0)
+        out.append(
+            f"{i}. {nom} ({prov}): {ln:,} líneas, {cant} unidades, {peso} kg, S/ {v}"
+        )
+    return "\n".join(out)
+
+
 def _lines_top_clientes_global(filas: list[dict[str, Any]]) -> str:
     out: list[str] = []
     for i, row in enumerate(filas[:25], start=1):
@@ -228,6 +243,9 @@ def format_payload(payload: dict[str, Any]) -> str:
     first = filas[0]
     if not isinstance(first, dict):
         return ""
+
+    if str(payload.get("tipo") or "") == "linea_resumen_provincia_cliente":
+        return _lines_linea_resumen_provincia(filas)
 
     if all(k in first for k in ("zona", "lineas_nc", "impacto_abs_valor")):
         return _lines_pareto_nc(filas)

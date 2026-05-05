@@ -523,3 +523,167 @@ def ym_add_months(ym: str, add: int) -> str:
     y += (mo - 1) // 12
     mo = (mo - 1) % 12 + 1
     return f"{y:04d}-{mo:02d}"
+
+
+def _linea_extra_filters(
+    sql: str, bind: dict[str, Any], params: dict[str, Any],
+    cod_item: str | None, prefijo_zona: str | None
+) -> str:
+    if cod_item:
+        sql += " AND CodigoItem = :cod_item"
+        bind["cod_item"] = cod_item
+        params[":cod_item"] = cod_item
+    if prefijo_zona:
+        like = prefijo_zona.upper() + "%"
+        sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzo"
+        bind["prefzo"] = like
+        params[":prefzo"] = like
+    return sql
+
+
+def ventas_linea_resumen_provincia(
+    conn: Connection,
+    d1: str,
+    d2: str,
+    linea: str,
+    top: int | None = None,
+    cod_item: str | None = None,
+    prefijo_zona: str | None = None,
+) -> dict[str, Any]:
+    """top=None o <=0: sin LIMIT (todas las filas agrupadas). Si top>0, como máximo 100000."""
+    limit_clause = ""
+    if top is not None and top > 0:
+        lim = max(1, min(100_000, int(top)))
+        limit_clause = f" LIMIT {lim}"
+    base = """SELECT
+            COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,
+            CodigoCliente AS cod_cliente,
+            MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,
+            COUNT(*) AS lineas,
+            COALESCE(SUM(Cantidad),0) AS suma_cantidad,
+            COALESCE(SUM(Peso),0) AS suma_peso,
+            COALESCE(SUM(Valor),0) AS suma_valor
+        FROM ventasgeneral2
+        WHERE FechaContable BETWEEN :d1 AND :d2
+        AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))"""
+    bind: dict[str, Any] = {"d1": d1, "d2": d2, "linea": linea}
+    params: dict[str, Any] = {":d1": d1, ":d2": d2, ":linea": linea}
+    base = _linea_extra_filters(base, bind, params, cod_item, prefijo_zona)
+    sql = base + f" GROUP BY provincia, CodigoCliente ORDER BY suma_peso DESC{limit_clause}"
+    filas = _rows(conn.execute(text(sql), bind))
+    return {
+        "filas": filas,
+        "linea_comercial": linea,
+        "cod_item": cod_item,
+        "mercado": prefijo_zona,
+        "periodo": {"desde": d1, "hasta": d2},
+        "_sql_traces": [_trace(sql, params)],
+    }
+
+
+def ventas_linea_diario_provincia(
+    conn: Connection, d1: str, d2: str, linea: str, top: int,
+    cod_item: str | None = None, prefijo_zona: str | None = None
+) -> dict[str, Any]:
+    top = max(1, min(1000, top))
+    base = """SELECT
+            FechaContable AS fecha,
+            COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,
+            CodigoCliente AS cod_cliente,
+            MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,
+            COUNT(*) AS lineas,
+            COALESCE(SUM(Cantidad),0) AS suma_cantidad,
+            COALESCE(SUM(Peso),0) AS suma_peso,
+            COALESCE(SUM(Valor),0) AS suma_valor
+        FROM ventasgeneral2
+        WHERE FechaContable BETWEEN :d1 AND :d2
+        AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))"""
+    bind: dict[str, Any] = {"d1": d1, "d2": d2, "linea": linea}
+    params: dict[str, Any] = {":d1": d1, ":d2": d2, ":linea": linea}
+    base = _linea_extra_filters(base, bind, params, cod_item, prefijo_zona)
+    sql = base + f" GROUP BY fecha, provincia, CodigoCliente ORDER BY fecha ASC, suma_peso DESC LIMIT {top}"
+    filas = _rows(conn.execute(text(sql), bind))
+    return {
+        "filas": filas,
+        "linea_comercial": linea,
+        "cod_item": cod_item,
+        "mercado": prefijo_zona,
+        "periodo": {"desde": d1, "hasta": d2},
+        "_sql_traces": [_trace(sql, params)],
+    }
+
+
+def ventas_linea_precio_diario(
+    conn: Connection, d1: str, d2: str, linea: str, top: int,
+    cod_item: str | None = None, prefijo_zona: str | None = None
+) -> dict[str, Any]:
+    top = max(1, min(1000, top))
+    base = """SELECT
+            FechaContable AS fecha,
+            COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,
+            CodigoCliente AS cod_cliente,
+            MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,
+            COALESCE(SUM(Cantidad),0) AS suma_cantidad,
+            COALESCE(SUM(Peso),0) AS suma_peso,
+            COALESCE(SUM(Valor),0) AS suma_valor,
+            CASE WHEN COALESCE(SUM(Peso),0) > 0
+                 THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)
+                 ELSE NULL END AS precio_kg
+        FROM ventasgeneral2
+        WHERE FechaContable BETWEEN :d1 AND :d2
+        AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))"""
+    bind: dict[str, Any] = {"d1": d1, "d2": d2, "linea": linea}
+    params: dict[str, Any] = {":d1": d1, ":d2": d2, ":linea": linea}
+    base = _linea_extra_filters(base, bind, params, cod_item, prefijo_zona)
+    sql = base + f" GROUP BY fecha, provincia, CodigoCliente ORDER BY fecha ASC, suma_peso DESC LIMIT {top}"
+    filas = _rows(conn.execute(text(sql), bind))
+    return {
+        "filas": filas,
+        "linea_comercial": linea,
+        "cod_item": cod_item,
+        "mercado": prefijo_zona,
+        "periodo": {"desde": d1, "hasta": d2},
+        "_sql_traces": [_trace(sql, params)],
+    }
+
+
+def ventas_linea_mix_productos(
+    conn: Connection, d1: str, d2: str, linea: str,
+    prefijo_zona: str | None = None
+) -> dict[str, Any]:
+    base = """SELECT
+            CodigoItem AS cod_item,
+            MAX(COALESCE(NULLIF(TRIM(GlosaDetalle),''),'(sin glosa)')) AS glosa,
+            COUNT(*) AS lineas,
+            COALESCE(SUM(Cantidad),0) AS suma_cantidad,
+            COALESCE(SUM(Peso),0) AS suma_peso,
+            COALESCE(SUM(Valor),0) AS suma_valor,
+            CASE WHEN COALESCE(SUM(Peso),0) > 0
+                 THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)
+                 ELSE NULL END AS precio_kg
+        FROM ventasgeneral2
+        WHERE FechaContable BETWEEN :d1 AND :d2
+        AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))"""
+    bind: dict[str, Any] = {"d1": d1, "d2": d2, "linea": linea}
+    params: dict[str, Any] = {":d1": d1, ":d2": d2, ":linea": linea}
+    if prefijo_zona:
+        like = prefijo_zona.upper() + "%"
+        base += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzo"
+        bind["prefzo"] = like
+        params[":prefzo"] = like
+    sql = base + " GROUP BY CodigoItem ORDER BY suma_peso DESC"
+    filas = _rows(conn.execute(text(sql), bind))
+    total_peso = sum(float(r.get("suma_peso") or 0) for r in filas)
+    total_valor = sum(float(r.get("suma_valor") or 0) for r in filas)
+    for r in filas:
+        sp = float(r.get("suma_peso") or 0)
+        r["pct_peso"] = round(sp / total_peso * 100, 2) if total_peso else 0.0
+    return {
+        "filas": filas,
+        "linea_comercial": linea,
+        "mercado": prefijo_zona,
+        "total_peso": total_peso,
+        "total_valor": total_valor,
+        "periodo": {"desde": d1, "hasta": d2},
+        "_sql_traces": [_trace(sql, params)],
+    }

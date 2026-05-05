@@ -424,6 +424,372 @@ def ventas_top_clientes_nc():
     return render_template('pages/reporte_top_clientes_nc.html', **ctx)
 
 
+@bp.route('/modules/reports/ventas-linea-resumen-provincia')
+@require_login
+def ventas_linea_resumen_provincia():
+    from services.db import get_connection
+
+    d1 = _parse_date_string(request.args.get('desde') or request.args.get('fecha_desde'))
+    d2 = _parse_date_string(request.args.get('hasta') or request.args.get('fecha_hasta'))
+    if not d1 or not d2 or d1 > d2:
+        return _bad('Parámetros requeridos: desde y hasta (YYYY-MM-DD).')
+
+    linea = (request.args.get('linea') or '').strip()
+    if not linea:
+        return _bad('Parámetro requerido: linea (ej. "Pollo Vivo").')
+
+    raw_top = request.args.get('top')
+    top = None
+    if raw_top is not None and str(raw_top).strip() != '':
+        s = str(raw_top).strip().lower()
+        if s not in ('0', 'all', 'todos'):
+            try:
+                n = int(raw_top)
+                if n > 0:
+                    top = max(1, min(100_000, n))
+            except (TypeError, ValueError):
+                top = None
+
+    cod_item = (request.args.get('cod_item') or '').strip()
+    mercado = (request.args.get('mercado') or '').strip().upper()
+
+    sql = (f"SELECT COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
+           f" CodigoCliente AS cod_cliente,"
+           f" MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
+           f" COUNT(*) AS lineas,"
+           f" COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
+           f" COALESCE(SUM(Peso),0) AS suma_peso,"
+           f" COALESCE(SUM(Valor),0) AS suma_valor"
+           f" FROM ventasgeneral2"
+           f" WHERE FechaContable BETWEEN :d1 AND :d2"
+           f" AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))")
+    bind = {'d1': d1, 'd2': d2, 'linea': linea}
+    if cod_item:
+        sql += " AND CodigoItem = :cod_item"
+        bind['cod_item'] = cod_item
+    if mercado:
+        sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzo"
+        bind['prefzo'] = mercado + '%'
+    sql += " GROUP BY provincia, CodigoCliente ORDER BY suma_peso DESC"
+    if top is not None:
+        sql += f" LIMIT {top}"
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql), bind)
+        raw = cur.fetchall() or []
+
+    total_lineas = sum(int(r.get('lineas') or 0) for r in raw)
+    total_cantidad = sum(float(r.get('suma_cantidad') or 0) for r in raw)
+    total_peso = sum(float(r.get('suma_peso') or 0) for r in raw)
+    total_valor = sum(float(r.get('suma_valor') or 0) for r in raw)
+
+    filas = []
+    chart_labels: list = []
+    chart_pesos: list = []
+    chart_valores: list = []
+    for i, r in enumerate(raw, 1):
+        sp = float(r.get('suma_peso') or 0)
+        sv = float(r.get('suma_valor') or 0)
+        nombre = str(r.get('nombre_cliente') or '')
+        prov = str(r.get('provincia') or '')
+        chart_labels.append(f"{nombre[:20]} ({prov[:8]})")
+        chart_pesos.append(round(sp, 2))
+        chart_valores.append(round(sv, 2))
+        filas.append({
+            'rank': i,
+            'provincia': prov,
+            'cod_cliente': str(r.get('cod_cliente') or ''),
+            'nombre_cliente': nombre,
+            'lineas': f"{int(r.get('lineas') or 0):,}",
+            'suma_cantidad': f"{float(r.get('suma_cantidad') or 0):,.2f}",
+            'suma_peso': f'{sp:,.2f}',
+            'suma_valor': f'{sv:,.2f}',
+        })
+
+    top_lead = 'Sin límite (todas las filas)' if top is None else f'Top {top}'
+    ctx = _report_shell_context(f'Ventas {linea} · Resumen provincia/cliente')
+    ctx.update({
+        'd1': d1, 'd2': d2, 'linea': linea, 'top': top, 'top_lead': top_lead,
+        'filas': filas,
+        'total_lineas': f'{total_lineas:,}',
+        'total_cantidad': f'{total_cantidad:,.2f}',
+        'total_peso': f'{total_peso:,.2f}',
+        'total_valor': f'{total_valor:,.2f}',
+        'pdf_filename': f'linea_resumen_{d1}_{d2}.pdf',
+        'chart_data': {'labels': chart_labels, 'pesos': chart_pesos, 'valores': chart_valores},
+    })
+    return render_template('pages/reporte_linea_resumen_provincia.html', **ctx)
+
+
+@bp.route('/modules/reports/ventas-linea-diario-provincia')
+@require_login
+def ventas_linea_diario_provincia():
+    from services.db import get_connection
+
+    d1 = _parse_date_string(request.args.get('desde') or request.args.get('fecha_desde'))
+    d2 = _parse_date_string(request.args.get('hasta') or request.args.get('fecha_hasta'))
+    if not d1 or not d2 or d1 > d2:
+        return _bad('Parámetros requeridos: desde y hasta (YYYY-MM-DD).')
+
+    linea = (request.args.get('linea') or '').strip()
+    if not linea:
+        return _bad('Parámetro requerido: linea (ej. "Pollo Vivo").')
+
+    try:
+        top = max(1, min(1000, int(request.args.get('top') or 200)))
+    except (TypeError, ValueError):
+        top = 200
+
+    cod_item = (request.args.get('cod_item') or '').strip()
+    mercado = (request.args.get('mercado') or '').strip().upper()
+
+    base_where = (" WHERE FechaContable BETWEEN :d1 AND :d2"
+                  " AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))")
+    bind = {'d1': d1, 'd2': d2, 'linea': linea}
+    if cod_item:
+        base_where += " AND CodigoItem = :cod_item"
+        bind['cod_item'] = cod_item
+    if mercado:
+        base_where += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzo"
+        bind['prefzo'] = mercado + '%'
+
+    sql = (f"SELECT FechaContable AS fecha,"
+           f" COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
+           f" CodigoCliente AS cod_cliente,"
+           f" MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
+           f" COUNT(*) AS lineas,"
+           f" COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
+           f" COALESCE(SUM(Peso),0) AS suma_peso,"
+           f" COALESCE(SUM(Valor),0) AS suma_valor"
+           f" FROM ventasgeneral2{base_where}"
+           f" GROUP BY fecha, provincia, CodigoCliente ORDER BY fecha ASC, suma_peso DESC LIMIT {top}")
+    sql_dia = ("SELECT FechaContable AS fecha,"
+               " COALESCE(SUM(Peso),0) AS suma_peso,"
+               " COALESCE(SUM(Valor),0) AS suma_valor"
+               f" FROM ventasgeneral2{base_where}"
+               " GROUP BY fecha ORDER BY fecha ASC")
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql), bind)
+        raw = cur.fetchall() or []
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql_dia), bind)
+        raw_dia = cur.fetchall() or []
+
+    filas = []
+    for i, r in enumerate(raw, 1):
+        fecha = r.get('fecha')
+        fecha_str = fecha.strftime('%Y-%m-%d') if hasattr(fecha, 'strftime') else str(fecha or '')
+        filas.append({
+            'rank': i,
+            'fecha': fecha_str,
+            'provincia': str(r.get('provincia') or ''),
+            'cod_cliente': str(r.get('cod_cliente') or ''),
+            'nombre_cliente': str(r.get('nombre_cliente') or ''),
+            'lineas': f"{int(r.get('lineas') or 0):,}",
+            'suma_cantidad': f"{float(r.get('suma_cantidad') or 0):,.2f}",
+            'suma_peso': f"{float(r.get('suma_peso') or 0):,.2f}",
+            'suma_valor': f"{float(r.get('suma_valor') or 0):,.2f}",
+        })
+
+    chart_fechas = []
+    chart_pesos_dia = []
+    chart_valores_dia = []
+    for r in raw_dia:
+        fecha = r.get('fecha')
+        chart_fechas.append(fecha.strftime('%Y-%m-%d') if hasattr(fecha, 'strftime') else str(fecha or ''))
+        chart_pesos_dia.append(round(float(r.get('suma_peso') or 0), 2))
+        chart_valores_dia.append(round(float(r.get('suma_valor') or 0), 2))
+
+    total_peso = sum(chart_pesos_dia)
+    total_valor = sum(chart_valores_dia)
+
+    ctx = _report_shell_context(f'Ventas {linea} · Diario por provincia/cliente')
+    ctx.update({
+        'd1': d1, 'd2': d2, 'linea': linea, 'top': top,
+        'filas': filas,
+        'total_peso': f'{total_peso:,.2f}',
+        'total_valor': f'{total_valor:,.2f}',
+        'pdf_filename': f'linea_diario_{d1}_{d2}.pdf',
+        'chart_data': {'fechas': chart_fechas, 'pesos': chart_pesos_dia, 'valores': chart_valores_dia},
+    })
+    return render_template('pages/reporte_linea_diario_provincia.html', **ctx)
+
+
+@bp.route('/modules/reports/ventas-linea-precio-diario')
+@require_login
+def ventas_linea_precio_diario():
+    from services.db import get_connection
+
+    d1 = _parse_date_string(request.args.get('desde') or request.args.get('fecha_desde'))
+    d2 = _parse_date_string(request.args.get('hasta') or request.args.get('fecha_hasta'))
+    if not d1 or not d2 or d1 > d2:
+        return _bad('Parámetros requeridos: desde y hasta (YYYY-MM-DD).')
+
+    linea = (request.args.get('linea') or '').strip()
+    if not linea:
+        return _bad('Parámetro requerido: linea (ej. "Pollo Vivo").')
+
+    try:
+        top = max(1, min(1000, int(request.args.get('top') or 200)))
+    except (TypeError, ValueError):
+        top = 200
+
+    cod_item = (request.args.get('cod_item') or '').strip()
+    mercado = (request.args.get('mercado') or '').strip().upper()
+
+    base_where = (" WHERE FechaContable BETWEEN :d1 AND :d2"
+                  " AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))")
+    bind = {'d1': d1, 'd2': d2, 'linea': linea}
+    if cod_item:
+        base_where += " AND CodigoItem = :cod_item"
+        bind['cod_item'] = cod_item
+    if mercado:
+        base_where += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzo"
+        bind['prefzo'] = mercado + '%'
+
+    sql = (f"SELECT FechaContable AS fecha,"
+           f" COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
+           f" CodigoCliente AS cod_cliente,"
+           f" MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
+           f" COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
+           f" COALESCE(SUM(Peso),0) AS suma_peso,"
+           f" COALESCE(SUM(Valor),0) AS suma_valor,"
+           f" CASE WHEN COALESCE(SUM(Peso),0) > 0"
+           f"      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
+           f"      ELSE NULL END AS precio_kg"
+           f" FROM ventasgeneral2{base_where}"
+           f" GROUP BY fecha, provincia, CodigoCliente ORDER BY fecha ASC, suma_peso DESC LIMIT {top}")
+    sql_precio_dia = ("SELECT FechaContable AS fecha,"
+                      " COALESCE(SUM(Peso),0) AS suma_peso,"
+                      " CASE WHEN COALESCE(SUM(Peso),0) > 0"
+                      "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
+                      "      ELSE NULL END AS precio_kg"
+                      f" FROM ventasgeneral2{base_where}"
+                      " GROUP BY fecha ORDER BY fecha ASC")
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql), bind)
+        raw = cur.fetchall() or []
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql_precio_dia), bind)
+        raw_precio = cur.fetchall() or []
+
+    filas = []
+    for i, r in enumerate(raw, 1):
+        fecha = r.get('fecha')
+        fecha_str = fecha.strftime('%Y-%m-%d') if hasattr(fecha, 'strftime') else str(fecha or '')
+        precio = r.get('precio_kg')
+        filas.append({
+            'rank': i,
+            'fecha': fecha_str,
+            'provincia': str(r.get('provincia') or ''),
+            'cod_cliente': str(r.get('cod_cliente') or ''),
+            'nombre_cliente': str(r.get('nombre_cliente') or ''),
+            'suma_cantidad': f"{float(r.get('suma_cantidad') or 0):,.2f}",
+            'suma_peso': f"{float(r.get('suma_peso') or 0):,.2f}",
+            'suma_valor': f"{float(r.get('suma_valor') or 0):,.2f}",
+            'precio_kg': f"{float(precio):,.4f}" if precio is not None else '—',
+        })
+
+    chart_fechas = []
+    chart_precios = []
+    for r in raw_precio:
+        fecha = r.get('fecha')
+        chart_fechas.append(fecha.strftime('%Y-%m-%d') if hasattr(fecha, 'strftime') else str(fecha or ''))
+        p = r.get('precio_kg')
+        chart_precios.append(round(float(p), 4) if p is not None else None)
+
+    ctx = _report_shell_context(f'Ventas {linea} · Precio por día provincia/cliente')
+    ctx.update({
+        'd1': d1, 'd2': d2, 'linea': linea, 'top': top,
+        'filas': filas,
+        'pdf_filename': f'linea_precio_diario_{d1}_{d2}.pdf',
+        'chart_data': {'fechas': chart_fechas, 'precios': chart_precios},
+    })
+    return render_template('pages/reporte_linea_precio_diario.html', **ctx)
+
+
+@bp.route('/modules/reports/ventas-linea-mix-productos')
+@require_login
+def ventas_linea_mix_productos():
+    from services.db import get_connection
+
+    d1 = _parse_date_string(request.args.get('desde') or request.args.get('fecha_desde'))
+    d2 = _parse_date_string(request.args.get('hasta') or request.args.get('fecha_hasta'))
+    if not d1 or not d2 or d1 > d2:
+        return _bad('Parámetros requeridos: desde y hasta (YYYY-MM-DD).')
+
+    linea = (request.args.get('linea') or '').strip()
+    if not linea:
+        return _bad('Parámetro requerido: linea (ej. "Pollo Vivo").')
+
+    mercado = (request.args.get('mercado') or '').strip().upper()
+
+    sql = ("SELECT CodigoItem AS cod_item,"
+           " MAX(COALESCE(NULLIF(TRIM(GlosaDetalle),''),'(sin glosa)')) AS glosa,"
+           " COUNT(*) AS lineas,"
+           " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
+           " COALESCE(SUM(Peso),0) AS suma_peso,"
+           " COALESCE(SUM(Valor),0) AS suma_valor,"
+           " CASE WHEN COALESCE(SUM(Peso),0) > 0"
+           "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
+           "      ELSE NULL END AS precio_kg"
+           " FROM ventasgeneral2"
+           " WHERE FechaContable BETWEEN :d1 AND :d2"
+           " AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))")
+    bind = {'d1': d1, 'd2': d2, 'linea': linea}
+    if mercado:
+        sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzo"
+        bind['prefzo'] = mercado + '%'
+    sql += " GROUP BY CodigoItem ORDER BY suma_peso DESC"
+
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql), bind)
+        raw = cur.fetchall() or []
+
+    total_peso = sum(float(r.get('suma_peso') or 0) for r in raw)
+    total_valor = sum(float(r.get('suma_valor') or 0) for r in raw)
+
+    filas = []
+    chart_labels: list = []
+    chart_pesos: list = []
+    chart_valores: list = []
+    for i, r in enumerate(raw, 1):
+        sp = float(r.get('suma_peso') or 0)
+        sv = float(r.get('suma_valor') or 0)
+        pk = r.get('precio_kg')
+        glosa = str(r.get('glosa') or '')
+        pct = round(sp / total_peso * 100, 2) if total_peso else 0.0
+        chart_labels.append(glosa[:30] or str(r.get('cod_item') or ''))
+        chart_pesos.append(round(sp, 2))
+        chart_valores.append(round(sv, 2))
+        filas.append({
+            'rank': i,
+            'cod_item': str(r.get('cod_item') or ''),
+            'glosa': glosa,
+            'lineas': f"{int(r.get('lineas') or 0):,}",
+            'suma_cantidad': f"{float(r.get('suma_cantidad') or 0):,.2f}",
+            'suma_peso': f'{sp:,.2f}',
+            'suma_valor': f'{sv:,.2f}',
+            'precio_kg': f'{float(pk):,.4f}' if pk is not None else '—',
+            'pct_peso': f'{pct:.2f}',
+        })
+
+    ctx = _report_shell_context(f'Ventas {linea} · Mix de productos')
+    ctx.update({
+        'd1': d1, 'd2': d2, 'linea': linea,
+        'mercado': mercado or None,
+        'filas': filas,
+        'total_peso': f'{total_peso:,.2f}',
+        'total_valor': f'{total_valor:,.2f}',
+        'pdf_filename': f'linea_mix_productos_{d1}_{d2}.pdf',
+        'chart_data': {'labels': chart_labels, 'pesos': chart_pesos, 'valores': chart_valores},
+    })
+    return render_template('pages/reporte_linea_mix_productos.html', **ctx)
+
+
 @bp.route('/modules/reports/<slug>')
 @require_login
 def report_placeholder(slug: str):

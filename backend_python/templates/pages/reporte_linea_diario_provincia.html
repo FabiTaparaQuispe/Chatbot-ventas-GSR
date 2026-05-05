@@ -1,0 +1,152 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+    <h1>{{ linea }} · Ventas diarias por provincia y cliente</h1>
+    <p class="page-lead">FechaContable del <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong> · ordenado por fecha ASC y peso DESC.</p>
+</div>
+
+<div class="reporte-page">
+    <div class="card-filtros-demo reporte-informe-panel">
+        <div class="reporte-informe-toolbar">
+            <button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button>
+        </div>
+        <div id="reporte-pdf-root">
+            <h2 class="reporte-informe-title">{{ linea }} · Detalle diario</h2>
+            <p class="reporte-informe-meta">
+                Período: <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong> ·
+                Peso total: <strong>{{ total_peso }} kg</strong> ·
+                Valor total: <strong>S/ {{ total_valor }}</strong>
+            </p>
+
+            {% if filas %}
+            <div class="table-wrapper overflow-x-auto productos-dt-skin">
+                <table class="data-table config-table display stripe">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Fecha</th>
+                            <th>Provincia</th>
+                            <th>Nombre cliente</th>
+                            <th style="text-align:right;">Líneas</th>
+                            <th style="text-align:right;">Cantidad (un.)</th>
+                            <th style="text-align:right;">Peso (kg)</th>
+                            <th style="text-align:right;">Valor (S/)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in filas %}
+                        <tr>
+                            <td>{{ f.rank }}</td>
+                            <td>{{ f.fecha }}</td>
+                            <td>{{ f.provincia }}</td>
+                            <td>{{ f.nombre_cliente }}</td>
+                            <td style="text-align:right;">{{ f.lineas }}</td>
+                            <td style="text-align:right;">{{ f.suma_cantidad }}</td>
+                            <td style="text-align:right;">{{ f.suma_peso }}</td>
+                            <td style="text-align:right;">{{ f.suma_valor }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p style="color:var(--muted);">No se encontraron ventas para la línea "{{ linea }}" en el período seleccionado.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if chart_data.fechas %}
+    <section class="reporte-chart-section" aria-label="Gráfico peso diario">
+        <h3 class="reporte-chart-heading">Peso total (kg) por día</h3>
+        <div class="chart-inner"><canvas id="chartPesoDia"></canvas></div>
+    </section>
+    <section class="reporte-chart-section" aria-label="Gráfico valor diario">
+        <h3 class="reporte-chart-heading">Valor total (S/) por día</h3>
+        <div class="chart-inner"><canvas id="chartValorDia"></canvas></div>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/reporte_pdf.js"></script>
+<script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
+<script>
+(function () {
+    var d = {{ chart_data | tojson }};
+    var fechas  = d.fechas  || [];
+    var pesos   = d.pesos   || [];
+    var valores = d.valores || [];
+
+    var lineOpts = {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { labels: { color: '#cbd5e1', boxWidth: 14 } } },
+        scales: {
+            x: { ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 10 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+            y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' } },
+        },
+    };
+
+    function buildCharts() {
+        if (!window.Chart || !fechas.length) return;
+
+        new Chart(document.getElementById('chartPesoDia'), {
+            type: 'line',
+            data: {
+                labels: fechas,
+                datasets: [{
+                    label: 'Peso (kg)',
+                    data: pesos,
+                    borderColor: 'rgba(34,197,94,1)',
+                    backgroundColor: 'rgba(34,197,94,0.15)',
+                    borderWidth: 2,
+                    tension: 0.2,
+                    fill: true,
+                    pointRadius: fechas.length > 60 ? 0 : 3,
+                    pointBackgroundColor: 'rgba(34,197,94,1)',
+                }],
+            },
+            options: Object.assign({}, lineOpts, {
+                plugins: Object.assign({}, lineOpts.plugins, {
+                    tooltip: { callbacks: { label: function(ctx) {
+                        return 'Peso: ' + (ctx.parsed.y || 0).toLocaleString('es-PE', {minimumFractionDigits:2}) + ' kg';
+                    }}},
+                }),
+            }),
+        });
+
+        new Chart(document.getElementById('chartValorDia'), {
+            type: 'line',
+            data: {
+                labels: fechas,
+                datasets: [{
+                    label: 'Valor (S/)',
+                    data: valores,
+                    borderColor: 'rgba(59,130,246,1)',
+                    backgroundColor: 'rgba(59,130,246,0.15)',
+                    borderWidth: 2,
+                    tension: 0.2,
+                    fill: true,
+                    pointRadius: fechas.length > 60 ? 0 : 3,
+                    pointBackgroundColor: 'rgba(59,130,246,1)',
+                }],
+            },
+            options: Object.assign({}, lineOpts, {
+                plugins: Object.assign({}, lineOpts.plugins, {
+                    tooltip: { callbacks: { label: function(ctx) {
+                        return 'S/ ' + (ctx.parsed.y || 0).toLocaleString('es-PE', {minimumFractionDigits:2});
+                    }}},
+                }),
+            }),
+        });
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', buildCharts);
+    else buildCharts();
+})();
+</script>
+{% endblock %}

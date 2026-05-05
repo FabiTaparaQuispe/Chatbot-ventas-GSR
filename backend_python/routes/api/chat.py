@@ -32,6 +32,17 @@ Si hay filas de ranking/top, escribe primero la lista numerada (1. nombre: N lí
 
 COMPARATIVO ESTRICTO: cuando el usuario pide comparar dos períodos (dos meses, A vs B, enero vs febrero, etc.) DEBES llamar UNA SOLA VEZ a ventasgeneral_comparativo_periodos con periodo_a_desde, periodo_a_hasta, periodo_b_desde, periodo_b_hasta. NUNCA llames ventasgeneral_barras_ventas_dimension dos veces ni calcules tú mismo la diferencia — el resultado sería inventado.
 
+LÍNEA COMERCIAL: cuando el usuario pregunte por una línea usa las herramientas de línea. El campo LineaComercial guarda texto, no códigos numéricos. Valores reales en la base de datos:
+"Pollo Vivo" | "Pollo Beneficiado" | "Pollo trozado Seco" | "Embutidos" | "Menudencia" | "Semielaborados" | "Pavos" | "Precocidos" | "Huevos SF" | "Pollo Congelado San Fer." | "Cerdos" | "Promociones embutidos" | "Venta de insumos" | "Envases"
+Mapeo de códigos que puede mencionar el usuario: línea 601 = "Pollo Vivo". Si el usuario dice "pollo vivo" o "línea 601" → linea_comercial="Pollo Vivo".
+Productos dentro de Pollo Vivo: cod_item 100 = carne, cod_item 103 = brasa. Usa cod_item cuando el usuario filtre por tipo de producto.
+Mercados (DescripcionZonaPrecio) disponibles para Pollo Vivo: AQPMERCADO, TACNA, ILO, MOQUEGUA, MOLLENDO, CAMANA, LAJOYA, PEDREGAL. Pasa el valor como parámetro "mercado" cuando el usuario filtre por mercado/zona.
+- resumen provincia/cliente → ventasgeneral_linea_resumen_provincia (linea_comercial obligatorio, pasar el texto exacto). No pases top_n salvo que el usuario pida explícitamente un top N; sin top_n se devuelven todas las filas provincia+cliente.
+- ventas por día provincia/cliente → ventasgeneral_linea_diario_provincia
+- precio por día provincia/cliente → ventasgeneral_linea_precio_diario (incluye precio_kg = Valor/Peso)
+- mix carne vs brasa / comparar productos → ventasgeneral_linea_mix_productos (agrupa por CodigoItem, incluye pct_peso)
+La comparación es case-insensitive. Si el usuario no especifica la línea, pregúntala antes de llamar la herramienta.
+
 Mapeo herramientas:
 - más NC por cliente → ventasgeneral_top_clientes_nota_credito (URL: /modules/reports/ventas-top-clientes-nc?desde=&hasta=&top=)
 - pareto NC por zona → ventasgeneral_pareto_nc_zonaprecio (/modules/reports/pareto-nc-zona?…, no por cliente)
@@ -44,6 +55,10 @@ Mapeo herramientas:
 - ruta/corp → ventasgeneral_barras_ruta_comercial / ventasgeneral_barras_corporativo
 - serie mensual → ventasgeneral_serie_mensual_valor
 - proyección ventas → ventasgeneral_proyeccion_ventas
+- ventas línea resumen → ventasgeneral_linea_resumen_provincia
+- ventas línea por día → ventasgeneral_linea_diario_provincia
+- precio línea por día → ventasgeneral_linea_precio_diario
+- mix productos / carne vs brasa → ventasgeneral_linea_mix_productos
 - líneas sueltas → ventasgeneral_buscar
 - totales → ventasgeneral_resumen
 

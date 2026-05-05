@@ -11,6 +11,7 @@ from sqlalchemy import text
 
 from app.db import get_engine
 from app.deps import templates
+from app.settings import get_settings
 from app.documento_tipo import enriquecer_filas_mix_tdoc
 from app import ventas_queries as vq
 from app.ventas_parse import (
@@ -22,6 +23,13 @@ from app.ventas_parse import (
 )
 
 router = APIRouter(prefix="/modules", tags=["reports"])
+
+
+def _report_template_response(request: Request, template_name: str, ctx: dict[str, Any]):
+    ctx = dict(ctx)
+    ctx.setdefault("request", request)
+    ctx.setdefault("app_company", get_settings().app_company)
+    return templates(request).TemplateResponse(template_name, ctx)
 
 
 def _short(s: str, n: int = 30) -> str:
@@ -87,7 +95,7 @@ def ventas_barras_dimension(request: Request) -> Any:
         "table_rows": rows,
         "chart_payload": payload,
     }
-    return templates(request).TemplateResponse("reports/chart_hbar.html", ctx)
+    return _report_template_response(request, "reports/chart_hbar.html", ctx)
 
 
 @router.get("/ventas_top_productos.php")
@@ -129,7 +137,7 @@ def ventas_top_productos(request: Request) -> Any:
         "table_rows": rows,
         "chart_payload": {"labels": labels, "valores": vals, "label": "Importe"},
     }
-    return templates(request).TemplateResponse("reports/chart_hbar.html", ctx)
+    return _report_template_response(request, "reports/chart_hbar.html", ctx)
 
 
 @router.get("/ventas_top_clientes_global.php")
@@ -168,7 +176,7 @@ def ventas_top_clientes_global(request: Request) -> Any:
         "table_rows": rows,
         "chart_payload": {"labels": labels, "valores": vals, "label": "Importe"},
     }
-    return templates(request).TemplateResponse("reports/chart_hbar.html", ctx)
+    return _report_template_response(request, "reports/chart_hbar.html", ctx)
 
 
 @router.get("/ventas_top_clientes_nc.php")
@@ -207,7 +215,7 @@ def ventas_top_clientes_nc(request: Request) -> Any:
         "table_rows": rows,
         "chart_payload": {"labels": labels, "valores": vals, "label": "Líneas NC"},
     }
-    return templates(request).TemplateResponse("reports/chart_hbar.html", ctx)
+    return _report_template_response(request, "reports/chart_hbar.html", ctx)
 
 
 @router.get("/ventas_barras_ruta.php")
@@ -236,7 +244,7 @@ def ventas_barras_ruta(request: Request) -> Any:
         "table_rows": rows,
         "chart_payload": {"labels": labels, "valores": vals, "label": "Importe"},
     }
-    return templates(request).TemplateResponse("reports/chart_hbar.html", ctx)
+    return _report_template_response(request, "reports/chart_hbar.html", ctx)
 
 
 @router.get("/ventas_barras_corporativo.php")
@@ -273,7 +281,7 @@ def ventas_barras_corporativo(request: Request) -> Any:
         "table_rows": rows,
         "chart_payload": {"labels": labels, "valores": vals, "label": "Importe"},
     }
-    return templates(request).TemplateResponse("reports/chart_hbar.html", ctx)
+    return _report_template_response(request, "reports/chart_hbar.html", ctx)
 
 
 @router.get("/ventas_mix_tdoc.php")
@@ -310,7 +318,7 @@ def ventas_mix_tdoc(request: Request) -> Any:
         "table_rows": rows,
         "chart_payload": {"labels": labels, "valores": vals},
     }
-    return templates(request).TemplateResponse("reports/chart_doughnut.html", ctx)
+    return _report_template_response(request, "reports/chart_doughnut.html", ctx)
 
 
 @router.get("/ventas_serie_mensual.php")
@@ -338,7 +346,7 @@ def ventas_serie_mensual(request: Request) -> Any:
         "table_rows": rows,
         "chart_payload": {"labels": labels, "valores": vals},
     }
-    return templates(request).TemplateResponse("reports/chart_line.html", ctx)
+    return _report_template_response(request, "reports/chart_line.html", ctx)
 
 
 @router.get("/ventas_comparativo.php")
@@ -389,7 +397,7 @@ def ventas_comparativo(request: Request) -> Any:
             "label_b": f"B ({b1}…{b2})",
         },
     }
-    return templates(request).TemplateResponse("reports/chart_comparativo.html", ctx)
+    return _report_template_response(request, "reports/chart_comparativo.html", ctx)
 
 
 @router.get("/pareto_nc_zona.php")
@@ -438,7 +446,7 @@ def pareto_nc_zona(request: Request) -> Any:
             "line_label": "% acumulado",
         },
     }
-    return templates(request).TemplateResponse("reports/chart_pareto.html", ctx)
+    return _report_template_response(request, "reports/chart_pareto.html", ctx)
 
 
 @router.get("/pareto_clientes_zona.php")
@@ -492,7 +500,7 @@ def pareto_clientes_zona(request: Request) -> Any:
             "line_label": "% acumulado (sobre total zona)",
         },
     }
-    return templates(request).TemplateResponse("reports/chart_pareto.html", ctx)
+    return _report_template_response(request, "reports/chart_pareto.html", ctx)
 
 
 @router.get("/resumen.php")
@@ -614,12 +622,13 @@ def ventasgeneral_resumen_tabla(request: Request) -> Any:
     r2 = f"{float(row.get('suma_cantidad') or 0):,.2f}"
     r3 = f"{float(row.get('suma_peso') or 0):,.2f}"
     pn_js = json.dumps(pdf_name, ensure_ascii=False)
+    ac = html_escape(get_settings().app_company)
     body = f"""<!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tabla · Resumen ventasgeneral</title>
 <link rel="stylesheet" href="/assets/css/app.css">
 <style>body{{margin:0;}}main{{padding:1rem;max-width:980px;margin:0 auto;}} .wrap-dark{{background:var(--surface,#1e293b);border-radius:12px;padding:1rem;border:1px solid var(--border,#334155);}} .wrap-dark .pdf-meta{{color:var(--muted,#a1a1aa);}} #reporte-pdf-root table.data-table tbody td{{padding:0.65rem 0.85rem;}}</style>
-</head><body><main><div class="wrap-dark">
+</head><body data-app-company="{ac}" data-pdf-logo="/assets/img/empresa-logo.png"><main><div class="wrap-dark">
 <div class="reporte-toolbar"><button type="button" class="btn btn-primary" id="btn-pdf-resumen">Descargar PDF</button></div>
 <div id="reporte-pdf-root">
 <h2 class="pdf-h2">Agregados del periodo</h2>

@@ -1,0 +1,123 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+    <h1>{{ linea }} · Precio por día y cliente</h1>
+    <p class="page-lead">FechaContable del <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong> · Precio kg = Valor / Peso · ordenado por fecha ASC y peso DESC.</p>
+</div>
+
+<div class="reporte-page">
+    <div class="card-filtros-demo reporte-informe-panel">
+        <div class="reporte-informe-toolbar">
+            <button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button>
+        </div>
+        <div id="reporte-pdf-root">
+            <h2 class="reporte-informe-title">{{ linea }} · Precio por día provincia/cliente</h2>
+            <p class="reporte-informe-meta">
+                Período: <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong> ·
+                Precio/kg = SUM(Valor) / SUM(Peso) · en soles (S/).
+            </p>
+
+            {% if filas %}
+            <div class="table-wrapper overflow-x-auto productos-dt-skin">
+                <table class="data-table config-table display stripe">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Fecha</th>
+                            <th>Provincia</th>
+                            <th>Nombre cliente</th>
+                            <th style="text-align:right;">Cantidad (un.)</th>
+                            <th style="text-align:right;">Peso (kg)</th>
+                            <th style="text-align:right;">Valor (S/)</th>
+                            <th style="text-align:right;">Precio/kg (S/)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in filas %}
+                        <tr>
+                            <td>{{ f.rank }}</td>
+                            <td>{{ f.fecha }}</td>
+                            <td>{{ f.provincia }}</td>
+                            <td>{{ f.nombre_cliente }}</td>
+                            <td style="text-align:right;">{{ f.suma_cantidad }}</td>
+                            <td style="text-align:right;">{{ f.suma_peso }}</td>
+                            <td style="text-align:right;">{{ f.suma_valor }}</td>
+                            <td style="text-align:right;">{{ f.precio_kg }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p style="color:var(--muted);">No se encontraron ventas para la línea "{{ linea }}" en el período seleccionado.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if chart_data.fechas %}
+    <section class="reporte-chart-section" aria-label="Gráfico precio diario">
+        <h3 class="reporte-chart-heading">Precio promedio ponderado (S//kg) por día</h3>
+        <div class="chart-inner"><canvas id="chartPrecioDia"></canvas></div>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/reporte_pdf.js"></script>
+<script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
+<script>
+(function () {
+    var d = {{ chart_data | tojson }};
+    var fechas  = d.fechas  || [];
+    var precios = d.precios || [];
+
+    function buildCharts() {
+        if (!window.Chart || !fechas.length) return;
+
+        new Chart(document.getElementById('chartPrecioDia'), {
+            type: 'line',
+            data: {
+                labels: fechas,
+                datasets: [{
+                    label: 'Precio/kg (S/)',
+                    data: precios,
+                    borderColor: 'rgba(251,146,60,1)',
+                    backgroundColor: 'rgba(251,146,60,0.15)',
+                    borderWidth: 2,
+                    tension: 0.2,
+                    fill: true,
+                    pointRadius: fechas.length > 60 ? 0 : 4,
+                    pointBackgroundColor: 'rgba(251,146,60,1)',
+                    spanGaps: true,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { labels: { color: '#cbd5e1', boxWidth: 14 } },
+                    tooltip: { callbacks: { label: function(ctx) {
+                        return 'S/ ' + (ctx.parsed.y != null ? ctx.parsed.y.toLocaleString('es-PE', {minimumFractionDigits:4, maximumFractionDigits:4}) : '—') + '/kg';
+                    }}},
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 10 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                    y: {
+                        ticks: { color: '#94a3b8', callback: function(v){ return 'S/ ' + v.toLocaleString('es-PE', {minimumFractionDigits:2}); } },
+                        grid: { color: 'rgba(148,163,184,0.15)' },
+                        title: { display: true, text: 'S//kg', color: '#94a3b8', font: { size: 11 } },
+                    },
+                },
+            },
+        });
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', buildCharts);
+    else buildCharts();
+})();
+</script>
+{% endblock %}

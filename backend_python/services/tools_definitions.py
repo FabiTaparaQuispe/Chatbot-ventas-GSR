@@ -5,6 +5,10 @@ from services.urlmap import (
     REPORT_SLUG_VENTAS_BARRAS_DIMENSION,
     REPORT_SLUG_VENTAS_BARRAS_RUTA,
     REPORT_SLUG_VENTAS_COMPARATIVO,
+    REPORT_SLUG_VENTAS_LINEA_DIARIO_PROVINCIA,
+    REPORT_SLUG_VENTAS_LINEA_MIX_PRODUCTOS,
+    REPORT_SLUG_VENTAS_LINEA_PRECIO_DIARIO,
+    REPORT_SLUG_VENTAS_LINEA_RESUMEN_PROVINCIA,
     REPORT_SLUG_VENTAS_MIX_TDOC,
     REPORT_SLUG_VENTAS_SERIE_MENSUAL,
     REPORT_SLUG_VENTAS_TOP_CLIENTES_GLOBAL,
@@ -20,6 +24,10 @@ def ventas_tool_definitions():
     d = {'type': 'string'}
     d_opt = {'type': 'string', 'description': 'YYYY-MM-DD'}
     dn = {'anyOf': [{'type': 'integer'}, {'type': 'string'}], 'description': 'Entero positivo'}
+    dn_top_linea_resumen = {
+        'anyOf': [{'type': 'integer'}, {'type': 'string'}],
+        'description': 'Opcional. Omitir para devolver todas las filas (sin LIMIT). Si se indica un entero >0, máximo ese número de filas (tope 100000).',
+    }
     dim = {'type': 'string', 'enum': ['precio', 'comercial'], 'description': 'precio=DescripcionZonaPrecio, comercial=ZonaComercial'}
     pref = {'type': 'string', 'description': 'Prefijo de DescripcionZonaPrecio, ej. AQP, TACNA, MOQUEGUA, LAJOYA'}
     prov = {'type': 'string', 'description': 'Valor de Provincia, ej. AREQUIPA, TACNA'}
@@ -131,5 +139,47 @@ def ventas_tool_definitions():
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt,
                 'meses_a_proyectar': {'type': 'integer', 'default': 3, 'description': 'Meses futuros a proyectar (1-12)'},
             }, 'required': ['fecha_desde', 'fecha_hasta']},
+        }},
+        {'type': 'function', 'function': {
+            'name': 'ventasgeneral_linea_resumen_provincia',
+            'description': f'Resumen de ventas de una línea comercial agrupado por provincia y cliente: SUM(Cantidad), SUM(Peso), SUM(Valor), ordenado por peso DESC. Por defecto sin límite de filas (todas). Filtros opcionales: cod_item (producto, ej. 100=carne, 103=brasa) y mercado (prefijo DescripcionZonaPrecio, ej. TACNA, AQPMERCADO). reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_LINEA_RESUMEN_PROVINCIA}?…',
+            'parameters': {'type': 'object', 'properties': {
+                'fecha_desde': d_opt, 'fecha_hasta': d_opt,
+                'linea_comercial': {'type': 'string', 'description': "Texto de LineaComercial, ej. 'Pollo Vivo'"},
+                'cod_item': {'type': 'string', 'description': 'Código de producto, ej. 100 (carne), 103 (brasa)'},
+                'mercado': pref,
+                'top_n': dn_top_linea_resumen,
+            }, 'required': ['fecha_desde', 'fecha_hasta', 'linea_comercial']},
+        }},
+        {'type': 'function', 'function': {
+            'name': 'ventasgeneral_linea_diario_provincia',
+            'description': f'Ventas diarias de una línea comercial por fecha, provincia y cliente. Filtros opcionales: cod_item (ej. 100=carne, 103=brasa) y mercado (prefijo zona precio). reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_LINEA_DIARIO_PROVINCIA}?…',
+            'parameters': {'type': 'object', 'properties': {
+                'fecha_desde': d_opt, 'fecha_hasta': d_opt,
+                'linea_comercial': {'type': 'string', 'description': "Texto de LineaComercial, ej. 'Pollo Vivo'"},
+                'cod_item': {'type': 'string', 'description': 'Código de producto, ej. 100 (carne), 103 (brasa)'},
+                'mercado': pref,
+                'top_n': dn,
+            }, 'required': ['fecha_desde', 'fecha_hasta', 'linea_comercial']},
+        }},
+        {'type': 'function', 'function': {
+            'name': 'ventasgeneral_linea_precio_diario',
+            'description': f'Precio por día (precio_kg = Valor/Peso) de una línea comercial por fecha, provincia y cliente. Filtros opcionales: cod_item y mercado. reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_LINEA_PRECIO_DIARIO}?…',
+            'parameters': {'type': 'object', 'properties': {
+                'fecha_desde': d_opt, 'fecha_hasta': d_opt,
+                'linea_comercial': {'type': 'string', 'description': "Texto de LineaComercial, ej. 'Pollo Vivo'"},
+                'cod_item': {'type': 'string', 'description': 'Código de producto, ej. 100 (carne), 103 (brasa)'},
+                'mercado': pref,
+                'top_n': dn,
+            }, 'required': ['fecha_desde', 'fecha_hasta', 'linea_comercial']},
+        }},
+        {'type': 'function', 'function': {
+            'name': 'ventasgeneral_linea_mix_productos',
+            'description': f'Mix de productos dentro de una línea comercial: SUM(Cantidad), SUM(Peso), SUM(Valor), precio_kg y % del peso total por CodigoItem. Responde "¿cuánto carne vs brasa se vendió?". Filtro opcional: mercado. reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_LINEA_MIX_PRODUCTOS}?…',
+            'parameters': {'type': 'object', 'properties': {
+                'fecha_desde': d_opt, 'fecha_hasta': d_opt,
+                'linea_comercial': {'type': 'string', 'description': "Texto de LineaComercial, ej. 'Pollo Vivo'"},
+                'mercado': pref,
+            }, 'required': ['fecha_desde', 'fecha_hasta', 'linea_comercial']},
         }},
     ]

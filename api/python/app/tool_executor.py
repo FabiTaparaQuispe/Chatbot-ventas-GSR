@@ -61,6 +61,10 @@ class ToolExecutor:
             "ventasgeneral_barras_corporativo": self._barras_corp,
             "ventasgeneral_serie_mensual_valor": self._serie,
             "ventasgeneral_proyeccion_ventas": self._proyeccion,
+            "ventasgeneral_linea_resumen_provincia": self._linea_resumen_provincia,
+            "ventasgeneral_linea_diario_provincia": self._linea_diario_provincia,
+            "ventasgeneral_linea_precio_diario": self._linea_precio_diario,
+            "ventasgeneral_linea_mix_productos": self._linea_mix_productos,
         }
         fn = m.get(name)
         if fn is None:
@@ -99,6 +103,18 @@ class ToolExecutor:
         except (TypeError, ValueError):
             return default
         return max(lo, min(hi, n))
+
+    def _linea_resumen_top_n(self, v: Any) -> int | None:
+        """None = sin LIMIT (todas las filas). Entero >0 acota (máx. 100000)."""
+        if v in (None, ""):
+            return None
+        try:
+            n = int(v) if not isinstance(v, float) else int(v)
+        except (TypeError, ValueError):
+            return None
+        if n <= 0:
+            return None
+        return max(1, min(100_000, n))
 
     def _dim_pc(self, v: Any) -> str:
         d = str(v or "precio").strip().lower()
@@ -373,6 +389,110 @@ class ToolExecutor:
             "periodo": data["periodo"],
             "filas": data["filas"],
             "reporte_url": "ventas_serie_mensual.php?" + q,
+            "_sql_traces": tr,
+        }
+
+    def _linea_resumen_provincia(self, args: dict[str, Any]) -> dict[str, Any]:
+        d1, d2 = self._parse_range(args)
+        linea = str(args.get("linea_comercial") or "").strip()
+        if not linea:
+            raise ValueError("Falta linea_comercial (ej. 'Pollo Vivo')")
+        top = self._linea_resumen_top_n(args.get("top_n"))
+        cod_item = str(args.get("cod_item") or "").strip() or None
+        mercado = str(args.get("mercado") or "").strip().upper() or None
+        data = vq.ventas_linea_resumen_provincia(self._conn, d1, d2, linea, top, cod_item=cod_item, prefijo_zona=mercado)
+        tr = data.pop("_sql_traces", [])
+        q_params: dict[str, Any] = {"desde": d1, "hasta": d2, "linea": linea}
+        if top is not None:
+            q_params["top"] = top
+        if cod_item:
+            q_params["cod_item"] = cod_item
+        if mercado:
+            q_params["mercado"] = mercado
+        q = urlencode(q_params, safe="", quote_via=quote)
+        return {
+            "tabla": "ventasgeneral",
+            "tipo": "linea_resumen_provincia_cliente",
+            "linea_comercial": linea,
+            "periodo": data["periodo"],
+            "filas": data["filas"],
+            "reporte_url": "ventas-linea-resumen-provincia?" + q,
+            "_sql_traces": tr,
+        }
+
+    def _linea_diario_provincia(self, args: dict[str, Any]) -> dict[str, Any]:
+        d1, d2 = self._parse_range(args)
+        linea = str(args.get("linea_comercial") or "").strip()
+        if not linea:
+            raise ValueError("Falta linea_comercial (ej. 'Pollo Vivo')")
+        top = self._int_arg(args.get("top_n"), 200, 1, 1000)
+        cod_item = str(args.get("cod_item") or "").strip() or None
+        mercado = str(args.get("mercado") or "").strip().upper() or None
+        data = vq.ventas_linea_diario_provincia(self._conn, d1, d2, linea, top, cod_item=cod_item, prefijo_zona=mercado)
+        tr = data.pop("_sql_traces", [])
+        q_params: dict[str, Any] = {"desde": d1, "hasta": d2, "linea": linea, "top": top}
+        if cod_item:
+            q_params["cod_item"] = cod_item
+        if mercado:
+            q_params["mercado"] = mercado
+        q = urlencode(q_params, safe="", quote_via=quote)
+        return {
+            "tabla": "ventasgeneral",
+            "tipo": "linea_diario_provincia_cliente",
+            "linea_comercial": linea,
+            "periodo": data["periodo"],
+            "filas": data["filas"],
+            "reporte_url": "ventas-linea-diario-provincia?" + q,
+            "_sql_traces": tr,
+        }
+
+    def _linea_precio_diario(self, args: dict[str, Any]) -> dict[str, Any]:
+        d1, d2 = self._parse_range(args)
+        linea = str(args.get("linea_comercial") or "").strip()
+        if not linea:
+            raise ValueError("Falta linea_comercial (ej. 'Pollo Vivo')")
+        top = self._int_arg(args.get("top_n"), 200, 1, 1000)
+        cod_item = str(args.get("cod_item") or "").strip() or None
+        mercado = str(args.get("mercado") or "").strip().upper() or None
+        data = vq.ventas_linea_precio_diario(self._conn, d1, d2, linea, top, cod_item=cod_item, prefijo_zona=mercado)
+        tr = data.pop("_sql_traces", [])
+        q_params: dict[str, Any] = {"desde": d1, "hasta": d2, "linea": linea, "top": top}
+        if cod_item:
+            q_params["cod_item"] = cod_item
+        if mercado:
+            q_params["mercado"] = mercado
+        q = urlencode(q_params, safe="", quote_via=quote)
+        return {
+            "tabla": "ventasgeneral",
+            "tipo": "linea_precio_diario_provincia_cliente",
+            "linea_comercial": linea,
+            "periodo": data["periodo"],
+            "filas": data["filas"],
+            "reporte_url": "ventas-linea-precio-diario?" + q,
+            "_sql_traces": tr,
+        }
+
+    def _linea_mix_productos(self, args: dict[str, Any]) -> dict[str, Any]:
+        d1, d2 = self._parse_range(args)
+        linea = str(args.get("linea_comercial") or "").strip()
+        if not linea:
+            raise ValueError("Falta linea_comercial (ej. 'Pollo Vivo')")
+        mercado = str(args.get("mercado") or "").strip().upper() or None
+        data = vq.ventas_linea_mix_productos(self._conn, d1, d2, linea, prefijo_zona=mercado)
+        tr = data.pop("_sql_traces", [])
+        q_params: dict[str, Any] = {"desde": d1, "hasta": d2, "linea": linea}
+        if mercado:
+            q_params["mercado"] = mercado
+        q = urlencode(q_params, safe="", quote_via=quote)
+        return {
+            "tabla": "ventasgeneral",
+            "tipo": "linea_mix_productos",
+            "linea_comercial": linea,
+            "periodo": data["periodo"],
+            "total_peso": data["total_peso"],
+            "total_valor": data["total_valor"],
+            "filas": data["filas"],
+            "reporte_url": "ventas-linea-mix-productos?" + q,
             "_sql_traces": tr,
         }
 
