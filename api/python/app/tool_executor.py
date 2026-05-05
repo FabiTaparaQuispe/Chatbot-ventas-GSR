@@ -39,6 +39,15 @@ class ToolExecutor:
     def execute(self, name: str, args: dict[str, Any]) -> str:
         try:
             result = self._dispatch(name, args)
+        except ValueError as e:
+            result = {
+                "error": str(e),
+                "accion_para_el_asistente": (
+                    "Pregunta al usuario en español, de forma concreta, por el dato que falta o el formato correcto "
+                    "(fechas YYYY-MM-DD). No inventes valores. Cuando el usuario responda, vuelve a llamar esta "
+                    "herramienta con todos los parámetros requeridos."
+                ),
+            }
         except Exception as e:
             result = {"error": str(e)}
         if isinstance(result, dict):

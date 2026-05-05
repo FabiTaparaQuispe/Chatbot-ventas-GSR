@@ -9,7 +9,8 @@ from openai import OpenAI
 
 MAX_ITERATIONS = 10
 MAX_TOOL_JSON_BYTES = 14000
-MAX_429_RETRIES = 5
+MAX_429_RETRIES = 3
+_MAX_WAIT_SEC = 25.0
 
 
 class GroqClient:
@@ -88,9 +89,9 @@ class GroqClient:
                 if self._is_groq_daily_token_limit(msg):
                     raise RuntimeError(self._friendly_daily(msg)) from e
                 if self._is_rate_limit(msg) and attempt < MAX_429_RETRIES:
-                    sleep_sec = self._parse_retry_seconds(msg)
-                    if sleep_sec < 1.0:
-                        sleep_sec = min(8.0, 2.0 * attempt)
+                    sleep_sec = self._get_wait_seconds(e, msg)
+                    if sleep_sec > _MAX_WAIT_SEC:
+                        raise RuntimeError(self._friendly_wait_long(sleep_sec)) from e
                     time.sleep(sleep_sec)
                     continue
                 raise RuntimeError(self._friendly_error(msg)) from e
@@ -126,18 +127,41 @@ class GroqClient:
     @staticmethod
     def _friendly_error(raw: str) -> str:
         if GroqClient._is_rate_limit(raw):
-            return (
-                "Groq devolvió límite de velocidad (429). Espera unos minutos o cambia de modelo en GROQ_MODEL. [Detalle] "
-                + raw
-            )
+            wait = GroqClient._parse_retry_seconds(raw)
+            if wait >= 1.0:
+                mins = int(wait // 60)
+                secs = int(wait % 60)
+                wait_str = f"{mins}m {secs}s" if mins > 0 else f"{secs}s"
+                return f"Límite de consultas Groq. Intentá de nuevo en {wait_str}."
+            return "Límite de consultas Groq. Intentá de nuevo en unos minutos."
         return "Groq error: " + raw
 
     @staticmethod
+    def _friendly_wait_long(wait_sec: float) -> str:
+        mins = int(wait_sec // 60)
+        secs = int(wait_sec % 60)
+        wait_str = f"{mins}m {secs}s" if mins > 0 else f"{secs}s"
+        return f"Límite de consultas Groq. Intentá de nuevo en {wait_str}."
+
+    @classmethod
+    def _get_wait_seconds(cls, exc: Exception, msg: str) -> float:
+        try:
+            ra = exc.response.headers.get("retry-after") or exc.response.headers.get("Retry-After")  # type: ignore[attr-defined]
+            if ra:
+                return min(300.0, max(1.0, float(ra)))
+        except Exception:
+            pass
+        return cls._parse_retry_seconds(msg)
+
+    @staticmethod
     def _parse_retry_seconds(message: str) -> float:
-        m = re.search(r"try again in ([\d.]+)\s*s", message, flags=re.I)
+        m = re.search(r"try again in\s+(?:(\d+)h\s*)?(?:(\d+)m\s*)?([\d.]+)\s*s", message, flags=re.I)
         if m:
-            return min(30.0, max(0.5, float(m.group(1))))
-        return 0.0
+            h = float(m.group(1) or 0)
+            mn = float(m.group(2) or 0)
+            s = float(m.group(3) or 0)
+            return min(300.0, max(0.5, h * 3600 + mn * 60 + s))
+        return 3.0
 
     def _clamp_tool_json(self, json_str: str) -> str:
         if len(json_str) <= MAX_TOOL_JSON_BYTES:

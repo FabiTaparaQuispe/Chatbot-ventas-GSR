@@ -45,7 +45,7 @@ def api_chat(body: ChatBody) -> Any:
         )
 
     sanitized = filter_hallucinated_assistant(sanitized)
-    max_history = 4
+    max_history = 6
     if len(sanitized) > max_history:
         sanitized = sanitized[-max_history:]
 
@@ -93,6 +93,21 @@ def api_chat(body: ChatBody) -> Any:
 
             reply = unificar_enlaces_pareto(reply)
             return {"ok": True, "reply": reply}
+    except RuntimeError as e:
+        msg = str(e)
+        m = msg.lower()
+        if ("tokens per day" in m) or ("tpd" in m) or ("límite diario" in m) or ("limite diario" in m):
+            return JSONResponse(status_code=429, content={"ok": False, "error": msg})
+        if (
+            ("rate limit" in m)
+            or ("rate_limit" in m)
+            or ("too many requests" in m)
+            or ("429" in m)
+            or ("límite de velocidad" in m)
+            or ("limite de velocidad" in m)
+        ):
+            return JSONResponse(status_code=429, content={"ok": False, "error": msg})
+        return JSONResponse(status_code=500, content={"ok": False, "error": msg})
     except Exception as e:
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
 

@@ -1,0 +1,170 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+    <h1>{{ linea }} · Mix de productos</h1>
+    <p class="page-lead">FechaContable del <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong>{% if mercado %} · Mercado: <strong>{{ mercado }}</strong>{% endif %} · agrupado por CodigoItem, ordenado por peso descendente.</p>
+</div>
+
+<div class="reporte-page">
+    <div class="card-filtros-demo reporte-informe-panel">
+        <div class="reporte-informe-toolbar">
+            <button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button>
+        </div>
+        <div id="reporte-pdf-root">
+            <h2 class="reporte-informe-title">{{ linea }} · Mix de productos</h2>
+            <p class="reporte-informe-meta">
+                Período: <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong>{% if mercado %} · Mercado: <strong>{{ mercado }}</strong>{% endif %} ·
+                Peso total: <strong>{{ total_peso }} kg</strong> ·
+                Valor total: <strong>S/ {{ total_valor }}</strong>
+            </p>
+
+            {% if filas %}
+            <div class="table-wrapper overflow-x-auto productos-dt-skin">
+                <table class="data-table config-table display stripe">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Cód. item</th>
+                            <th>Producto</th>
+                            <th style="text-align:right;">Líneas</th>
+                            <th style="text-align:right;">Cantidad (un.)</th>
+                            <th style="text-align:right;">Peso (kg)</th>
+                            <th style="text-align:right;">% Peso</th>
+                            <th style="text-align:right;">Valor (S/)</th>
+                            <th style="text-align:right;">Precio/kg (S/)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in filas %}
+                        <tr>
+                            <td>{{ f.rank }}</td>
+                            <td>{{ f.cod_item }}</td>
+                            <td>{{ f.glosa }}</td>
+                            <td style="text-align:right;">{{ f.lineas }}</td>
+                            <td style="text-align:right;">{{ f.suma_cantidad }}</td>
+                            <td style="text-align:right;">{{ f.suma_peso }}</td>
+                            <td style="text-align:right;">{{ f.pct_peso }}%</td>
+                            <td style="text-align:right;">{{ f.suma_valor }}</td>
+                            <td style="text-align:right;">{{ f.precio_kg }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <th colspan="5" style="text-align:right;">Total período</th>
+                            <th style="text-align:right;">{{ total_peso }}</th>
+                            <th style="text-align:right;">100.00%</th>
+                            <th style="text-align:right;">{{ total_valor }}</th>
+                            <th></th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            {% else %}
+            <p style="color:var(--muted);">No se encontraron ventas para la línea "{{ linea }}"{% if mercado %} en el mercado "{{ mercado }}"{% endif %} en el período seleccionado.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if filas %}
+    <section class="reporte-chart-section" aria-label="Gráfico mix peso">
+        <h3 class="reporte-chart-heading">Mix por peso (kg) — distribución</h3>
+        <div class="chart-inner"><canvas id="chartPeso"></canvas></div>
+    </section>
+    <section class="reporte-chart-section" aria-label="Gráfico mix valor">
+        <h3 class="reporte-chart-heading">Valor (S/) por producto</h3>
+        <div class="chart-inner"><canvas id="chartValor"></canvas></div>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/reporte_pdf.js"></script>
+<script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
+<script>
+(function () {
+    var d = {{ chart_data | tojson }};
+    var labels = d.labels || [];
+    var pesos   = d.pesos  || [];
+    var valores = d.valores || [];
+
+    var COLORS = [
+        'rgba(34,197,94,0.75)',
+        'rgba(59,130,246,0.75)',
+        'rgba(234,179,8,0.75)',
+        'rgba(239,68,68,0.75)',
+        'rgba(168,85,247,0.75)',
+        'rgba(20,184,166,0.75)',
+        'rgba(249,115,22,0.75)',
+        'rgba(236,72,153,0.75)',
+    ];
+    var BORDERS = COLORS.map(function(c){ return c.replace('0.75','1'); });
+
+    function buildCharts() {
+        if (!window.Chart || !labels.length) return;
+
+        new Chart(document.getElementById('chartPeso'), {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Peso (kg)',
+                    data: pesos,
+                    backgroundColor: COLORS.slice(0, labels.length),
+                    borderColor: BORDERS.slice(0, labels.length),
+                    borderWidth: 1,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'right', labels: { color: '#cbd5e1', boxWidth: 14, padding: 14 } },
+                    tooltip: { callbacks: { label: function(ctx) {
+                        var val = ctx.parsed || 0;
+                        var total = (ctx.dataset.data || []).reduce(function(a,b){ return a+(b||0); }, 0);
+                        var pct = total > 0 ? (val / total * 100).toFixed(2) : '0.00';
+                        return ctx.label + ': ' + val.toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' kg (' + pct + '%)';
+                    }}},
+                },
+            },
+        });
+
+        new Chart(document.getElementById('chartValor'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Valor (S/)',
+                    data: valores,
+                    backgroundColor: COLORS.slice(0, labels.length),
+                    borderColor: BORDERS.slice(0, labels.length),
+                    borderWidth: 1,
+                }],
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: '#cbd5e1', boxWidth: 14 } },
+                    tooltip: { callbacks: { label: function(ctx) {
+                        return 'S/ ' + (ctx.parsed.x || 0).toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2});
+                    }}},
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8', callback: function(v){ return 'S/ ' + v.toLocaleString('es-PE'); } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                    y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                },
+            },
+        });
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', buildCharts);
+    else buildCharts();
+})();
+</script>
+{% endblock %}

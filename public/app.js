@@ -114,12 +114,12 @@ form.addEventListener("submit", async (e) => {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok || data.ok === false) {
-      const err = String(
-        data.error || data.detail?.error?.message || JSON.stringify(data.detail || data)
-      ).toLowerCase();
-      const friendly = err.includes('token') || err.includes('rate limit') || err.includes('tpd') || err.includes('diario')
-        ? 'Un momento, estoy pensando... Se alcanzó el límite de consultas. Intentá nuevamente en unos minutos.'
-        : 'Un momento, estoy procesando... Hubo un inconveniente. Por favor intentá de nuevo.';
+      const serverMsg = String(data.error || data.detail?.error?.message || '');
+      const err = serverMsg.toLowerCase();
+      const isRateLimit = res.status === 429 || err.includes('rate limit') || err.includes('rate_limit') || err.includes('too many requests') || err.includes('tokens per day') || err.includes('tpd') || err.includes('límite') || err.includes('limite');
+      const friendly = isRateLimit
+        ? (serverMsg && serverMsg.toLowerCase().startsWith('límite') ? serverMsg : 'Se alcanzó el límite de consultas. Intentá nuevamente en unos minutos.')
+        : 'Hubo un inconveniente. Por favor intentá de nuevo.';
       appendBubble("assistant", friendly, true);
       history.pop();
       return;

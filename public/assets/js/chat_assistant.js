@@ -1430,11 +1430,13 @@
             }
         } catch (e) {
             const errMsg = String(e.message || e).toLowerCase();
+            const serverMsg = String(e.message || '');
+            const isRateLimit = (e && e.status === 429) || errMsg.includes('rate limit') || errMsg.includes('rate_limit') || errMsg.includes('too many requests') || errMsg.includes('tokens per day') || errMsg.includes('tpd') || errMsg.includes('límite') || errMsg.includes('limite');
             const friendly = (errMsg.includes('no-json') || errMsg.includes('respuesta no-json') || errMsg.includes('sesión') || errMsg.includes('redirect'))
                 ? 'Tu sesión parece haber cambiado o el servidor respondió algo inesperado. Recarga la página e intentá de nuevo.'
-                : (errMsg.includes('token') || errMsg.includes('rate limit') || errMsg.includes('tpd') || errMsg.includes('diario'))
-                ? 'Un momento, estoy pensando… Se alcanzó el límite de consultas. Intentá de nuevo en unos minutos.'
-                : 'Un momento, estoy procesando… Hubo un inconveniente. Por favor intentá de nuevo.';
+                : isRateLimit
+                ? (serverMsg && serverMsg.toLowerCase().startsWith('límite') ? serverMsg : 'Se alcanzó el límite de consultas. Intentá de nuevo en unos minutos.')
+                : 'Hubo un inconveniente. Por favor intentá de nuevo.';
             append('assistant', friendly);
             history.pop();
             input.value = text;

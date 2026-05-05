@@ -107,7 +107,7 @@ function ventasBindPdfDownload(buttonId, rootId, filename, opts) {
         });
         if (head.length > 0) {
             var h0 = String(head[0] || '').toLowerCase().replace(/\./g, '').trim();
-            var hasN = h0 === 'n°' || h0 === 'nº' || h0 === 'no' || h0 === 'nro' || h0 === 'numero' || h0 === 'n';
+            var hasN = h0 === 'n°' || h0 === 'nº' || h0 === 'no' || h0 === 'nro' || h0 === 'numero' || h0 === 'n' || h0 === '#';
             if (!hasN) {
                 head.unshift('N°');
                 rows = rows.map(function (r, idx) {
