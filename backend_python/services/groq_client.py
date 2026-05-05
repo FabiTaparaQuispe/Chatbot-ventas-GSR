@@ -6,7 +6,8 @@ from openai import OpenAI, APIStatusError
 
 MAX_ITERATIONS = 10
 MAX_TOOL_JSON_BYTES = 14000
-MAX_429_RETRIES = 5
+MAX_429_RETRIES = 3
+_MAX_WAIT_SEC = 25.0  # si Groq pide esperar más que esto, fallamos rápido
 
 
 class GroqClient:
@@ -69,22 +70,24 @@ class GroqClient:
             params['tools'] = tools
             params['tool_choice'] = 'auto'
 
+        last_err: Exception | None = None
         for attempt in range(1, MAX_429_RETRIES + 1):
             try:
                 return self._client.chat.completions.create(**params)
             except APIStatusError as e:
+                last_err = e
                 msg = str(e)
                 if self._is_daily_limit(msg):
                     raise RuntimeError(self._friendly_daily_limit(msg))
                 if self._is_rate_limit(msg) and attempt < MAX_429_RETRIES:
-                    sleep_sec = self._parse_retry_seconds(msg)
-                    if sleep_sec < 1.0:
-                        sleep_sec = min(8.0, 2.0 * attempt)
+                    sleep_sec = self._get_wait_seconds(e, msg)
+                    if sleep_sec > _MAX_WAIT_SEC:
+                        raise RuntimeError(self._friendly_wait_long(sleep_sec))
                     time.sleep(sleep_sec)
                     continue
                 raise RuntimeError(self._friendly_error(msg))
 
-        raise RuntimeError('Groq: se agotaron los reintentos sin obtener una respuesta válida.')
+        raise RuntimeError(str(last_err) if last_err else 'Groq: sin respuesta')
 
     @staticmethod
     def _is_daily_limit(msg: str) -> bool:
@@ -112,15 +115,41 @@ class GroqClient:
 
     def _friendly_error(self, raw: str) -> str:
         if self._is_rate_limit(raw):
-            return 'Groq devolvió límite de velocidad (429). Espera unos minutos o cambia de modelo en GROQ_MODEL. [Detalle] ' + raw
+            wait = self._parse_retry_seconds(raw)
+            if wait >= 1.0:
+                mins = int(wait // 60)
+                secs = int(wait % 60)
+                wait_str = f'{mins}m {secs}s' if mins > 0 else f'{secs}s'
+                return f'Límite de consultas Groq. Intentá de nuevo en {wait_str}.'
+            return 'Límite de consultas Groq. Intentá de nuevo en unos minutos.'
         return 'Groq error: ' + raw
 
     @staticmethod
+    def _friendly_wait_long(wait_sec: float) -> str:
+        mins = int(wait_sec // 60)
+        secs = int(wait_sec % 60)
+        wait_str = f'{mins}m {secs}s' if mins > 0 else f'{secs}s'
+        return f'Límite de consultas Groq. Intentá de nuevo en {wait_str}.'
+
+    @classmethod
+    def _get_wait_seconds(cls, exc: APIStatusError, msg: str) -> float:
+        try:
+            ra = exc.response.headers.get('retry-after') or exc.response.headers.get('Retry-After')
+            if ra:
+                return min(300.0, max(1.0, float(ra)))
+        except Exception:
+            pass
+        return cls._parse_retry_seconds(msg)
+
+    @staticmethod
     def _parse_retry_seconds(msg: str) -> float:
-        m = re.search(r'try again in ([\d.]+)\s*s', msg, re.IGNORECASE)
+        m = re.search(r'try again in\s+(?:(\d+)h\s*)?(?:(\d+)m\s*)?([\d.]+)\s*s', msg, re.IGNORECASE)
         if m:
-            return min(30.0, max(0.5, float(m.group(1))))
-        return 0.0
+            h = float(m.group(1) or 0)
+            mn = float(m.group(2) or 0)
+            s = float(m.group(3) or 0)
+            return min(300.0, max(0.5, h * 3600 + mn * 60 + s))
+        return 3.0
 
     def _clamp_tool_json(self, json_str: str) -> str:
         if len(json_str) <= MAX_TOOL_JSON_BYTES:
