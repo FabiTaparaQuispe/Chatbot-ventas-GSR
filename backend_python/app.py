@@ -6,7 +6,9 @@ sys.path.insert(0, os.path.dirname(__file__))
 from flask import Flask, send_from_directory
 from dotenv import load_dotenv
 
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
+# En Windows es común que queden variables viejas en el entorno.
+# Forzamos que `.env` tenga prioridad para que cambios de modelo/proveedor apliquen tras reiniciar.
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'), override=True)
 
 PUBLIC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'public'))
 

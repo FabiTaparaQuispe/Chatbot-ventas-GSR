@@ -6,8 +6,9 @@ from openai import OpenAI, APIStatusError
 
 MAX_ITERATIONS = 10
 MAX_TOOL_JSON_BYTES = 14000
-MAX_429_RETRIES = 3
-_MAX_WAIT_SEC = 25.0  # si Groq pide esperar más que esto, fallamos rápido
+MAX_429_RETRIES = 5          # ← subido de 3 a 5
+_MAX_WAIT_SEC = 65.0         # ← subido de 25 a 65 (Groq free tier puede pedir hasta ~60s)
+_DEFAULT_WAIT_SEC = 5.0      # ← subido de 3 a 5
 
 
 class GroqClient:
@@ -77,21 +78,30 @@ class GroqClient:
             except APIStatusError as e:
                 last_err = e
                 msg = str(e)
+
+                # ── Límite diario (TPD): no tiene sentido reintentar ──
                 if self._is_daily_limit(msg):
                     raise RuntimeError(self._friendly_daily_limit(msg))
+
+                # ── Rate limit (RPM / TPM): reintentar con backoff ──
                 if self._is_rate_limit(msg) and attempt < MAX_429_RETRIES:
-                    sleep_sec = self._get_wait_seconds(e, msg)
+                    sleep_sec = self._get_wait_seconds(e, msg, attempt)
                     if sleep_sec > _MAX_WAIT_SEC:
                         raise RuntimeError(self._friendly_wait_long(sleep_sec))
+                    print(f"[GroqClient] Rate limit (intento {attempt}/{MAX_429_RETRIES}). "
+                          f"Esperando {sleep_sec:.1f}s...")
                     time.sleep(sleep_sec)
                     continue
+
+                # ── Otros errores de API ──
                 raise RuntimeError(self._friendly_error(msg))
 
-        raise RuntimeError(str(last_err) if last_err else 'Groq: sin respuesta')
+        raise RuntimeError(self._friendly_error(str(last_err) if last_err else 'Groq: sin respuesta'))
 
     @staticmethod
     def _is_daily_limit(msg: str) -> bool:
-        return 'tokens per day' in msg.lower() or 'TPD' in msg
+        m = msg.lower()
+        return 'tokens per day' in m or 'tpd' in m
 
     @staticmethod
     def _is_rate_limit(msg: str) -> bool:
@@ -132,14 +142,30 @@ class GroqClient:
         return f'Límite de consultas Groq. Intentá de nuevo en {wait_str}.'
 
     @classmethod
-    def _get_wait_seconds(cls, exc: APIStatusError, msg: str) -> float:
+    def _get_wait_seconds(cls, exc: APIStatusError, msg: str, attempt: int = 1) -> float:
+        """
+        Determina cuánto esperar. Prioridad:
+        1. Header Retry-After de Groq
+        2. Parsear "try again in Xs" del mensaje
+        3. Backoff exponencial: 5s, 10s, 20s, 40s...
+        """
+        # 1. Header
         try:
             ra = exc.response.headers.get('retry-after') or exc.response.headers.get('Retry-After')
             if ra:
-                return min(300.0, max(1.0, float(ra)))
+                val = float(ra)
+                if 0.5 <= val <= 300.0:
+                    return val + 1.0  # margen de seguridad
         except Exception:
             pass
-        return cls._parse_retry_seconds(msg)
+
+        # 2. Parsear mensaje
+        parsed = cls._parse_retry_seconds(msg)
+        if parsed > 1.0:
+            return parsed + 1.0  # margen de seguridad
+
+        # 3. Backoff exponencial con base _DEFAULT_WAIT_SEC
+        return min(60.0, _DEFAULT_WAIT_SEC * (2 ** (attempt - 1)))
 
     @staticmethod
     def _parse_retry_seconds(msg: str) -> float:
@@ -149,7 +175,7 @@ class GroqClient:
             mn = float(m.group(2) or 0)
             s = float(m.group(3) or 0)
             return min(300.0, max(0.5, h * 3600 + mn * 60 + s))
-        return 3.0
+        return 0.0  # ← cambiado de 3.0 a 0.0 para que el backoff exponencial tome el control
 
     def _clamp_tool_json(self, json_str: str) -> str:
         if len(json_str) <= MAX_TOOL_JSON_BYTES:

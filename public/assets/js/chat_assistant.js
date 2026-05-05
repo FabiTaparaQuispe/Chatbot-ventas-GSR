@@ -1411,9 +1411,10 @@
                 reply = await callChatApiOnce();
             } catch (e1) {
                 // Reintento único: a veces el primer request falla por redirect/cold-start.
-                const isRetryable = (e1 && (e1.nonJson || e1.status === 429 || e1.status === 500 || e1.status === 502 || e1.status === 503));
+                // NO reintentar 429 (rate-limit/TPD): solo genera otro 429 y duplica llamadas.
+                const isRetryable = (e1 && (e1.nonJson || e1.status === 500 || e1.status === 502 || e1.status === 503));
                 if (!isRetryable) throw e1;
-                await new Promise(r => setTimeout(r, 650));
+                await new Promise(r => setTimeout(r, 650)); 
                 reply = await callChatApiOnce();
             }
 

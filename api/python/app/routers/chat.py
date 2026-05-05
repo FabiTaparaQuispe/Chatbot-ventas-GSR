@@ -15,12 +15,30 @@ from app.chat_logic import (
 )
 from app.db import get_engine
 from app.groq_client import GroqClient
+from app.gemini_client import GeminiClient
 from app.settings import get_settings
 from app.sql_texto import format_append_lines
 from app.tool_executor import ToolExecutor
 from app.tools_definitions import ventas_tool_definitions
 
 router = APIRouter(tags=["chat"])
+
+def _parse_retry_after_seconds(msg: str) -> int | None:
+    if not msg:
+        return None
+    m = re.search(r"try again in\s+([\d.]+)\s*s", msg, flags=re.I)
+    if not m:
+        return None
+    try:
+        sec = float(m.group(1))
+    except Exception:
+        return None
+    if sec <= 0:
+        return None
+    n = int(sec)
+    if float(n) < sec:
+        n += 1
+    return max(1, min(3600, n))
 
 
 class ChatBody(BaseModel):
@@ -31,11 +49,13 @@ class ChatBody(BaseModel):
 @router.post("/api/chat")
 def api_chat(body: ChatBody) -> Any:
     settings = get_settings()
-    if not settings.groq_api_key.strip():
-        return JSONResponse(
-            status_code=503,
-            content={"ok": False, "error": "Configure GROQ_API_KEY en .env"},
-        )
+    provider = (settings.llm_provider or "groq").strip().lower()
+    if provider == "gemini":
+        if not settings.gemini_api_key.strip():
+            return JSONResponse(status_code=503, content={"ok": False, "error": "Configure GEMINI_API_KEY en .env"})
+    else:
+        if not settings.groq_api_key.strip():
+            return JSONResponse(status_code=503, content={"ok": False, "error": "Configure GROQ_API_KEY en .env"})
 
     sanitized = sanitize_messages(body.messages)
     if not sanitized:
@@ -67,13 +87,17 @@ def api_chat(body: ChatBody) -> Any:
         engine = get_engine()
         with engine.connect() as conn:
             executor = ToolExecutor(conn)
-            groq = GroqClient(settings.groq_api_key.strip(), settings.groq_model)
+            llm = (
+                GeminiClient(settings.gemini_api_key.strip(), settings.gemini_model)
+                if provider == "gemini"
+                else GroqClient(settings.groq_api_key.strip(), settings.groq_model)
+            )
             tools = ventas_tool_definitions()
 
             def run_tool(name: str, args: dict[str, Any]) -> str:
                 return executor.execute(name, args)
 
-            result = groq.chat_with_tools(messages, tools, run_tool)
+            result = llm.chat_with_tools(messages, tools, run_tool)
             reply = str(result.get("reply") or "")
             groq_msgs = result.get("messages") or []
             if not isinstance(groq_msgs, list):
@@ -97,7 +121,9 @@ def api_chat(body: ChatBody) -> Any:
         msg = str(e)
         m = msg.lower()
         if ("tokens per day" in m) or ("tpd" in m) or ("límite diario" in m) or ("limite diario" in m):
-            return JSONResponse(status_code=429, content={"ok": False, "error": msg})
+            ra = _parse_retry_after_seconds(msg)
+            headers = {"Retry-After": str(ra)} if ra is not None else None
+            return JSONResponse(status_code=429, content={"ok": False, "error": msg}, headers=headers)
         if (
             ("rate limit" in m)
             or ("rate_limit" in m)
@@ -106,7 +132,9 @@ def api_chat(body: ChatBody) -> Any:
             or ("límite de velocidad" in m)
             or ("limite de velocidad" in m)
         ):
-            return JSONResponse(status_code=429, content={"ok": False, "error": msg})
+            ra = _parse_retry_after_seconds(msg)
+            headers = {"Retry-After": str(ra)} if ra is not None else None
+            return JSONResponse(status_code=429, content={"ok": False, "error": msg}, headers=headers)
         return JSONResponse(status_code=500, content={"ok": False, "error": msg})
     except Exception as e:
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})

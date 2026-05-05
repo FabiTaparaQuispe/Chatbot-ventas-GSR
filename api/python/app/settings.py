@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     groq_api_key: str = Field(default="", validation_alias="GROQ_API_KEY")
     groq_model: str = Field(default="llama-3.1-8b-instant", validation_alias="GROQ_MODEL")
 
+    llm_provider: str = Field(default="groq", validation_alias="LLM_PROVIDER")
+    anthropic_api_key: str = Field(default="", validation_alias="ANTHROPIC_API_KEY")
+    anthropic_model: str = Field(default="claude-3-5-sonnet-latest", validation_alias="ANTHROPIC_MODEL")
+    gemini_api_key: str = Field(default="", validation_alias="GEMINI_API_KEY")
+    gemini_model: str = Field(default="gemini-1.5-flash", validation_alias="GEMINI_MODEL")
+
     db_dsn: str = Field(
         default="mysql:host=127.0.0.1;port=3306;dbname=cia2026;charset=utf8mb4",
         validation_alias="DB_DSN",

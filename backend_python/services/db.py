@@ -6,7 +6,8 @@ import pymysql
 import pymysql.cursors
 from dotenv import load_dotenv
 
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
+# Forzar prioridad de `.env` sobre variables del sistema (evita quedarse en modelos viejos).
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'), override=True)
 
 _G_CONN_KEY = '_pymysql_conn'
 

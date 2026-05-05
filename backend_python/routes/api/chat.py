@@ -3,6 +3,7 @@ import re
 from flask import Blueprint, request, jsonify
 from services.db import get_connection, db_label
 from services.groq_client import GroqClient
+from services.gemini_client import GeminiClient
 from services.tool_executor import ToolExecutor
 from services.tools_definitions import ventas_tool_definitions
 from services.chat_reply_enricher import enrich_reply
@@ -91,6 +92,118 @@ def _unify_pareto_links(reply: str) -> str:
     return reply.strip()
 
 
+def _parse_retry_after_seconds(msg: str) -> int | None:
+    if not msg:
+        return None
+    m = re.search(r"try again in\s+([\d.]+)\s*s", msg, flags=re.I)
+    sec: float | None = None
+    if m:
+        try:
+            sec = float(m.group(1))
+        except Exception:
+            sec = None
+    if sec is None:
+        m0 = re.search(r"(?:please\s+)?retry in\s+([\d.]+)\s*s", msg, flags=re.I)
+        if m0:
+            try:
+                sec = float(m0.group(1))
+            except Exception:
+                sec = None
+    if sec is None:
+        m_es = re.search(
+            r"(?:intent[aá]\s+de\s+nuevo|reintent[aá])\s+en\s+([\d.]+)\s*s",
+            msg,
+            flags=re.I,
+        )
+        if m_es:
+            try:
+                sec = float(m_es.group(1))
+            except Exception:
+                sec = None
+    if sec is None:
+        m2 = re.search(r"en\s+(?:(\d+)\s*m\s*)?([\d.]+)\s*s\b", msg, flags=re.I)
+        if m2:
+            try:
+                mins = float(m2.group(1) or 0)
+                secs = float(m2.group(2) or 0)
+                sec = mins * 60 + secs
+            except Exception:
+                sec = None
+    if sec is None:
+        return None
+    if sec <= 0:
+        return None
+    n = int(sec)
+    if float(n) < sec:
+        n += 1
+    return max(1, min(3600, n))
+
+
+def _get_llm_client():
+    """
+    Crea el cliente LLM según LLM_PROVIDER (.env).
+    Soporta: groq (default), gemini.
+    """
+    provider = (os.getenv('LLM_PROVIDER', 'groq') or 'groq').strip().lower()
+
+    if provider == 'gemini':
+        api_key = os.getenv('GEMINI_API_KEY', '')
+        if not api_key:
+            raise RuntimeError('Configure GEMINI_API_KEY en .env')
+        model = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash')
+        return GeminiClient(api_key, model), provider
+
+    # Default: groq
+    api_key = os.getenv('GROQ_API_KEY', '')
+    if not api_key:
+        raise RuntimeError('Configure GROQ_API_KEY en .env')
+    model = os.getenv('GROQ_MODEL', 'llama-3.1-8b-instant')
+    return GroqClient(api_key, model), provider
+
+
+def _is_rate_limit_error(msg: str) -> bool:
+    m = msg.lower()
+    return any(k in m for k in (
+        'límite de consultas',
+        'limite de consultas',
+        'rate limit',
+        'rate_limit',
+        'too many requests',
+        'tokens per day',
+        'tpd',
+        'límite diario',
+        'limite diario',
+        '429',
+        'resource exhausted',
+        'quota exceeded',
+    ))
+
+
+@bp.route("/api/health_llm", methods=["GET"])
+def health_llm():
+    provider = (os.getenv("LLM_PROVIDER", "groq") or "groq").strip().lower()
+
+    info = {
+        "ok": True,
+        "llm_provider": provider,
+    }
+
+    if provider == "gemini":
+        api_key = os.getenv("GEMINI_API_KEY", "") or ""
+        model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash") or "gemini-2.0-flash"
+        info["gemini_model"] = model
+        info["gemini_api_key_configured"] = bool(api_key.strip())
+        info["gemini_api_key_len"] = len(api_key.strip())
+    else:
+        api_key = os.getenv("GROQ_API_KEY", "") or ""
+        model = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant") or "llama-3.1-8b-instant"
+        info["groq_model"] = model
+        info["groq_api_key_configured"] = bool(api_key.strip())
+        info["groq_api_key_len"] = len(api_key.strip())
+
+    return jsonify(info)
+
+
 @bp.route('/api/chat', methods=['POST'])
 @bp.route('/api/chat.php', methods=['POST'])
 def chat():
@@ -102,11 +215,12 @@ def chat():
     if not isinstance(messages_in, list):
         return jsonify({'error': 'Falta messages (array)'}), 400
 
-    api_key = os.getenv('GROQ_API_KEY', '')
-    if not api_key:
-        return jsonify({'error': 'Configure GROQ_API_KEY en .env'}), 503
+    # ── Crear cliente LLM dinámicamente ──
+    try:
+        llm_client, provider = _get_llm_client()
+    except RuntimeError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 503
 
-    model = os.getenv('GROQ_MODEL', 'llama-3.1-8b-instant')
     label = db_label()
 
     system = {
@@ -164,10 +278,9 @@ def chat():
     try:
         conn = get_connection()
         executor = ToolExecutor(conn)
-        groq = GroqClient(api_key, model)
         tools = ventas_tool_definitions()
 
-        result = groq.chat_with_tools(
+        result = llm_client.chat_with_tools(
             messages, tools,
             lambda name, args: executor.execute(name, args)
         )
@@ -184,15 +297,23 @@ def chat():
             reply = (reply + suffix).strip()
 
         return jsonify({'reply': _unify_pareto_links(reply), 'ok': True})
+
     except RuntimeError as e:
-        # GroqClient ya devuelve mensajes "amigables". Ajustamos status para que el frontend
-        # pueda distinguir rate-limit/quota real de un 500 genérico.
         msg = str(e)
-        m = msg.lower()
-        if ('tokens per day' in m) or ('tpd' in m) or ('límite diario' in m) or ('limite diario' in m):
-            return jsonify({'ok': False, 'error': msg}), 429
-        if ('rate limit' in m) or ('rate_limit' in m) or ('too many requests' in m) or ('429' in m) or ('límite de velocidad' in m) or ('limite de velocidad' in m):
-            return jsonify({'ok': False, 'error': msg}), 429
+        if _is_rate_limit_error(msg):
+            ra = _parse_retry_after_seconds(msg)
+            resp = jsonify({'ok': False, 'error': msg})
+            if ra is not None:
+                resp.headers['Retry-After'] = str(ra)
+            return resp, 429
         return jsonify({'ok': False, 'error': msg}), 500
+
     except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        msg = str(e)
+        if _is_rate_limit_error(msg):
+            ra = _parse_retry_after_seconds(msg)
+            resp = jsonify({'ok': False, 'error': msg})
+            if ra is not None:
+                resp.headers['Retry-After'] = str(ra)
+            return resp, 429
+        return jsonify({'ok': False, 'error': msg}), 500
