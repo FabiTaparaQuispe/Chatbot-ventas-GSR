@@ -93,7 +93,12 @@ class GroqClient:
     @staticmethod
     def _is_rate_limit(msg: str) -> bool:
         m = msg.lower()
-        return 'rate_limit' in m or 'rate limit' in m or 'too many requests' in m
+        return (
+            'rate_limit' in m
+            or 'rate limit' in m
+            or 'too many requests' in m
+            or '429' in m
+        )
 
     @staticmethod
     def _friendly_daily_limit(raw: str) -> str:
