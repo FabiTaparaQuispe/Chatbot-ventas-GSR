@@ -294,8 +294,13 @@
             if (st.view === 'lista') {
                 tableWrap.style.display = '';
                 cardsWrap.style.display = 'none';
-                origRows.forEach(function (tr) { tr.style.display = 'none'; });
-                pageIndices.forEach(function (i) { origRows[i].style.display = ''; });
+                /* Reordenar físicamente las filas en el DOM según el orden actual de sortedIndices */
+                var visibleSet = {};
+                pageIndices.forEach(function (i) { visibleSet[i] = true; });
+                sortedIndices.forEach(function (i) {
+                    origRows[i].style.display = visibleSet[i] ? '' : 'none';
+                    tbody.appendChild(origRows[i]);
+                });
             } else {
                 tableWrap.style.display = 'none';
                 cardsWrap.style.display = 'block';
