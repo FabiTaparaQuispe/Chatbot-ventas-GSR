@@ -829,6 +829,243 @@
         return { head: head, tail: tail };
     }
 
+    // ─── CHAT TABLE WIDGET ─────────────────────────────────────────────────────
+    var _ctSeq = 0;
+    function _ctId() { return 'ct' + (++_ctSeq); }
+
+    function _ctAttr(s) {
+        return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function _ctCap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+
+    function _ctColHeader(v) {
+        var s = String(v || '').trim();
+        if (/^S\/\s/.test(s)) return 'Importe';
+        var mPer = s.match(/^(periodo\s+[A-Z])\s+S\//i);
+        if (mPer) return _ctCap(mPer[1]);
+        var mLbl = s.match(/^([a-záéíóúüñ ]+?)\s+S\//i);
+        if (mLbl) return _ctCap(mLbl[1].trim());
+        var mNum = s.match(/^[\d,.]+\s+(.+)$/);
+        if (mNum) return _ctCap(mNum[1].trim());
+        var mPct = s.match(/^[\d,.]+%\s+(.+)$/);
+        if (mPct) return _ctCap(mPct[1].trim());
+        if (/^[\d,.]+%$/.test(s)) return '% del total';
+        return _ctCap(s);
+    }
+
+    function _ctParseItem(raw) {
+        var ci = raw.indexOf(': ');
+        if (ci < 0) return { name: raw, extra: '', vals: [raw] };
+        var name = raw.slice(0, ci).trim();
+        var vals = raw.slice(ci + 2).trim().split(', ');
+        var nm = name.match(/^(.*?)\s*\(([^)]+)\)$/);
+        if (nm) return { name: nm[1].trim(), extra: nm[2].trim(), vals: vals };
+        return { name: name, extra: '', vals: vals };
+    }
+
+    function _ctParseBlocks(text) {
+        var lines = text.split('\n');
+        var blocks = [], block = null, next = 1;
+        for (var i = 0; i < lines.length; i++) {
+            var t = lines[i].trim();
+            var m = t.match(/^(\d+)\.\s+(.+)$/);
+            if (m && parseInt(m[1], 10) === next && !m[2].startsWith('(+')) {
+                if (!block) block = { start: i, end: i, items: [] };
+                block.items.push({ num: parseInt(m[1], 10), raw: m[2] });
+                block.end = i; next++;
+            } else {
+                if (block && block.items.length >= 2) blocks.push(block);
+                block = null; next = 1;
+                var m1 = t.match(/^1\.\s+(.+)$/);
+                if (m1 && !m1[1].startsWith('(+')) {
+                    block = { start: i, end: i, items: [{ num: 1, raw: m1[1] }] };
+                    next = 2;
+                }
+            }
+        }
+        if (block && block.items.length >= 2) blocks.push(block);
+        return blocks;
+    }
+
+    function _ctBuildPagination(page, total) {
+        if (total <= 1) return '';
+        var h = '<span class="paginate_button previous chat-paginate-btn' + (page === 0 ? ' disabled' : '') + '" data-ctp="prev">Anterior</span>';
+        var s = Math.max(0, page - 2), e = Math.min(total - 1, s + 4);
+        if (e - s < 4) s = Math.max(0, e - 4);
+        for (var p = s; p <= e; p++) {
+            h += '<span class="paginate_button chat-paginate-btn' + (p === page ? ' current' : '') + '" data-ctp="' + p + '">' + (p + 1) + '</span>';
+        }
+        h += '<span class="paginate_button next chat-paginate-btn' + (page === total - 1 ? ' disabled' : '') + '" data-ctp="next">Siguiente</span>';
+        return h;
+    }
+
+    function _ctBuildWidget(items) {
+        var parsed = items.map(function(it) { return _ctParseItem(it.raw); });
+        var hasExtra = parsed.some(function(p) { return p.extra !== ''; });
+        var cols = ['N°', hasExtra ? 'Nombre' : 'Concepto'];
+        if (hasExtra) cols.push('Extra');
+        var firstVals = parsed[0].vals;
+        for (var vi = 0; vi < firstVals.length; vi++) cols.push(_ctColHeader(firstVals[vi]));
+
+        var rows = items.map(function(it, idx) {
+            var p = parsed[idx];
+            var row = [String(it.num), p.name];
+            if (hasExtra) row.push(p.extra);
+            for (var i = 0; i < p.vals.length; i++) row.push(p.vals[i]);
+            while (row.length < cols.length) row.push('');
+            return row;
+        });
+
+        var pp = 30, total = Math.max(1, Math.ceil(rows.length / pp));
+        var initRows = rows.slice(0, pp), endIdx = Math.min(pp, rows.length);
+        var infoText = rows.length > 0 ? 'Mostrando 1 a ' + endIdx + ' de ' + rows.length + ' registros' : 'Sin resultados';
+        var thead = cols.map(function(c) { return '<th>' + escapeHtml(c) + '</th>'; }).join('');
+        var tbody = initRows.map(function(row) {
+            return '<tr>' + row.map(function(c) { return '<td>' + escapeHtml(String(c)) + '</td>'; }).join('') + '</tr>';
+        }).join('');
+        var initCards = initRows.map(function(row) {
+            var fields = cols.slice(1).map(function(col, ci) {
+                return '<div class="card-row"><span class="label">' + escapeHtml(col) + '</span><span>' + escapeHtml(String(row[ci + 1] || '')) + '</span></div>';
+            }).join('');
+            return '<article class="card-item prod-card"><div class="card-numero-row">#' + escapeHtml(String(row[0])) + '</div><div class="card-campos">' + fields + '</div></article>';
+        }).join('');
+        var pag = _ctBuildPagination(0, total);
+        var tid = _ctId();
+
+        return '<div class="ventas-chat-table-widget productos-dt-skin" data-ct-id="' + tid + '"'
+            + ' data-ct-rows="' + _ctAttr(JSON.stringify(rows)) + '"'
+            + ' data-ct-cols="' + _ctAttr(JSON.stringify(cols)) + '"'
+            + ' data-ct-pp="30" data-ct-page="0" data-ct-q="" data-ct-view="lista" data-ct-total="' + total + '">'
+            + '<div class="ventas-chat-table-toolbar reportes-toolbar-row">'
+            + '<div class="view-toggle-group">'
+            + '<button type="button" class="view-toggle-btn active" data-ct-v="lista" title="Lista"><i class="fas fa-list" aria-hidden="true"></i> Lista</button>'
+            + '<button type="button" class="view-toggle-btn" data-ct-v="iconos" title="Iconos"><i class="fas fa-th" aria-hidden="true"></i> Iconos</button>'
+            + '</div>'
+            + '<div class="ventas-chat-table-controls">'
+            + '<div class="dataTables_length"><label>Mostrar <select class="chat-ct-pp"><option value="10">10</option><option value="20">20</option><option value="30" selected>30</option><option value="50">50</option><option value="100">100</option></select> registros</label></div>'
+            + '<div class="dataTables_filter"><label>Buscar <input type="search" class="chat-ct-q" placeholder=""></label></div>'
+            + '</div></div>'
+            + '<div class="view-lista-wrap" data-ct-pane="lista"><div class="table-wrapper overflow-x-auto">'
+            + '<table class="data-table display stripe nowrap" style="width:100%"><thead><tr>' + thead + '</tr></thead><tbody>' + tbody + '</tbody></table>'
+            + '</div></div>'
+            + '<div class="view-tarjetas-wrap" data-ct-pane="iconos" style="display:none">'
+            + '<div class="cards-grid cards-grid-iconos" data-vista-cards="iconos">' + initCards + '</div></div>'
+            + '<div class="dt-bottom-row">'
+            + '<div class="dataTables_info chat-ct-info">' + escapeHtml(infoText) + '</div>'
+            + '<div class="dataTables_paginate paginate_button_wrap chat-ct-pag">' + pag + '</div>'
+            + '</div></div>';
+    }
+
+    function _ctRender(widget) {
+        var rows, cols;
+        try { rows = JSON.parse(widget.dataset.ctRows || '[]'); cols = JSON.parse(widget.dataset.ctCols || '[]'); } catch(e) { return; }
+        var pp = parseInt(widget.dataset.ctPp || '30');
+        var page = parseInt(widget.dataset.ctPage || '0');
+        var q = (widget.dataset.ctQ || '').toLowerCase();
+        var view = widget.dataset.ctView || 'lista';
+        var filtered = q ? rows.filter(function(row) { return row.some(function(c) { return String(c).toLowerCase().indexOf(q) >= 0; }); }) : rows;
+        var total = Math.max(1, Math.ceil(filtered.length / pp));
+        page = Math.min(page, total - 1);
+        widget.dataset.ctPage = String(page); widget.dataset.ctTotal = String(total);
+        var start = page * pp, end = Math.min(start + pp, filtered.length);
+        var pageRows = filtered.slice(start, end);
+
+        var infoEl = widget.querySelector('.chat-ct-info');
+        if (infoEl) infoEl.textContent = filtered.length === 0 ? 'Sin resultados'
+            : 'Mostrando ' + (start + 1) + ' a ' + end + ' de ' + filtered.length + ' registros'
+              + (filtered.length < rows.length ? ' (filtrados de ' + rows.length + ' total)' : '');
+
+        var pagEl = widget.querySelector('.chat-ct-pag');
+        if (pagEl) pagEl.innerHTML = _ctBuildPagination(page, total);
+
+        var listaPane = widget.querySelector('[data-ct-pane="lista"]');
+        var iconosPane = widget.querySelector('[data-ct-pane="iconos"]');
+
+        if (view === 'lista') {
+            if (listaPane) listaPane.style.display = '';
+            if (iconosPane) iconosPane.style.display = 'none';
+            var tbody = widget.querySelector('tbody');
+            if (tbody) tbody.innerHTML = pageRows.map(function(row) {
+                return '<tr>' + row.map(function(c) { return '<td>' + escapeHtml(String(c)) + '</td>'; }).join('') + '</tr>';
+            }).join('');
+        } else {
+            if (listaPane) listaPane.style.display = 'none';
+            if (iconosPane) iconosPane.style.display = '';
+            var cardsEl = widget.querySelector('.cards-grid');
+            if (cardsEl) cardsEl.innerHTML = pageRows.map(function(row) {
+                var fields = cols.slice(1).map(function(col, ci) {
+                    return '<div class="card-row"><span class="label">' + escapeHtml(col) + '</span><span>' + escapeHtml(String(row[ci + 1] || '')) + '</span></div>';
+                }).join('');
+                return '<article class="card-item prod-card"><div class="card-numero-row">#' + escapeHtml(String(row[0])) + '</div><div class="card-campos">' + fields + '</div></article>';
+            }).join('');
+        }
+    }
+
+    function _ctInitDelegation() {
+        if (!log || log._ctDel) return;
+        log._ctDel = true;
+        log.addEventListener('change', function(e) {
+            if (e.target.classList.contains('chat-ct-pp')) {
+                var w = e.target.closest('.ventas-chat-table-widget');
+                if (w) { w.dataset.ctPp = e.target.value; w.dataset.ctPage = '0'; _ctRender(w); }
+            }
+        });
+        var _ctTimer;
+        log.addEventListener('input', function(e) {
+            if (e.target.classList.contains('chat-ct-q')) {
+                var w = e.target.closest('.ventas-chat-table-widget');
+                if (w) { clearTimeout(_ctTimer); _ctTimer = setTimeout(function() { w.dataset.ctQ = e.target.value.toLowerCase(); w.dataset.ctPage = '0'; _ctRender(w); }, 250); }
+            }
+        });
+        log.addEventListener('click', function(e) {
+            var btn = e.target.closest('[data-ct-v]');
+            if (btn) {
+                var w = btn.closest('.ventas-chat-table-widget');
+                if (w) {
+                    var v = btn.dataset.ctV; w.dataset.ctView = v;
+                    w.querySelectorAll('[data-ct-v]').forEach(function(b) { b.classList.toggle('active', b.dataset.ctV === v); });
+                    _ctRender(w); return;
+                }
+            }
+            var pb = e.target.closest('.chat-paginate-btn');
+            if (pb && !pb.classList.contains('disabled')) {
+                var w = pb.closest('.ventas-chat-table-widget');
+                if (w) {
+                    var action = pb.dataset.ctp, tot = parseInt(w.dataset.ctTotal || '1'), page = parseInt(w.dataset.ctPage || '0');
+                    if (action === 'prev') page = Math.max(0, page - 1);
+                    else if (action === 'next') page = Math.min(tot - 1, page + 1);
+                    else { var n = parseInt(action, 10); if (!isNaN(n)) page = Math.max(0, Math.min(tot - 1, n)); }
+                    w.dataset.ctPage = String(page); _ctRender(w);
+                }
+            }
+        });
+    }
+
+    function _chatTextToHtml(text) {
+        var blocks = _ctParseBlocks(text);
+        if (!blocks.length) return linkifyAssistant(text);
+        var lines = text.split('\n');
+        var lineBlock = new Array(lines.length).fill(-1);
+        blocks.forEach(function(b, bi) { for (var i = b.start; i <= b.end; i++) lineBlock[i] = bi; });
+        var parts = [], i = 0;
+        while (i < lines.length) {
+            var bi = lineBlock[i];
+            if (bi >= 0) {
+                parts.push(_ctBuildWidget(blocks[bi].items));
+                i = blocks[bi].end + 1;
+            } else {
+                var j = i;
+                while (j < lines.length && lineBlock[j] < 0) j++;
+                var seg = lines.slice(i, j).join('\n');
+                if (seg.trim()) parts.push('<span class="chat-text-seg">' + linkifyAssistant(seg) + '</span>');
+                i = j;
+            }
+        }
+        return parts.join('');
+    }
+    // ───────────────────────────────────────────────────────────────────────────
+
     function renderAssistantHtml(fullText) {
         const parts = splitAssistantAnswerAndSql(fullText);
         if (!parts.tail) return linkifyAssistant(parts.head);
@@ -1432,11 +1669,11 @@
         } catch (e) {
             const errMsg = String(e.message || e).toLowerCase();
             const serverMsg = String(e.message || '');
-            const isRateLimit = (e && e.status === 429) || errMsg.includes('rate limit') || errMsg.includes('rate_limit') || errMsg.includes('too many requests') || errMsg.includes('tokens per day') || errMsg.includes('tpd') || errMsg.includes('límite') || errMsg.includes('limite');
+            const isRateLimit = (e && e.status === 429) || errMsg.includes('rate limit') || errMsg.includes('rate_limit') || errMsg.includes('too many requests') || errMsg.includes('tokens per day') || errMsg.includes('tpd') || errMsg.includes('límite') || errMsg.includes('limite') || errMsg.includes('intentá de nuevo');
             const friendly = (errMsg.includes('no-json') || errMsg.includes('respuesta no-json') || errMsg.includes('sesión') || errMsg.includes('redirect'))
                 ? 'Tu sesión parece haber cambiado o el servidor respondió algo inesperado. Recarga la página e intentá de nuevo.'
                 : isRateLimit
-                ? (serverMsg && serverMsg.toLowerCase().startsWith('límite') ? serverMsg : 'Se alcanzó el límite de consultas. Intentá de nuevo en unos minutos.')
+                ? (serverMsg && (serverMsg.toLowerCase().startsWith('límite') || serverMsg.toLowerCase().startsWith('intentá')) ? serverMsg : 'Se alcanzó el límite de consultas. Intentá de nuevo en unos minutos.')
                 : 'Hubo un inconveniente. Por favor intentá de nuevo.';
             append('assistant', friendly);
             history.pop();
@@ -1449,6 +1686,8 @@
             sendInFlight = false;
         }
     }
+
+    _ctInitDelegation();
 
     if (send) {
         send.addEventListener('click', sendMessage);

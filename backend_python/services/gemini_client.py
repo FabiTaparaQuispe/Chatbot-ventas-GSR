@@ -201,8 +201,8 @@ class GeminiClient:
                 hint = self._extract_retry_hint(raw)
                 if hint:
                     
-                    raise RuntimeError(f"Límite de consultas Gemini. Intentá de nuevo en {hint}.") from e
-                raise RuntimeError("Límite de consultas Gemini. Intentá de nuevo en unos segundos.") from e
+                    raise RuntimeError(f"Intentá de nuevo en {hint}.") from e
+                raise RuntimeError("Intentá de nuevo en unos segundos.") from e
             if e.code in (401, 403):
                 # 403 suele ocurrir con API keys restringidas a navegador (HTTP referrer) o API no habilitada.
                 raise RuntimeError(

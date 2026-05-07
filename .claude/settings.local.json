@@ -10,7 +10,9 @@
       "PowerShell(tree /F \"C:\\\\xampp\\\\htdocs\\\\chatbotVentasGeneral\\\\Chatbot-ventas-GSR\" -Depth 5)",
       "PowerShell(Get-ChildItem -Path \"C:\\\\xampp\\\\htdocs\\\\chatbotVentasGeneral\\\\Chatbot-ventas-GSR\" -Recurse | Where-Object {$_.PSIsContainer -eq $false} | ForEach-Object {$_.FullName} | Where-Object {-not $_.Contains\\('.git'\\)} | Sort-Object)",
       "PowerShell($resp = Invoke-WebRequest -Uri \"http://127.0.0.1:5000/api/ventasgeneral_dt.php?draw=1&start=0&length=5\" -UseBasicParsing; Write-Host \"Status: $\\($resp.StatusCode\\)\"; Write-Host $resp.Content)",
-      "PowerShell($resp = Invoke-WebRequest -Uri \"http://127.0.0.1:5000/modules/chat_assistant_script.php?u=testuser\" -UseBasicParsing; Write-Host \"Status: $\\($resp.StatusCode\\)\"; Write-Host \"Content-Type: $\\($resp.Headers.'Content-Type'\\)\"; Write-Host $resp.Content.Substring\\(0, 200\\))"
+      "PowerShell($resp = Invoke-WebRequest -Uri \"http://127.0.0.1:5000/modules/chat_assistant_script.php?u=testuser\" -UseBasicParsing; Write-Host \"Status: $\\($resp.StatusCode\\)\"; Write-Host \"Content-Type: $\\($resp.Headers.'Content-Type'\\)\"; Write-Host $resp.Content.Substring\\(0, 200\\))",
+      "Bash(Get-ChildItem -Path \"c:\\\\xampp\\\\htdocs\\\\chatbotVentasGeneral\\\\Chatbot-ventas-GSR\" -Directory)",
+      "Bash(Select-Object Name)"
     ],
     "additionalDirectories": [
       "c:\\Users\\redim\\.claude\\projects\\c--xampp-htdocs-chatbotVentasGeneral-Chatbot-ventas-GSR\\memory"

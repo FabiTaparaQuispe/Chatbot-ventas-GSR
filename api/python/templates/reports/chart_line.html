@@ -17,6 +17,9 @@
     })();
     </script>
     <link rel="stylesheet" href="/assets/css/app.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/assets/css/dashboard-vista-tabla-iconos.css">
+    <link rel="stylesheet" href="/assets/css/dt-tabla-listado-sip.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
     <style>
         body { margin: 0; }
@@ -41,7 +44,7 @@
                 <div id="reporte-pdf-root">
                     <h2 class="pdf-h2">{{ pdf_h2|e }}</h2>
                     <div class="table-wrapper overflow-x-auto productos-dt-skin">
-                        <table class="data-table config-table display stripe">
+                        <table class="data-table config-table display stripe rct-auto">
                             <thead><tr>{% for th in table_headers %}<th>{{ th|e }}</th>{% endfor %}</tr></thead>
                             <tbody>
                             {% for row in table_rows %}
@@ -81,5 +84,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
     <script src="/assets/js/reporte_pdf.js"></script>
     <script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_name|tojson }});</script>
+    <script src="/assets/js/report-table-ctrl.js"></script>
 </body>
 </html>

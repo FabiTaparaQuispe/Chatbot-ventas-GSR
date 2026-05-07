@@ -174,7 +174,7 @@ class GeminiClient:
         except HTTPError as e:
             raw = e.read().decode("utf-8", "replace")
             if e.code in (429, 503):
-                raise RuntimeError("Límite de consultas Gemini. Intentá de nuevo en unos segundos.") from e
+                raise RuntimeError("Intentá de nuevo en unos segundos.") from e
             if e.code in (401, 403):
                 raise RuntimeError("Gemini rechazó la API key. Verificá GEMINI_API_KEY.") from e
             raise RuntimeError(f"Gemini HTTP {e.code}: {raw[:500]}") from e

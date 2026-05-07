@@ -47,7 +47,7 @@ def _report_shell_context(page_title: str) -> dict[str, Any]:
         'app_name': APP_NAME,
         'app_company': APP_COMPANY,
         'load_ventas_assets': False,
-        'load_listado_skin': False,
+        'load_listado_skin': True,
         'skip_floating_chat': False,
         'body_class': '',
         'role': role,
@@ -462,7 +462,8 @@ def ventas_linea_resumen_provincia():
            f" COALESCE(SUM(Valor),0) AS suma_valor"
            f" FROM ventasgeneral2"
            f" WHERE FechaContable BETWEEN :d1 AND :d2"
-           f" AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))")
+           f" AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))"
+           f" AND CodigoDocumento IN ('01','03')")
     bind = {'d1': d1, 'd2': d2, 'linea': linea}
     if cod_item:
         sql += " AND CodigoItem = :cod_item"
@@ -544,7 +545,8 @@ def ventas_linea_diario_provincia():
     mercado = (request.args.get('mercado') or '').strip().upper()
 
     base_where = (" WHERE FechaContable BETWEEN :d1 AND :d2"
-                  " AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))")
+                  " AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))"
+                  " AND CodigoDocumento IN ('01','03')")
     bind = {'d1': d1, 'd2': d2, 'linea': linea}
     if cod_item:
         base_where += " AND CodigoItem = :cod_item"
@@ -639,7 +641,8 @@ def ventas_linea_precio_diario():
     mercado = (request.args.get('mercado') or '').strip().upper()
 
     base_where = (" WHERE FechaContable BETWEEN :d1 AND :d2"
-                  " AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))")
+                  " AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))"
+                  " AND CodigoDocumento IN ('01','03')")
     bind = {'d1': d1, 'd2': d2, 'linea': linea}
     if cod_item:
         base_where += " AND CodigoItem = :cod_item"

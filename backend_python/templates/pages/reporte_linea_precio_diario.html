@@ -2,7 +2,7 @@
 {% block content %}
 <div class="page-head">
     <h1>{{ linea }} · Precio por día y cliente</h1>
-    <p class="page-lead">FechaContable del <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong> · Precio kg = Valor / Peso · ordenado por fecha ASC y peso DESC.</p>
+    <p class="page-lead">FechaContable del <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong></p>
 </div>
 
 <div class="reporte-page">
@@ -13,13 +13,12 @@
         <div id="reporte-pdf-root">
             <h2 class="reporte-informe-title">{{ linea }} · Precio por día provincia/cliente</h2>
             <p class="reporte-informe-meta">
-                Período: <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong> ·
-                Precio/kg = SUM(Valor) / SUM(Peso) · en soles (S/).
+                Período: <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong>
             </p>
 
             {% if filas %}
             <div class="table-wrapper overflow-x-auto productos-dt-skin">
-                <table class="data-table config-table display stripe">
+                <table class="data-table config-table display stripe rct-auto">
                     <thead>
                         <tr>
                             <th>#</th>
