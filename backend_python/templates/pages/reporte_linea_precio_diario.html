@@ -120,6 +120,13 @@
     </section>
     {% endif %}
 
+    {% if chart_data_tdoc.fechas %}
+    <section class="reporte-chart-section" aria-label="Gráfico precio por tipo de documento">
+        <h3 class="reporte-chart-heading">Precio (S//kg) por tipo de documento · Factura (01) · Boleta (03) · N.Crédito (07)</h3>
+        <div class="chart-inner"><canvas id="chartPrecioTdoc"></canvas></div>
+    </section>
+    {% endif %}
+
 </div>
 {% endblock %}
 
@@ -321,6 +328,72 @@
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', buildCharts);
     else buildCharts();
+})();
+</script>
+<script>
+(function () {
+    var d      = {{ chart_data_tdoc | tojson }};
+    var fechas = d.fechas  || [];
+    var series = d.series  || {};
+
+    var COLORS = {
+        '01': { border: 'rgba(59,130,246,1)',  bg: 'rgba(59,130,246,0.12)'  },
+        '03': { border: 'rgba(34,197,94,1)',   bg: 'rgba(34,197,94,0.12)'   },
+        '07': { border: 'rgba(239,68,68,1)',   bg: 'rgba(239,68,68,0.12)'   },
+    };
+    var LABELS = { '01': 'Factura (01)', '03': 'Boleta (03)', '07': 'N. Crédito (07)' };
+
+    function buildTdocChart() {
+        if (!window.Chart || !fechas.length) return;
+        var el = document.getElementById('chartPrecioTdoc');
+        if (!el) return;
+
+        var datasets = Object.keys(series).sort().map(function (t) {
+            var c = COLORS[t] || { border: 'rgba(148,163,184,1)', bg: 'rgba(148,163,184,0.1)' };
+            return {
+                label: LABELS[t] || ('Tipo ' + t),
+                data: series[t],
+                borderColor: c.border,
+                backgroundColor: c.bg,
+                borderWidth: 2,
+                tension: 0.2,
+                fill: false,
+                spanGaps: true,
+                pointRadius: fechas.length > 60 ? 0 : 4,
+                pointBackgroundColor: c.border,
+            };
+        });
+
+        new Chart(el, {
+            type: 'line',
+            data: { labels: fechas, datasets: datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { labels: { color: '#cbd5e1', boxWidth: 14 } },
+                    tooltip: { callbacks: { label: function (ctx) {
+                        return ctx.dataset.label + ': ' +
+                            (ctx.parsed.y != null
+                                ? 'S/ ' + ctx.parsed.y.toLocaleString('es-PE', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + '/kg'
+                                : '—');
+                    }}},
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 10 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                    y: {
+                        ticks: { color: '#94a3b8', callback: function (v) { return 'S/ ' + v.toLocaleString('es-PE', { minimumFractionDigits: 2 }); } },
+                        grid: { color: 'rgba(148,163,184,0.15)' },
+                        title: { display: true, text: 'S//kg', color: '#94a3b8', font: { size: 11 } },
+                    },
+                },
+            },
+        });
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', buildTdocChart);
+    else buildTdocChart();
 })();
 </script>
 {% endblock %}

@@ -886,6 +886,38 @@ def ventas_linea_diario_provincia():
     total_peso  = sum(chart_pesos_dia)
     total_valor = sum(chart_valores_dia)
 
+    # Árbol de cascada (sin filtros multi-select) para desplegado progresivo
+    opts_tree: dict = {}
+    tree_sql = (
+        "SELECT DISTINCT"
+        " COALESCE(NULLIF(TRIM(Provincia),''),'') AS provincia,"
+        " COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'') AS nombre_corporativo,"
+        " COALESCE(NULLIF(TRIM(NombreCliente),''),'') AS nombre_cliente,"
+        " CodigoCliente AS cod_cliente"
+        f" FROM ventasgeneral2{base_where}"
+        " AND COALESCE(NULLIF(TRIM(Provincia),''),'') <> ''"
+        " ORDER BY provincia, nombre_corporativo, nombre_cliente"
+    )
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(tree_sql), base_bind)
+        for r in (cur.fetchall() or []):
+            pv      = str(r.get('provincia')         or '').strip()
+            corp    = str(r.get('nombre_corporativo') or '').strip()
+            cli_cod = str(r.get('cod_cliente')        or '').strip()
+            cli_nom = str(r.get('nombre_cliente')     or '').strip()
+            if not pv:
+                continue
+            if pv not in opts_tree:
+                opts_tree[pv] = {'corps': [], 'clients': {}}
+            node = opts_tree[pv]
+            if corp and corp not in node['corps']:
+                node['corps'].append(corp)
+            if cli_cod and corp:
+                if corp not in node['clients']:
+                    node['clients'][corp] = []
+                if not any(c['cod'] == cli_cod for c in node['clients'][corp]):
+                    node['clients'][corp].append({'cod': cli_cod, 'nombre': cli_nom})
+
     ctx = _report_shell_context(f'Ventas {linea} · Diario por provincia/cliente')
     ctx.update({
         'd1': d1, 'd2': d2, 'linea': linea, 'top': top,
@@ -900,6 +932,8 @@ def ventas_linea_diario_provincia():
         'f_provincias': f_provincias,
         'f_corporativos': f_corporativos,
         'f_clientes': f_clientes,
+        'opts_tree': opts_tree,
+        'body_class': 'app-page-reporte-wide',
     })
     return render_template('pages/reporte_linea_diario_provincia.html', **ctx)
 
@@ -991,12 +1025,29 @@ def ventas_linea_precio_diario():
                       f" FROM ventasgeneral2{ext_where}"
                       " GROUP BY fecha ORDER BY fecha ASC")
 
+    # WHERE para gráfico por tipo-doc: incluye 07 además de 01 y 03
+    tdoc_where = ext_where.replace(
+        "AND CodigoDocumento IN ('01','03')",
+        "AND CodigoDocumento IN ('01','03','07')"
+    )
+    sql_precio_tdoc = (
+        "SELECT FechaContable AS fecha, CodigoDocumento AS tipo_doc,"
+        " CASE WHEN COALESCE(SUM(Peso),0) > 0"
+        "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
+        "      ELSE NULL END AS precio_kg"
+        f" FROM ventasgeneral2{tdoc_where}"
+        " GROUP BY FechaContable, CodigoDocumento ORDER BY FechaContable ASC, CodigoDocumento ASC"
+    )
+
     with conn.cursor() as cur:
         cur.execute(_colon_params_to_pymysql(sql), bind)
         raw = cur.fetchall() or []
     with conn.cursor() as cur:
         cur.execute(_colon_params_to_pymysql(sql_precio_dia), bind)
         raw_precio = cur.fetchall() or []
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql_precio_tdoc), bind)
+        raw_precio_tdoc = cur.fetchall() or []
 
     filas = []
     for i, r in enumerate(raw, 1):
@@ -1024,6 +1075,26 @@ def ventas_linea_precio_diario():
         chart_fechas.append(fecha.strftime('%Y-%m-%d') if hasattr(fecha, 'strftime') else str(fecha or ''))
         p = r.get('precio_kg')
         chart_precios.append(round(float(p), 4) if p is not None else None)
+
+    # Precio por tipo de documento (01 Factura, 03 Boleta, 07 Nota de Crédito)
+    _tdoc_by_date: dict = {}
+    _tdoc_tipos: list = []
+    for r in raw_precio_tdoc:
+        fecha = r.get('fecha')
+        f_str = fecha.strftime('%Y-%m-%d') if hasattr(fecha, 'strftime') else str(fecha or '')
+        tdoc = str(r.get('tipo_doc') or '').strip()
+        p = r.get('precio_kg')
+        if tdoc and tdoc not in _tdoc_tipos:
+            _tdoc_tipos.append(tdoc)
+        if f_str not in _tdoc_by_date:
+            _tdoc_by_date[f_str] = {}
+        _tdoc_by_date[f_str][tdoc] = round(float(p), 4) if p is not None else None
+    _tdoc_tipos.sort()
+    _tdoc_fechas = sorted(_tdoc_by_date)
+    chart_data_tdoc = {
+        'fechas': _tdoc_fechas,
+        'series': {t: [_tdoc_by_date[f].get(t) for f in _tdoc_fechas] for t in _tdoc_tipos},
+    }
 
     # Árbol de cascada completo (sin filtros multi-select) para desplegado progresivo en el formulario
     opts_tree: dict = {}
@@ -1063,6 +1134,7 @@ def ventas_linea_precio_diario():
         'filas': filas,
         'pdf_filename': f'linea_precio_diario_{d1}_{d2}.pdf',
         'chart_data': {'fechas': chart_fechas, 'precios': chart_precios},
+        'chart_data_tdoc': chart_data_tdoc,
         'provincias_opts': provincias_opts,
         'corporativos_opts': corporativos_opts,
         'clientes_opts': clientes_opts,
