@@ -99,6 +99,148 @@ def _colon_params_to_pymysql(sql: str) -> str:
     return re.sub(r':([a-zA-Z_][a-zA-Z0-9_]*)', r'%(\1)s', sql)
 
 
+def _linea_where_cascada(
+    base_where: str,
+    base_bind: dict[str, Any],
+    f_provincias: list[str],
+    f_corporativos: list[str],
+    f_clientes: list[str],
+    *,
+    omit_provincia: bool,
+    omit_corporativo: bool,
+    omit_cliente: bool,
+) -> tuple[str, dict[str, Any]]:
+    """Extiende WHERE base con filtros multi-select omitiendo la propia dimensión (para opciones cascada)."""
+    w = base_where
+    b: dict[str, Any] = dict(base_bind)
+    if not omit_provincia and f_provincias:
+        keys = [f'_pvc_{i}' for i in range(len(f_provincias))]
+        w += ' AND Provincia IN (' + ','.join(f':{k}' for k in keys) + ')'
+        b.update(zip(keys, f_provincias))
+    if not omit_corporativo and f_corporativos:
+        keys = [f'_corp_{i}' for i in range(len(f_corporativos))]
+        w += ' AND NombreCoorporativo IN (' + ','.join(f':{k}' for k in keys) + ')'
+        b.update(zip(keys, f_corporativos))
+    if not omit_cliente and f_clientes:
+        keys = [f'_cli_{i}' for i in range(len(f_clientes))]
+        w += ' AND CodigoCliente IN (' + ','.join(f':{k}' for k in keys) + ')'
+        b.update(zip(keys, f_clientes))
+    return w, b
+
+
+def _linea_dropdowns_opciones_validas(
+    conn,
+    base_where: str,
+    base_bind: dict[str, Any],
+    f_provincias: list[str],
+    f_corporativos: list[str],
+    f_clientes: list[str],
+) -> tuple[list[str], list[dict[str, Any]], list[dict[str, Any]]]:
+    """
+    Cascada: cada lista solo muestra valores que coexisten en ventasgeneral2 con los otros filtros
+    (fecha, línea, mercado/cod_item, y las selecciones en las dimensiones aplicables).
+    """
+    # Provincias: respeta corporativo + cliente (no provincial)
+    wp, bp = _linea_where_cascada(
+        base_where, base_bind, f_provincias, f_corporativos, f_clientes,
+        omit_provincia=True, omit_corporativo=False, omit_cliente=False,
+    )
+    sql_prov = (
+        'SELECT DISTINCT COALESCE(NULLIF(TRIM(Provincia),\'\'),\'\') AS provincia'
+        f' FROM ventasgeneral2{wp}'
+        " AND COALESCE(NULLIF(TRIM(Provincia),''),'') <> '' ORDER BY provincia"
+    )
+
+    wc, bc = _linea_where_cascada(
+        base_where, base_bind, f_provincias, f_corporativos, f_clientes,
+        omit_provincia=False, omit_corporativo=True, omit_cliente=False,
+    )
+    sql_corp = (
+        'SELECT DISTINCT'
+        ' COALESCE(NULLIF(TRIM(NombreCoorporativo),\'\'),\'\') AS nombre_corporativo,'
+        ' COALESCE(NULLIF(TRIM(CodigoCoorporativo),\'\'),\'\') AS cod_corporativo'
+        f' FROM ventasgeneral2{wc}'
+        " AND COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'') <> ''"
+        ' ORDER BY nombre_corporativo'
+    )
+
+    wk, bk = _linea_where_cascada(
+        base_where, base_bind, f_provincias, f_corporativos, f_clientes,
+        omit_provincia=False, omit_corporativo=False, omit_cliente=True,
+    )
+    sql_cli = (
+        'SELECT DISTINCT'
+        ' COALESCE(NULLIF(TRIM(NombreCliente),\'\'),\'\') AS nombre_cliente,'
+        ' CodigoCliente AS cod_cliente,'
+        ' COALESCE(NULLIF(TRIM(NombreCoorporativo),\'\'),\'\') AS nombre_corporativo'
+        f' FROM ventasgeneral2{wk}'
+        " AND COALESCE(NULLIF(TRIM(CodigoCliente),''),'') <> '' ORDER BY nombre_corporativo, nombre_cliente"
+    )
+
+    provincias_opts: list[str] = []
+    corporativos_opts: list[dict[str, Any]] = []
+    clientes_opts: list[dict[str, Any]] = []
+
+    exec_sql = _colon_params_to_pymysql(sql_prov)
+    with conn.cursor() as cur:
+        cur.execute(exec_sql, bp)
+        for r in cur.fetchall() or []:
+            d = dict(r) if not isinstance(r, dict) else r
+            pv = str(d.get('provincia') or '').strip()
+            if pv:
+                provincias_opts.append(pv)
+
+    exec_sql = _colon_params_to_pymysql(sql_corp)
+    seen_corp: set[str] = set()
+    with conn.cursor() as cur:
+        cur.execute(exec_sql, bc)
+        for r in cur.fetchall() or []:
+            d = dict(r) if not isinstance(r, dict) else r
+            corp = str(d.get('nombre_corporativo') or '').strip()
+            if corp and corp not in seen_corp:
+                seen_corp.add(corp)
+                corporativos_opts.append({
+                    'nombre': corp,
+                    'cod': str(d.get('cod_corporativo') or ''),
+                })
+
+    seen_cli: set[str] = set()
+    exec_sql = _colon_params_to_pymysql(sql_cli)
+    with conn.cursor() as cur:
+        cur.execute(exec_sql, bk)
+        for r in cur.fetchall() or []:
+            d = dict(r) if not isinstance(r, dict) else r
+            cli = str(d.get('cod_cliente') or '').strip()
+            if cli and cli not in seen_cli:
+                seen_cli.add(cli)
+                clientes_opts.append({
+                    'cod': cli,
+                    'nombre': str(d.get('nombre_cliente') or ''),
+                    'corporativo': str(d.get('nombre_corporativo') or ''),
+                })
+
+    return provincias_opts, corporativos_opts, clientes_opts
+
+
+def _sanear_filtros_linea(
+    provincias_opts: list[str],
+    corporativos_opts: list[dict[str, Any]],
+    clientes_opts: list[dict[str, Any]],
+    f_provincias: list[str],
+    f_corporativos: list[str],
+    f_clientes: list[str],
+) -> tuple[list[str], list[str], list[str]]:
+    """Quita valores imposibles (no coexisten según cascada actual)."""
+    p_ok = set(provincias_opts)
+    c_ok = {str(d.get('nombre') or '').strip() for d in corporativos_opts if (d.get('nombre') or '').strip()}
+    k_ok = {str(d.get('cod') or '').strip() for d in clientes_opts if (d.get('cod') or '').strip()}
+    return (
+        [x for x in f_provincias if x.strip() and x.strip() in p_ok],
+        [x for x in f_corporativos if x.strip() and x.strip() in c_ok],
+        [x for x in f_clientes if x.strip() and x.strip() in k_ok],
+    )
+
+
 def _bad(msg: str, code: int = 400) -> Response:
     return Response(msg, status=code, mimetype='text/plain; charset=utf-8')
 
@@ -470,7 +612,16 @@ def ventas_linea_resumen_provincia():
         base_where += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzo"
         base_bind['prefzo'] = mercado + '%'
 
-    # WHERE extendido: agrega los filtros multi-select seleccionados
+    conn = get_connection()
+    for _ in range(2):
+        provincias_opts, corporativos_opts, clientes_opts = _linea_dropdowns_opciones_validas(
+            conn, base_where, base_bind, f_provincias, f_corporativos, f_clientes)
+        f_provincias, f_corporativos, f_clientes = _sanear_filtros_linea(
+            provincias_opts, corporativos_opts, clientes_opts,
+            f_provincias, f_corporativos, f_clientes)
+    provincias_opts, corporativos_opts, clientes_opts = _linea_dropdowns_opciones_validas(
+        conn, base_where, base_bind, f_provincias, f_corporativos, f_clientes)
+
     ext_where = base_where
     bind = dict(base_bind)
     if f_provincias:
@@ -485,16 +636,6 @@ def ventas_linea_resumen_provincia():
         keys = [f'cli_{i}' for i in range(len(f_clientes))]
         ext_where += ' AND CodigoCliente IN (' + ','.join(f':{k}' for k in keys) + ')'
         bind.update(zip(keys, f_clientes))
-
-    # Query opciones (usa solo base_where para mostrar todos los valores disponibles)
-    sql_opts = ("SELECT DISTINCT"
-                " COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'') AS nombre_corporativo,"
-                " COALESCE(NULLIF(TRIM(CodigoCoorporativo),''),'') AS cod_corporativo,"
-                " COALESCE(NULLIF(TRIM(NombreCliente),''),'') AS nombre_cliente,"
-                " CodigoCliente AS cod_cliente,"
-                " COALESCE(NULLIF(TRIM(Provincia),''),'') AS provincia"
-                f" FROM ventasgeneral2{base_where}"
-                " ORDER BY nombre_corporativo, nombre_cliente")
 
     # Query principal de agregación
     sql = ("SELECT"
@@ -523,41 +664,12 @@ def ventas_linea_resumen_provincia():
                       f" FROM ventasgeneral2{ext_where}"
                       " GROUP BY fecha ORDER BY fecha ASC")
 
-    conn = get_connection()
-    with conn.cursor() as cur:
-        cur.execute(_colon_params_to_pymysql(sql_opts), base_bind)
-        raw_opts = cur.fetchall() or []
     with conn.cursor() as cur:
         cur.execute(_colon_params_to_pymysql(sql), bind)
         raw = cur.fetchall() or []
     with conn.cursor() as cur:
         cur.execute(_colon_params_to_pymysql(sql_precio_dia), bind)
         raw_precio_dia = cur.fetchall() or []
-
-    # Construir listas de opciones para los dropdowns
-    provincias_opts: list[str] = []
-    corporativos_opts: list[dict] = []
-    clientes_opts: list[dict] = []
-    seen_prov: set = set()
-    seen_corp: set = set()
-    seen_cli: set = set()
-    for r in raw_opts:
-        pv = str(r.get('provincia') or '')
-        if pv and pv not in seen_prov:
-            seen_prov.add(pv)
-            provincias_opts.append(pv)
-        corp = str(r.get('nombre_corporativo') or '')
-        if corp and corp not in seen_corp:
-            seen_corp.add(corp)
-            corporativos_opts.append({'nombre': corp, 'cod': str(r.get('cod_corporativo') or '')})
-        cli = str(r.get('cod_cliente') or '')
-        if cli and cli not in seen_cli:
-            seen_cli.add(cli)
-            clientes_opts.append({
-                'cod': cli,
-                'nombre': str(r.get('nombre_cliente') or ''),
-                'corporativo': str(r.get('nombre_corporativo') or ''),
-            })
 
     # Construir filas y datos de gráficos
     total_lineas = 0
@@ -685,7 +797,16 @@ def ventas_linea_diario_provincia():
         base_where += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzo"
         base_bind['prefzo'] = mercado + '%'
 
-    # WHERE extendido (agrega multi-selects)
+    conn = get_connection()
+    for _ in range(2):
+        provincias_opts, corporativos_opts, clientes_opts = _linea_dropdowns_opciones_validas(
+            conn, base_where, base_bind, f_provincias, f_corporativos, f_clientes)
+        f_provincias, f_corporativos, f_clientes = _sanear_filtros_linea(
+            provincias_opts, corporativos_opts, clientes_opts,
+            f_provincias, f_corporativos, f_clientes)
+    provincias_opts, corporativos_opts, clientes_opts = _linea_dropdowns_opciones_validas(
+        conn, base_where, base_bind, f_provincias, f_corporativos, f_clientes)
+
     ext_where = base_where
     bind = dict(base_bind)
     if f_provincias:
@@ -700,16 +821,6 @@ def ventas_linea_diario_provincia():
         keys = [f'cli_{i}' for i in range(len(f_clientes))]
         ext_where += ' AND CodigoCliente IN (' + ','.join(f':{k}' for k in keys) + ')'
         bind.update(zip(keys, f_clientes))
-
-    # Opciones para dropdowns
-    sql_opts = ("SELECT DISTINCT"
-                " COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'') AS nombre_corporativo,"
-                " COALESCE(NULLIF(TRIM(CodigoCoorporativo),''),'') AS cod_corporativo,"
-                " COALESCE(NULLIF(TRIM(NombreCliente),''),'') AS nombre_cliente,"
-                " CodigoCliente AS cod_cliente,"
-                " COALESCE(NULLIF(TRIM(Provincia),''),'') AS provincia"
-                f" FROM ventasgeneral2{base_where}"
-                " ORDER BY nombre_corporativo, nombre_cliente")
 
     # Query detalle diario (tabla)
     sql = ("SELECT FechaContable AS fecha,"
@@ -734,41 +845,12 @@ def ventas_linea_diario_provincia():
                f" FROM ventasgeneral2{ext_where}"
                " GROUP BY fecha ORDER BY fecha ASC")
 
-    conn = get_connection()
-    with conn.cursor() as cur:
-        cur.execute(_colon_params_to_pymysql(sql_opts), base_bind)
-        raw_opts = cur.fetchall() or []
     with conn.cursor() as cur:
         cur.execute(_colon_params_to_pymysql(sql), bind)
         raw = cur.fetchall() or []
     with conn.cursor() as cur:
         cur.execute(_colon_params_to_pymysql(sql_dia), bind)
         raw_dia = cur.fetchall() or []
-
-    # Opciones dropdowns
-    provincias_opts: list[str] = []
-    corporativos_opts: list[dict] = []
-    clientes_opts: list[dict] = []
-    seen_prov: set = set()
-    seen_corp: set = set()
-    seen_cli: set = set()
-    for r in raw_opts:
-        pv = str(r.get('provincia') or '')
-        if pv and pv not in seen_prov:
-            seen_prov.add(pv)
-            provincias_opts.append(pv)
-        corp = str(r.get('nombre_corporativo') or '')
-        if corp and corp not in seen_corp:
-            seen_corp.add(corp)
-            corporativos_opts.append({'nombre': corp, 'cod': str(r.get('cod_corporativo') or '')})
-        cli = str(r.get('cod_cliente') or '')
-        if cli and cli not in seen_cli:
-            seen_cli.add(cli)
-            clientes_opts.append({
-                'cod': cli,
-                'nombre': str(r.get('nombre_cliente') or ''),
-                'corporativo': str(r.get('nombre_corporativo') or ''),
-            })
 
     # Filas tabla
     filas = []
@@ -861,7 +943,16 @@ def ventas_linea_precio_diario():
         base_where += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzo"
         base_bind['prefzo'] = mercado + '%'
 
-    # WHERE extendido (agrega multi-selects)
+    conn = get_connection()
+    for _ in range(2):
+        provincias_opts, corporativos_opts, clientes_opts = _linea_dropdowns_opciones_validas(
+            conn, base_where, base_bind, f_provincias, f_corporativos, f_clientes)
+        f_provincias, f_corporativos, f_clientes = _sanear_filtros_linea(
+            provincias_opts, corporativos_opts, clientes_opts,
+            f_provincias, f_corporativos, f_clientes)
+    provincias_opts, corporativos_opts, clientes_opts = _linea_dropdowns_opciones_validas(
+        conn, base_where, base_bind, f_provincias, f_corporativos, f_clientes)
+
     ext_where = base_where
     bind = dict(base_bind)
     if f_provincias:
@@ -876,16 +967,6 @@ def ventas_linea_precio_diario():
         keys = [f'cli_{i}' for i in range(len(f_clientes))]
         ext_where += ' AND CodigoCliente IN (' + ','.join(f':{k}' for k in keys) + ')'
         bind.update(zip(keys, f_clientes))
-
-    # Opciones para dropdowns
-    sql_opts = ("SELECT DISTINCT"
-                " COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'') AS nombre_corporativo,"
-                " COALESCE(NULLIF(TRIM(CodigoCoorporativo),''),'') AS cod_corporativo,"
-                " COALESCE(NULLIF(TRIM(NombreCliente),''),'') AS nombre_cliente,"
-                " CodigoCliente AS cod_cliente,"
-                " COALESCE(NULLIF(TRIM(Provincia),''),'') AS provincia"
-                f" FROM ventasgeneral2{base_where}"
-                " ORDER BY nombre_corporativo, nombre_cliente")
 
     sql = ("SELECT FechaContable AS fecha,"
            " COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
@@ -910,41 +991,12 @@ def ventas_linea_precio_diario():
                       f" FROM ventasgeneral2{ext_where}"
                       " GROUP BY fecha ORDER BY fecha ASC")
 
-    conn = get_connection()
-    with conn.cursor() as cur:
-        cur.execute(_colon_params_to_pymysql(sql_opts), base_bind)
-        raw_opts = cur.fetchall() or []
     with conn.cursor() as cur:
         cur.execute(_colon_params_to_pymysql(sql), bind)
         raw = cur.fetchall() or []
     with conn.cursor() as cur:
         cur.execute(_colon_params_to_pymysql(sql_precio_dia), bind)
         raw_precio = cur.fetchall() or []
-
-    # Opciones dropdowns
-    provincias_opts: list[str] = []
-    corporativos_opts: list[dict] = []
-    clientes_opts: list[dict] = []
-    seen_prov: set = set()
-    seen_corp: set = set()
-    seen_cli: set = set()
-    for r in raw_opts:
-        pv = str(r.get('provincia') or '')
-        if pv and pv not in seen_prov:
-            seen_prov.add(pv)
-            provincias_opts.append(pv)
-        corp = str(r.get('nombre_corporativo') or '')
-        if corp and corp not in seen_corp:
-            seen_corp.add(corp)
-            corporativos_opts.append({'nombre': corp, 'cod': str(r.get('cod_corporativo') or '')})
-        cli = str(r.get('cod_cliente') or '')
-        if cli and cli not in seen_cli:
-            seen_cli.add(cli)
-            clientes_opts.append({
-                'cod': cli,
-                'nombre': str(r.get('nombre_cliente') or ''),
-                'corporativo': str(r.get('nombre_corporativo') or ''),
-            })
 
     filas = []
     for i, r in enumerate(raw, 1):
