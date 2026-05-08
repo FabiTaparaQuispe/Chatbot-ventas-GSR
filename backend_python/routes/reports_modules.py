@@ -1025,6 +1025,38 @@ def ventas_linea_precio_diario():
         p = r.get('precio_kg')
         chart_precios.append(round(float(p), 4) if p is not None else None)
 
+    # Árbol de cascada completo (sin filtros multi-select) para desplegado progresivo en el formulario
+    opts_tree: dict = {}
+    tree_sql = (
+        "SELECT DISTINCT"
+        " COALESCE(NULLIF(TRIM(Provincia),''),'') AS provincia,"
+        " COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'') AS nombre_corporativo,"
+        " COALESCE(NULLIF(TRIM(NombreCliente),''),'') AS nombre_cliente,"
+        " CodigoCliente AS cod_cliente"
+        f" FROM ventasgeneral2{base_where}"
+        " AND COALESCE(NULLIF(TRIM(Provincia),''),'') <> ''"
+        " ORDER BY provincia, nombre_corporativo, nombre_cliente"
+    )
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(tree_sql), base_bind)
+        for r in (cur.fetchall() or []):
+            pv      = str(r.get('provincia')         or '').strip()
+            corp    = str(r.get('nombre_corporativo') or '').strip()
+            cli_cod = str(r.get('cod_cliente')        or '').strip()
+            cli_nom = str(r.get('nombre_cliente')     or '').strip()
+            if not pv:
+                continue
+            if pv not in opts_tree:
+                opts_tree[pv] = {'corps': [], 'clients': {}}
+            node = opts_tree[pv]
+            if corp and corp not in node['corps']:
+                node['corps'].append(corp)
+            if cli_cod and corp:
+                if corp not in node['clients']:
+                    node['clients'][corp] = []
+                if not any(c['cod'] == cli_cod for c in node['clients'][corp]):
+                    node['clients'][corp].append({'cod': cli_cod, 'nombre': cli_nom})
+
     ctx = _report_shell_context(f'Ventas {linea} · Precio por día provincia/cliente')
     ctx.update({
         'd1': d1, 'd2': d2, 'linea': linea, 'top': top,
@@ -1037,6 +1069,7 @@ def ventas_linea_precio_diario():
         'f_provincias': f_provincias,
         'f_corporativos': f_corporativos,
         'f_clientes': f_clientes,
+        'opts_tree': opts_tree,
         'body_class': 'app-page-reporte-wide',
     })
     return render_template('pages/reporte_linea_precio_diario.html', **ctx)

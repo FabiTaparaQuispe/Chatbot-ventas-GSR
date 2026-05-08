@@ -25,28 +25,23 @@
                 <div class="filter-row">
                     <div class="filter-field">
                         <label for="fProv">Provincia</label>
-                        <select id="fProv" name="provincia" multiple>
+                        <select id="fProv" name="provincia">
+                            <option value="">— Todas —</option>
                             {% for p in provincias_opts %}
-                            <option value="{{ p }}" {% if p in f_provincias %}selected{% endif %}>{{ p }}</option>
+                            <option value="{{ p }}" {% if f_provincias and p == f_provincias[0] %}selected{% endif %}>{{ p }}</option>
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="filter-field">
+                    <div class="filter-field" id="wCorp" style="display:none">
                         <label for="fCorp">Corporativo</label>
-                        <select id="fCorp" name="corporativo" multiple>
-                            {% for c in corporativos_opts %}
-                            <option value="{{ c.nombre }}" {% if c.nombre in f_corporativos %}selected{% endif %}>{{ c.nombre }}</option>
-                            {% endfor %}
+                        <select id="fCorp" name="corporativo">
+                            <option value="">— Todos —</option>
                         </select>
                     </div>
-                    <div class="filter-field">
+                    <div class="filter-field" id="wCli" style="display:none">
                         <label for="fCli">Cliente</label>
-                        <select id="fCli" name="cliente" multiple>
-                            {% for cli in clientes_opts %}
-                            <option value="{{ cli.cod }}" {% if cli.cod in f_clientes %}selected{% endif %}>
-                                {{ cli.cod }} — {{ cli.nombre }}
-                            </option>
-                            {% endfor %}
+                        <select id="fCli" name="cliente">
+                            <option value="">— Todos —</option>
                         </select>
                     </div>
                 </div>
@@ -134,6 +129,68 @@
 <script src="/assets/js/reporte_pdf.js"></script>
 <script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
 <script>
+/* Filtros en cascada: Provincia → Corporativo → Cliente */
+(function () {
+    var TREE  = {{ opts_tree | tojson }};
+    var fProv = document.getElementById('fProv');
+    var fCorp = document.getElementById('fCorp');
+    var fCli  = document.getElementById('fCli');
+    var wCorp = document.getElementById('wCorp');
+    var wCli  = document.getElementById('wCli');
+    if (!fProv) return;
+
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function onProvChange() {
+        var prov = fProv.value;
+        if (fCorp) fCorp.innerHTML = '<option value="">— Todos —</option>';
+        if (fCli)  fCli.innerHTML  = '<option value="">— Todos —</option>';
+        if (wCorp) wCorp.style.display = 'none';
+        if (wCli)  wCli.style.display  = 'none';
+        if (!prov || !TREE[prov]) return;
+        var corps = TREE[prov].corps || [];
+        corps.forEach(function (c) {
+            fCorp.insertAdjacentHTML('beforeend', '<option value="' + esc(c) + '">' + esc(c) + '</option>');
+        });
+        if (corps.length) wCorp.style.display = '';
+    }
+
+    function onCorpChange() {
+        var prov = fProv.value;
+        var corp = fCorp ? fCorp.value : '';
+        if (fCli) fCli.innerHTML = '<option value="">— Todos —</option>';
+        if (wCli) wCli.style.display = 'none';
+        if (!prov || !corp || !TREE[prov]) return;
+        var clients = ((TREE[prov].clients || {})[corp]) || [];
+        clients.forEach(function (c) {
+            fCli.insertAdjacentHTML('beforeend',
+                '<option value="' + esc(c.cod) + '">' + esc(c.cod) + ' — ' + esc(c.nombre) + '</option>');
+        });
+        if (clients.length) wCli.style.display = '';
+    }
+
+    fProv.addEventListener('change', onProvChange);
+    if (fCorp) fCorp.addEventListener('change', onCorpChange);
+
+    /* Restaurar estado tras envío de formulario */
+    var iP = {{ (f_provincias[0] if f_provincias else '') | tojson }};
+    var iC = {{ (f_corporativos[0] if f_corporativos else '') | tojson }};
+    var iL = {{ (f_clientes[0] if f_clientes else '') | tojson }};
+    if (iP) {
+        fProv.value = iP;
+        onProvChange();
+        if (iC && fCorp) {
+            fCorp.value = iC;
+            onCorpChange();
+            if (iL && fCli) fCli.value = iL;
+        }
+    }
+})();
+</script>
+<script>
 (function () {
     var head = document.getElementById('filtrosHead');
     var body = document.getElementById('filtrosBody');
@@ -215,6 +272,15 @@
             var cols = tableEl.__rct.cols || [];
             var data = tableEl.__rct.origData || [];
             var fi = (tableEl.__rct.filteredIndices || (tableEl.__rct.getFilteredIndices ? tableEl.__rct.getFilteredIndices() : [])) || [];
+
+            /* Sin filtro activo: el chart muestra los datos del servidor (período completo, sin LIMIT de tabla) */
+            if (!fi.length || fi.length >= data.length) {
+                chPrecio.data.labels = fechas.slice();
+                chPrecio.data.datasets[0].data = precios.slice();
+                chPrecio.data.datasets[0].pointRadius = fechas.length > 60 ? 0 : 4;
+                chPrecio.update('none');
+                return;
+            }
 
             var idxFecha = findCol(cols, /^fecha$/i);
             if (idxFecha < 0) idxFecha = findCol(cols, /fecha/i);

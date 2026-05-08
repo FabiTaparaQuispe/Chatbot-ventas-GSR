@@ -149,6 +149,19 @@
             var data = tableEl.__rct.origData || [];
             var fi = (tableEl.__rct.filteredIndices || (tableEl.__rct.getFilteredIndices ? tableEl.__rct.getFilteredIndices() : [])) || [];
 
+            /* Sin filtro activo: el chart muestra los datos del servidor (período completo, sin LIMIT de tabla) */
+            if (!fi.length || fi.length >= data.length) {
+                chPeso.data.labels = fechas.slice();
+                chPeso.data.datasets[0].data = pesos.slice();
+                chPeso.data.datasets[0].pointRadius = fechas.length > 60 ? 0 : 3;
+                chPeso.update('none');
+                chValor.data.labels = fechas.slice();
+                chValor.data.datasets[0].data = valores.slice();
+                chValor.data.datasets[0].pointRadius = fechas.length > 60 ? 0 : 3;
+                chValor.update('none');
+                return;
+            }
+
             var idxFecha = findCol(cols, /^fecha$/i);
             if (idxFecha < 0) idxFecha = findCol(cols, /fecha/i);
             var idxPeso = findCol(cols, /\bpeso\b/i);
