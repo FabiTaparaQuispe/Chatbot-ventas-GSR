@@ -89,7 +89,6 @@
 <script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
 <script>
 (function () {
-(function () {
     var d       = {{ chart_data | tojson }};
     var fechas  = d.fechas  || [];
     var pesos   = d.pesos   || [];
