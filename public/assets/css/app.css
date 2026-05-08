@@ -1045,6 +1045,11 @@ html[data-theme="dark"] .ventas-chat-menu-panel--page {
     width: 100%;
 }
 
+/* Reportes: usar mejor el ancho disponible */
+body.app-page-reporte-wide .app-content {
+    max-width: none;
+}
+
 .app-sidebar-backdrop {
     display: none;
     position: fixed;
@@ -1183,6 +1188,13 @@ body.app-sidebar-open .app-sidebar-backdrop {
     font-family: inherit;
     font-size: 0.88rem;
 }
+.filter-field select[multiple] {
+    min-height: 2.75rem;
+    max-height: 12.5rem;
+}
+.filter-field select[multiple] option {
+    padding: 0.15rem 0.35rem;
+}
 .filter-field input:focus,
 .filter-field select:focus {
     outline: none;
@@ -1288,7 +1300,7 @@ body.app-sidebar-open .app-sidebar-backdrop {
 }
 .chart-inner {
     position: relative;
-    height: min(55vh, 420px);
+    height: min(60vh, 520px);
 }
 .page-head .page-lead {
     margin: 0.35rem 0 0;

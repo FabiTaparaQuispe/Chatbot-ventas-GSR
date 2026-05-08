@@ -825,50 +825,114 @@ def ventas_linea_precio_diario():
         return _bad('Parámetro requerido: linea (ej. "Pollo Vivo").')
 
     try:
-        top = max(1, min(1000, int(request.args.get('top') or 200)))
+        top = max(1, min(10_000, int(request.args.get('top') or 2000)))
     except (TypeError, ValueError):
-        top = 200
+        top = 2000
 
     cod_item = (request.args.get('cod_item') or '').strip()
-    mercado = (request.args.get('mercado') or '').strip().upper()
+    mercado  = (request.args.get('mercado')   or '').strip().upper()
 
+    # Filtros multi-select
+    f_provincias   = [v.strip() for v in request.args.getlist('provincia')   if v.strip()]
+    f_corporativos = [v.strip() for v in request.args.getlist('corporativo') if v.strip()]
+    f_clientes     = [v.strip() for v in request.args.getlist('cliente')     if v.strip()]
+
+    # WHERE base (para opciones de dropdowns)
     base_where = (" WHERE FechaContable BETWEEN :d1 AND :d2"
                   " AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))"
                   " AND CodigoDocumento IN ('01','03')")
-    bind = {'d1': d1, 'd2': d2, 'linea': linea}
+    base_bind: dict = {'d1': d1, 'd2': d2, 'linea': linea}
     if cod_item:
         base_where += " AND CodigoItem = :cod_item"
-        bind['cod_item'] = cod_item
+        base_bind['cod_item'] = cod_item
     if mercado:
         base_where += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzo"
-        bind['prefzo'] = mercado + '%'
+        base_bind['prefzo'] = mercado + '%'
 
-    sql = (f"SELECT FechaContable AS fecha,"
-           f" COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
-           f" CodigoCliente AS cod_cliente,"
-           f" MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
-           f" COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
-           f" COALESCE(SUM(Peso),0) AS suma_peso,"
-           f" COALESCE(SUM(Valor),0) AS suma_valor,"
-           f" CASE WHEN COALESCE(SUM(Peso),0) > 0"
-           f"      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
-           f"      ELSE NULL END AS precio_kg"
-           f" FROM ventasgeneral2{base_where}"
-           f" GROUP BY fecha, provincia, CodigoCliente ORDER BY fecha ASC, suma_peso DESC LIMIT {top}")
+    # WHERE extendido (agrega multi-selects)
+    ext_where = base_where
+    bind = dict(base_bind)
+    if f_provincias:
+        keys = [f'prov_{i}' for i in range(len(f_provincias))]
+        ext_where += ' AND Provincia IN (' + ','.join(f':{k}' for k in keys) + ')'
+        bind.update(zip(keys, f_provincias))
+    if f_corporativos:
+        keys = [f'corp_{i}' for i in range(len(f_corporativos))]
+        ext_where += ' AND NombreCoorporativo IN (' + ','.join(f':{k}' for k in keys) + ')'
+        bind.update(zip(keys, f_corporativos))
+    if f_clientes:
+        keys = [f'cli_{i}' for i in range(len(f_clientes))]
+        ext_where += ' AND CodigoCliente IN (' + ','.join(f':{k}' for k in keys) + ')'
+        bind.update(zip(keys, f_clientes))
+
+    # Opciones para dropdowns
+    sql_opts = ("SELECT DISTINCT"
+                " COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'') AS nombre_corporativo,"
+                " COALESCE(NULLIF(TRIM(CodigoCoorporativo),''),'') AS cod_corporativo,"
+                " COALESCE(NULLIF(TRIM(NombreCliente),''),'') AS nombre_cliente,"
+                " CodigoCliente AS cod_cliente,"
+                " COALESCE(NULLIF(TRIM(Provincia),''),'') AS provincia"
+                f" FROM ventasgeneral2{base_where}"
+                " ORDER BY nombre_corporativo, nombre_cliente")
+
+    sql = ("SELECT FechaContable AS fecha,"
+           " COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
+           " MAX(COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'')) AS nombre_corporativo,"
+           " CodigoCliente AS cod_cliente,"
+           " MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
+           " COUNT(*) AS lineas,"
+           " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
+           " COALESCE(SUM(Peso),0) AS suma_peso,"
+           " COALESCE(SUM(Valor),0) AS suma_valor,"
+           " CASE WHEN COALESCE(SUM(Peso),0) > 0"
+           "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
+           "      ELSE NULL END AS precio_kg"
+           f" FROM ventasgeneral2{ext_where}"
+           f" GROUP BY fecha, provincia, CodigoCliente ORDER BY suma_peso DESC, fecha ASC LIMIT {top}")
+
     sql_precio_dia = ("SELECT FechaContable AS fecha,"
                       " COALESCE(SUM(Peso),0) AS suma_peso,"
                       " CASE WHEN COALESCE(SUM(Peso),0) > 0"
                       "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
                       "      ELSE NULL END AS precio_kg"
-                      f" FROM ventasgeneral2{base_where}"
+                      f" FROM ventasgeneral2{ext_where}"
                       " GROUP BY fecha ORDER BY fecha ASC")
+
     conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql_opts), base_bind)
+        raw_opts = cur.fetchall() or []
     with conn.cursor() as cur:
         cur.execute(_colon_params_to_pymysql(sql), bind)
         raw = cur.fetchall() or []
     with conn.cursor() as cur:
         cur.execute(_colon_params_to_pymysql(sql_precio_dia), bind)
         raw_precio = cur.fetchall() or []
+
+    # Opciones dropdowns
+    provincias_opts: list[str] = []
+    corporativos_opts: list[dict] = []
+    clientes_opts: list[dict] = []
+    seen_prov: set = set()
+    seen_corp: set = set()
+    seen_cli: set = set()
+    for r in raw_opts:
+        pv = str(r.get('provincia') or '')
+        if pv and pv not in seen_prov:
+            seen_prov.add(pv)
+            provincias_opts.append(pv)
+        corp = str(r.get('nombre_corporativo') or '')
+        if corp and corp not in seen_corp:
+            seen_corp.add(corp)
+            corporativos_opts.append({'nombre': corp, 'cod': str(r.get('cod_corporativo') or '')})
+        cli = str(r.get('cod_cliente') or '')
+        if cli and cli not in seen_cli:
+            seen_cli.add(cli)
+            clientes_opts.append({
+                'cod': cli,
+                'nombre': str(r.get('nombre_cliente') or ''),
+                'corporativo': str(r.get('nombre_corporativo') or ''),
+            })
 
     filas = []
     for i, r in enumerate(raw, 1):
@@ -879,8 +943,10 @@ def ventas_linea_precio_diario():
             'rank': i,
             'fecha': fecha_str,
             'provincia': str(r.get('provincia') or ''),
+            'nombre_corporativo': str(r.get('nombre_corporativo') or ''),
             'cod_cliente': str(r.get('cod_cliente') or ''),
             'nombre_cliente': str(r.get('nombre_cliente') or ''),
+            'lineas': f"{int(r.get('lineas') or 0):,}",
             'suma_cantidad': f"{float(r.get('suma_cantidad') or 0):,.2f}",
             'suma_peso': f"{float(r.get('suma_peso') or 0):,.2f}",
             'suma_valor': f"{float(r.get('suma_valor') or 0):,.2f}",
@@ -901,6 +967,13 @@ def ventas_linea_precio_diario():
         'filas': filas,
         'pdf_filename': f'linea_precio_diario_{d1}_{d2}.pdf',
         'chart_data': {'fechas': chart_fechas, 'precios': chart_precios},
+        'provincias_opts': provincias_opts,
+        'corporativos_opts': corporativos_opts,
+        'clientes_opts': clientes_opts,
+        'f_provincias': f_provincias,
+        'f_corporativos': f_corporativos,
+        'f_clientes': f_clientes,
+        'body_class': 'app-page-reporte-wide',
     })
     return render_template('pages/reporte_linea_precio_diario.html', **ctx)
 
