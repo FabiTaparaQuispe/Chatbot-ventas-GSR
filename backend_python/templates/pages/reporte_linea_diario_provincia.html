@@ -1,4 +1,26 @@
 {% extends "layout.html" %}
+
+{% block extra_head %}
+<style>
+/* ── Filtros dropdown (mismo estilo que reporte resumen) ───────────── */
+.rp-filtros{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;padding:.75rem 1rem}
+.rp-fd{position:relative}
+.rp-fd-btn{display:inline-flex;align-items:center;gap:.4rem;padding:.4rem .75rem;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:.8rem;font-weight:500;cursor:pointer;white-space:nowrap;transition:border-color .15s,box-shadow .15s}
+.rp-fd-btn:hover{border-color:var(--accent)}
+.rp-fd-btn.active{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.rp-fd-badge{background:var(--accent);color:#fff;border-radius:999px;font-size:.7rem;font-weight:700;padding:0 .4rem;line-height:1.4}
+.rp-fd-arrow{font-size:.65rem;opacity:.6}
+.rp-fd-panel{display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:120;min-width:220px;max-height:260px;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.12);padding:.35rem 0}
+.rp-fd-panel.open{display:block}
+.rp-fd-search{width:calc(100% - 1rem);margin:.3rem .5rem .2rem;padding:.3rem .5rem;border:1px solid var(--border);border-radius:5px;background:var(--input-bg);color:var(--text);font-size:.78rem}
+.rp-fd-item{display:flex;align-items:center;gap:.5rem;padding:.32rem .75rem;font-size:.8rem;cursor:pointer;user-select:none;color:var(--text)}
+.rp-fd-item:hover{background:var(--row-alt)}
+.rp-fd-item input[type=checkbox]{accent-color:var(--accent);flex-shrink:0}
+.rp-fd-sep{height:1px;background:var(--border);margin:.25rem 0}
+.rp-filtros-actions{display:flex;gap:.5rem;align-items:center;margin-left:auto}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-head">
     <h1>{{ linea }} · Ventas diarias por provincia y cliente</h1>
@@ -6,6 +28,120 @@
 </div>
 
 <div class="reporte-page">
+
+    {# ── Barra de filtros ─────────────────────────────────────────────── #}
+    <div class="card-filtros-demo reporte-informe-panel" style="margin-bottom:1rem;padding:.5rem 0;">
+        <form method="GET" id="form-filtros">
+            <input type="hidden" name="desde" value="{{ d1 }}">
+            <input type="hidden" name="hasta" value="{{ d2 }}">
+            <input type="hidden" name="linea" value="{{ linea }}">
+            <input type="hidden" name="top"   value="{{ top }}">
+
+            <div class="rp-filtros">
+
+                {# Provincia #}
+                <div class="rp-fd" id="fd-provincia">
+                    <button type="button" class="rp-fd-btn {% if f_provincias %}active{% endif %}"
+                            onclick="fdToggle('fd-provincia')" aria-haspopup="true">
+                        <span>Provincia</span>
+                        {% if f_provincias %}<span class="rp-fd-badge">{{ f_provincias|length }}</span>
+                        {% else %}<span style="color:var(--muted);font-size:.75rem;">Todas</span>{% endif %}
+                        <span class="rp-fd-arrow">▾</span>
+                    </button>
+                    <div class="rp-fd-panel" id="fd-provincia-panel">
+                        <input class="rp-fd-search" type="text" placeholder="Buscar..." oninput="fdSearch(this,'fd-provincia')">
+                        <label class="rp-fd-item">
+                            <input type="checkbox" id="fd-prov-all" onchange="fdToggleAll(this,'provincia')">
+                            <span><em>Todas</em></span>
+                        </label>
+                        <div class="rp-fd-sep"></div>
+                        {% for pv in provincias_opts %}
+                        <label class="rp-fd-item">
+                            <input type="checkbox" name="provincia" value="{{ pv }}"
+                                   {% if pv in f_provincias %}checked{% endif %}
+                                   onchange="fdSyncAll('fd-prov-all','provincia')">
+                            <span>{{ pv }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {# Corporativo #}
+                <div class="rp-fd" id="fd-corporativo">
+                    <button type="button" class="rp-fd-btn {% if f_corporativos %}active{% endif %}"
+                            onclick="fdToggle('fd-corporativo')" aria-haspopup="true">
+                        <span>Corporativo</span>
+                        {% if f_corporativos %}<span class="rp-fd-badge">{{ f_corporativos|length }}</span>
+                        {% else %}<span style="color:var(--muted);font-size:.75rem;">Todos</span>{% endif %}
+                        <span class="rp-fd-arrow">▾</span>
+                    </button>
+                    <div class="rp-fd-panel" id="fd-corporativo-panel">
+                        <input class="rp-fd-search" type="text" placeholder="Buscar..." oninput="fdSearch(this,'fd-corporativo')">
+                        <label class="rp-fd-item">
+                            <input type="checkbox" id="fd-corp-all" onchange="fdToggleAll(this,'corporativo')">
+                            <span><em>Todos</em></span>
+                        </label>
+                        <div class="rp-fd-sep"></div>
+                        {% for c in corporativos_opts %}
+                        <label class="rp-fd-item">
+                            <input type="checkbox" name="corporativo" value="{{ c.nombre }}"
+                                   {% if c.nombre in f_corporativos %}checked{% endif %}
+                                   onchange="fdSyncAll('fd-corp-all','corporativo'); fdFilterClientes()">
+                            <span>{{ c.nombre }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {# Cliente (dependiente) #}
+                <div class="rp-fd" id="fd-cliente">
+                    <button type="button" class="rp-fd-btn {% if f_clientes %}active{% endif %}"
+                            onclick="fdToggle('fd-cliente')" aria-haspopup="true">
+                        <span>Cliente</span>
+                        {% if f_clientes %}<span class="rp-fd-badge">{{ f_clientes|length }}</span>
+                        {% else %}<span style="color:var(--muted);font-size:.75rem;">Todos</span>{% endif %}
+                        <span class="rp-fd-arrow">▾</span>
+                    </button>
+                    <div class="rp-fd-panel" id="fd-cliente-panel" style="min-width:270px;">
+                        <input class="rp-fd-search" type="text" placeholder="Buscar..." oninput="fdSearch(this,'fd-cliente')">
+                        <label class="rp-fd-item">
+                            <input type="checkbox" id="fd-cli-all" onchange="fdToggleAll(this,'cliente')">
+                            <span><em>Todos</em></span>
+                        </label>
+                        <div class="rp-fd-sep"></div>
+                        {% for c in clientes_opts %}
+                        <label class="rp-fd-item" data-corp="{{ c.corporativo }}">
+                            <input type="checkbox" name="cliente" value="{{ c.cod }}"
+                                   data-corp="{{ c.corporativo }}"
+                                   {% if c.cod in f_clientes %}checked{% endif %}
+                                   onchange="fdSyncAll('fd-cli-all','cliente')">
+                            <span>{{ c.nombre }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="rp-filtros-actions">
+                    <button type="submit" class="btn btn-primary" style="font-size:.82rem;padding:.4rem .9rem;">
+                        <i class="fas fa-filter" style="margin-right:.3rem;"></i>Aplicar
+                    </button>
+                    <a href="?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}&top={{ top }}"
+                       class="btn btn-secondary" style="font-size:.82rem;padding:.4rem .9rem;">Limpiar</a>
+                </div>
+            </div>
+
+            {% if f_provincias or f_corporativos or f_clientes %}
+            <div style="padding:.2rem 1rem .5rem;font-size:.78rem;color:var(--muted);">
+                <i class="fas fa-filter" style="margin-right:.3rem;"></i>Filtros activos:
+                {% if f_provincias %}<strong>Provincia:</strong> {{ f_provincias|join(' · ') }}{% endif %}
+                {% if f_corporativos %}{% if f_provincias %} &nbsp;|&nbsp; {% endif %}<strong>Corporativo:</strong> {{ f_corporativos|join(' · ') }}{% endif %}
+                {% if f_clientes %}{% if f_provincias or f_corporativos %} &nbsp;|&nbsp; {% endif %}<strong>Cliente ({{ f_clientes|length }})</strong>{% endif %}
+            </div>
+            {% endif %}
+        </form>
+    </div>
+
+    {# ── Panel tabla + PDF ────────────────────────────────────────────── #}
     <div class="card-filtros-demo reporte-informe-panel">
         <div class="reporte-informe-toolbar">
             <button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button>
@@ -26,11 +162,13 @@
                             <th>#</th>
                             <th>Fecha</th>
                             <th>Provincia</th>
+                            <th>Corporativo</th>
                             <th>Nombre cliente</th>
                             <th style="text-align:right;">Líneas</th>
                             <th style="text-align:right;">Cantidad (un.)</th>
                             <th style="text-align:right;">Peso (kg)</th>
                             <th style="text-align:right;">Valor (S/)</th>
+                            <th style="text-align:right;">Precio (S//kg)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -39,18 +177,26 @@
                             <td>{{ f.rank }}</td>
                             <td>{{ f.fecha }}</td>
                             <td>{{ f.provincia }}</td>
+                            <td>{{ f.nombre_corporativo }}</td>
                             <td>{{ f.nombre_cliente }}</td>
                             <td style="text-align:right;">{{ f.lineas }}</td>
                             <td style="text-align:right;">{{ f.suma_cantidad }}</td>
                             <td style="text-align:right;">{{ f.suma_peso }}</td>
                             <td style="text-align:right;">{{ f.suma_valor }}</td>
+                            <td style="text-align:right;">{{ f.precio_kg }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
             {% else %}
-            <p style="color:var(--muted);">No se encontraron ventas para la línea "{{ linea }}" en el período seleccionado.</p>
+            <p style="color:var(--muted);padding:.5rem 0;">
+                No se encontraron ventas para la línea "{{ linea }}" en el período y filtros seleccionados.
+                {% if f_provincias or f_corporativos or f_clientes %}
+                <a href="?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}&top={{ top }}"
+                   style="color:var(--accent);">Limpiar filtros</a>
+                {% endif %}
+            </p>
             {% endif %}
         </div>
     </div>
@@ -65,6 +211,7 @@
         <div class="chart-inner"><canvas id="chartValorDia"></canvas></div>
     </section>
     {% endif %}
+
 </div>
 {% endblock %}
 
@@ -74,13 +221,24 @@
 <script src="/assets/js/reporte_pdf.js"></script>
 <script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
 <script>
+/* ── Dropdowns ──────────────────────────────────────────────────────── */
+function fdToggle(id){var panel=document.getElementById(id+'-panel');var isOpen=panel.classList.contains('open');document.querySelectorAll('.rp-fd-panel.open').forEach(function(p){p.classList.remove('open');});if(!isOpen){panel.classList.add('open');var inp=panel.querySelector('.rp-fd-search');if(inp){inp.value='';fdSearchApply(inp,id);inp.focus();}}}
+document.addEventListener('click',function(e){if(!e.target.closest('.rp-fd')){document.querySelectorAll('.rp-fd-panel.open').forEach(function(p){p.classList.remove('open');});}});
+function fdSearch(inp,id){fdSearchApply(inp,id);}
+function fdSearchApply(inp,id){var q=inp.value.toLowerCase();document.querySelectorAll('#'+id+'-panel .rp-fd-item').forEach(function(lbl){if(lbl.querySelector('em'))return;lbl.style.display=lbl.textContent.toLowerCase().includes(q)?'':'none';});}
+function fdToggleAll(cb,name){if(cb.checked){document.querySelectorAll('input[name="'+name+'"]').forEach(function(c){c.checked=false;});}}
+function fdSyncAll(allId,name){var anyChecked=Array.from(document.querySelectorAll('input[name="'+name+'"]')).some(function(c){return c.checked;});var allCb=document.getElementById(allId);if(allCb)allCb.checked=!anyChecked;if(name==='corporativo')fdFilterClientes();}
+function fdFilterClientes(){var selCorps=Array.from(document.querySelectorAll('input[name="corporativo"]:checked')).map(function(c){return c.value;});document.querySelectorAll('#fd-cliente-panel .rp-fd-item').forEach(function(lbl){if(lbl.querySelector('em'))return;if(selCorps.length===0){lbl.style.display='';}else{lbl.style.display=selCorps.indexOf(lbl.dataset.corp)!==-1?'':'none';}});document.querySelectorAll('#fd-cliente-panel input[name="cliente"]').forEach(function(cb){if(cb.closest('.rp-fd-item').style.display==='none')cb.checked=false;});fdSyncAll('fd-cli-all','cliente');}
+(function(){['provincia','corporativo','cliente'].forEach(function(name){var anyChecked=Array.from(document.querySelectorAll('input[name="'+name+'"]')).some(function(c){return c.checked;});var ids={provincia:'fd-prov-all',corporativo:'fd-corp-all',cliente:'fd-cli-all'};var allCb=document.getElementById(ids[name]);if(allCb)allCb.checked=!anyChecked;});if(Array.from(document.querySelectorAll('input[name="corporativo"]:checked')).length>0)fdFilterClientes();})();
+
+/* ── Gráficos ───────────────────────────────────────────────────────── */
 (function () {
-    var d = {{ chart_data | tojson }};
+    var d       = {{ chart_data | tojson }};
     var fechas  = d.fechas  || [];
     var pesos   = d.pesos   || [];
     var valores = d.valores || [];
 
-    var lineOpts = {
+    var baseOpts = {
         responsive: true,
         maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
@@ -96,52 +254,28 @@
 
         new Chart(document.getElementById('chartPesoDia'), {
             type: 'line',
-            data: {
-                labels: fechas,
-                datasets: [{
-                    label: 'Peso (kg)',
-                    data: pesos,
-                    borderColor: 'rgba(34,197,94,1)',
-                    backgroundColor: 'rgba(34,197,94,0.15)',
-                    borderWidth: 2,
-                    tension: 0.2,
-                    fill: true,
-                    pointRadius: fechas.length > 60 ? 0 : 3,
-                    pointBackgroundColor: 'rgba(34,197,94,1)',
-                }],
-            },
-            options: Object.assign({}, lineOpts, {
-                plugins: Object.assign({}, lineOpts.plugins, {
-                    tooltip: { callbacks: { label: function(ctx) {
-                        return 'Peso: ' + (ctx.parsed.y || 0).toLocaleString('es-PE', {minimumFractionDigits:2}) + ' kg';
-                    }}},
-                }),
-            }),
+            data: { labels: fechas, datasets: [{ label: 'Peso (kg)', data: pesos,
+                borderColor: 'rgba(34,197,94,1)', backgroundColor: 'rgba(34,197,94,0.15)',
+                borderWidth: 2, tension: 0.2, fill: true,
+                pointRadius: fechas.length > 60 ? 0 : 3, pointBackgroundColor: 'rgba(34,197,94,1)' }] },
+            options: Object.assign({}, baseOpts, { plugins: Object.assign({}, baseOpts.plugins, {
+                tooltip: { callbacks: { label: function(ctx) {
+                    return 'Peso: ' + (ctx.parsed.y||0).toLocaleString('es-PE',{minimumFractionDigits:2}) + ' kg';
+                }}},
+            })}),
         });
 
         new Chart(document.getElementById('chartValorDia'), {
             type: 'line',
-            data: {
-                labels: fechas,
-                datasets: [{
-                    label: 'Valor (S/)',
-                    data: valores,
-                    borderColor: 'rgba(59,130,246,1)',
-                    backgroundColor: 'rgba(59,130,246,0.15)',
-                    borderWidth: 2,
-                    tension: 0.2,
-                    fill: true,
-                    pointRadius: fechas.length > 60 ? 0 : 3,
-                    pointBackgroundColor: 'rgba(59,130,246,1)',
-                }],
-            },
-            options: Object.assign({}, lineOpts, {
-                plugins: Object.assign({}, lineOpts.plugins, {
-                    tooltip: { callbacks: { label: function(ctx) {
-                        return 'S/ ' + (ctx.parsed.y || 0).toLocaleString('es-PE', {minimumFractionDigits:2});
-                    }}},
-                }),
-            }),
+            data: { labels: fechas, datasets: [{ label: 'Valor (S/)', data: valores,
+                borderColor: 'rgba(59,130,246,1)', backgroundColor: 'rgba(59,130,246,0.15)',
+                borderWidth: 2, tension: 0.2, fill: true,
+                pointRadius: fechas.length > 60 ? 0 : 3, pointBackgroundColor: 'rgba(59,130,246,1)' }] },
+            options: Object.assign({}, baseOpts, { plugins: Object.assign({}, baseOpts.plugins, {
+                tooltip: { callbacks: { label: function(ctx) {
+                    return 'S/ ' + (ctx.parsed.y||0).toLocaleString('es-PE',{minimumFractionDigits:2});
+                }}},
+            })}),
         });
     }
 
