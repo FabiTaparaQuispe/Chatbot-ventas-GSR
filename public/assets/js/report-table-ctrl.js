@@ -71,10 +71,12 @@
         /* Índices ordenados (puede reordenarse al hacer click en columna) */
         var sortedIndices = origRows.map(function (_, i) { return i; });
 
-        /* Detectar columna Provincia */
+        /* Detectar columnas filtrables */
         var provIdx = -1;
+        var corpIdx = -1;
         for (var ci = 0; ci < cols.length; ci++) {
-            if (cols[ci].toLowerCase() === 'provincia') { provIdx = ci; break; }
+            if (cols[ci].toLowerCase() === 'provincia') provIdx = ci;
+            if (/corporativo/i.test(cols[ci])) corpIdx = ci;
         }
 
         var tableWrap = tableEl.closest('.table-wrapper') || tableEl.parentElement;
@@ -99,6 +101,21 @@
                 + '</select></label></div>';
         }
 
+        /* Dropdown de corporativos */
+        var corpHTML = '';
+        if (corpIdx >= 0) {
+            var corps = [];
+            origData.forEach(function (row) {
+                var c = row[corpIdx] || '';
+                if (c && corps.indexOf(c) < 0) corps.push(c);
+            });
+            corps.sort(function (a, b) { return a.localeCompare(b, 'es'); });
+            corpHTML = '<div class="dataTables_filter"><label>Corporativo '
+                + '<select class="rct-corp chat-ct-pp"><option value="">Todos</option>'
+                + corps.map(function (c) { return '<option value="' + escH(c) + '">' + escH(c) + '</option>'; }).join('')
+                + '</select></label></div>';
+        }
+
         /* Toolbar */
         var toolbar = document.createElement('div');
         toolbar.className = 'reportes-toolbar-row rct-toolbar';
@@ -111,6 +128,7 @@
             + '</div>'
             + '<div class="ventas-chat-table-controls">'
             + provHTML
+            + corpHTML
             + '<div class="dataTables_length"><label>Mostrar '
             + '<select class="rct-pp chat-ct-pp">'
             + '<option value="10">10</option><option value="20">20</option>'
@@ -140,7 +158,7 @@
         wrap.appendChild(bottomRow);
 
         /* Estado */
-        var st = { page: 0, pp: DEFAULT_PP, q: '', prov: '', view: 'lista' };
+        var st = { page: 0, pp: DEFAULT_PP, q: '', prov: '', corp: '', view: 'lista' };
         var sortState = { col: -1, dir: 'asc' };
 
         /* Cabeceras ordenables */
@@ -262,9 +280,11 @@
         function getFiltered() {
             var q = st.q;
             var prov = st.prov;
+            var corp = st.corp;
             return sortedIndices.filter(function (i) {
                 var row = origData[i];
                 if (prov && provIdx >= 0 && (row[provIdx] || '') !== prov) return false;
+                if (corp && corpIdx >= 0 && (row[corpIdx] || '') !== corp) return false;
                 if (q && !row.some(function (c) { return c.toLowerCase().indexOf(q) >= 0; })) return false;
                 return true;
             });
@@ -339,6 +359,11 @@
             }
             if (e.target.classList.contains('rct-prov')) {
                 st.prov = e.target.value;
+                st.page = 0;
+                render();
+            }
+            if (e.target.classList.contains('rct-corp')) {
+                st.corp = e.target.value;
                 st.page = 0;
                 render();
             }
