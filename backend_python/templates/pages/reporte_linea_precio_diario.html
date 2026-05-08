@@ -163,7 +163,7 @@
     function buildCharts() {
         if (!window.Chart || !fechas.length) return;
 
-        new Chart(document.getElementById('chartPrecioDia'), {
+        var chPrecio = new Chart(document.getElementById('chartPrecioDia'), {
             type: 'line',
             data: {
                 labels: fechas,
@@ -200,6 +200,57 @@
                 },
             },
         });
+
+        function parseNum(s) {
+            var n = parseFloat(String(s == null ? '' : s).replace(/[^\d.\-]/g, ''));
+            return isNaN(n) ? null : n;
+        }
+        function findCol(cols, re) {
+            for (var i = 0; i < cols.length; i++) if (re.test((cols[i] || '').toLowerCase())) return i;
+            return -1;
+        }
+        function recomputeFromFilteredTable() {
+            var tableEl = document.querySelector('table.rct-auto');
+            if (!tableEl || !tableEl.__rct || !tableEl.__rct.origData) return;
+            var cols = tableEl.__rct.cols || [];
+            var data = tableEl.__rct.origData || [];
+            var fi = (tableEl.__rct.filteredIndices || (tableEl.__rct.getFilteredIndices ? tableEl.__rct.getFilteredIndices() : [])) || [];
+
+            var idxFecha = findCol(cols, /^fecha$/i);
+            if (idxFecha < 0) idxFecha = findCol(cols, /fecha/i);
+            var idxPeso = findCol(cols, /\bpeso\b/i);
+            var idxValor = findCol(cols, /\bvalor\b/i);
+            if (idxFecha < 0 || idxPeso < 0 || idxValor < 0) return;
+
+            var byDay = {};
+            fi.forEach(function (i) {
+                var row = data[i] || [];
+                var f = (row[idxFecha] || '').trim();
+                if (!f) return;
+                var p = parseNum(row[idxPeso]);  if (p == null) p = 0;
+                var v = parseNum(row[idxValor]); if (v == null) v = 0;
+                if (!byDay[f]) byDay[f] = { peso: 0, valor: 0 };
+                byDay[f].peso += p;
+                byDay[f].valor += v;
+            });
+
+            var newFechas = Object.keys(byDay).sort();
+            var newPrecios = newFechas.map(function (f) {
+                var p = byDay[f].peso || 0;
+                return p > 0 ? (byDay[f].valor / p) : null;
+            });
+
+            chPrecio.data.labels = newFechas;
+            chPrecio.data.datasets[0].data = newPrecios;
+            chPrecio.data.datasets[0].pointRadius = newFechas.length > 60 ? 0 : 4;
+            chPrecio.update('none');
+        }
+
+        var tableEl2 = document.querySelector('table.rct-auto');
+        if (tableEl2) {
+            tableEl2.addEventListener('rct:filtered', recomputeFromFilteredTable);
+        }
+        recomputeFromFilteredTable();
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', buildCharts);

@@ -8,7 +8,7 @@ import re
 from datetime import datetime
 from typing import Any
 
-from flask import Blueprint, Response, abort, render_template, request
+from flask import Blueprint, Response, abort, jsonify, render_template, request
 
 from routes.pages import APP_COMPANY, APP_NAME, ROLES_VENTAS_GENERAL, require_login
 from services.urlmap import (
@@ -631,6 +631,18 @@ def ventas_linea_resumen_provincia():
         'f_corporativos': f_corporativos,
         'f_clientes': f_clientes,
     })
+
+    if (request.args.get('fmt') or '').strip().lower() == 'json':
+        return jsonify({
+            'chart_data': {
+                'labels': chart_labels,
+                'pesos': chart_pesos,
+                'valores': chart_valores,
+                'fechas': chart_fechas,
+                'precios_dia': chart_precios_dia,
+            }
+        })
+
     return render_template('pages/reporte_linea_resumen_provincia.html', **ctx)
 
 

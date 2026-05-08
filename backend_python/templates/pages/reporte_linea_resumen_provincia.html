@@ -114,8 +114,12 @@
     function buildCharts() {
         if (!window.Chart) return;
 
+        var chPeso = null;
+        var chValor = null;
+        var chPrecioDia = null;
+
         if (labels.length) {
-            new Chart(document.getElementById('chartPeso'), {
+            chPeso = new Chart(document.getElementById('chartPeso'), {
                 type: 'bar',
                 data: { labels: labels, datasets: [{ label: 'Peso (kg)', data: pesos,
                     backgroundColor: 'rgba(34,197,94,0.65)', borderColor: 'rgba(34,197,94,1)', borderWidth: 1 }] },
@@ -134,7 +138,7 @@
                 },
             });
 
-            new Chart(document.getElementById('chartValor'), {
+            chValor = new Chart(document.getElementById('chartValor'), {
                 type: 'bar',
                 data: { labels: labels, datasets: [{ label: 'Valor (S/)', data: valores,
                     backgroundColor: 'rgba(59,130,246,0.65)', borderColor: 'rgba(59,130,246,1)', borderWidth: 1 }] },
@@ -155,7 +159,7 @@
         }
 
         if (fechas.length) {
-            new Chart(document.getElementById('chartPrecioDia'), {
+            chPrecioDia = new Chart(document.getElementById('chartPrecioDia'), {
                 type: 'line',
                 data: { labels: fechas, datasets: [{ label: 'Precio/kg (S/)', data: preciosDia,
                     borderColor: 'rgba(251,146,60,1)', backgroundColor: 'rgba(251,146,60,0.15)',
@@ -182,6 +186,106 @@
                 },
             });
         }
+
+        function parseNum(s) {
+            var n = parseFloat(String(s == null ? '' : s).replace(/[^\d.\-]/g, ''));
+            return isNaN(n) ? null : n;
+        }
+        function findCol(cols, re) {
+            for (var i = 0; i < cols.length; i++) if (re.test((cols[i] || '').toLowerCase())) return i;
+            return -1;
+        }
+        function buildTopFromFilteredTable() {
+            var tableEl = document.querySelector('table.rct-auto');
+            if (!tableEl || !tableEl.__rct || !tableEl.__rct.origData) return null;
+            var cols = tableEl.__rct.cols || [];
+            var data = tableEl.__rct.origData || [];
+            var fi = (tableEl.__rct.filteredIndices || (tableEl.__rct.getFilteredIndices ? tableEl.__rct.getFilteredIndices() : [])) || [];
+
+            var idxProv = findCol(cols, /^provincia$/i);
+            var idxCli  = findCol(cols, /nombre\s*cliente/i);
+            var idxPeso = findCol(cols, /\bpeso\b/i);
+            var idxValor = findCol(cols, /\bvalor\b/i);
+            if (idxCli < 0 || idxPeso < 0 || idxValor < 0) return null;
+
+            var byClient = {};
+            fi.forEach(function (i) {
+                var row = data[i] || [];
+                var cli = (row[idxCli] || '').trim();
+                if (!cli) return;
+                var prov = idxProv >= 0 ? (row[idxProv] || '').trim() : '';
+                var key = cli + '||' + prov;
+                if (!byClient[key]) byClient[key] = { label: prov ? (cli + ' (' + prov + ')') : cli, peso: 0, valor: 0 };
+                var p = parseNum(row[idxPeso]);  if (p == null) p = 0;
+                var v = parseNum(row[idxValor]); if (v == null) v = 0;
+                byClient[key].peso += p;
+                byClient[key].valor += v;
+            });
+
+            var arr = Object.keys(byClient).map(function (k) { return byClient[k]; });
+            arr.sort(function (a, b) { return (b.peso - a.peso) || (b.valor - a.valor); });
+            arr = arr.slice(0, SHOW);
+            return {
+                labels: arr.map(function (x) { return x.label; }),
+                pesos: arr.map(function (x) { return Math.round(x.peso * 100) / 100; }),
+                valores: arr.map(function (x) { return Math.round(x.valor * 100) / 100; }),
+            };
+        }
+
+        var _lastFetchKey = null;
+        var _ft;
+        function fetchPrecioDiaForFilters(filters) {
+            if (!chPrecioDia) return;
+            filters = filters || {};
+            var prov = filters.prov || '';
+            var corp = filters.corp || '';
+            var key = prov + '||' + corp;
+            if (key === _lastFetchKey) return;
+            _lastFetchKey = key;
+
+            clearTimeout(_ft);
+            _ft = setTimeout(function () {
+                try {
+                    var url = new URL(window.location.href);
+                    url.searchParams.set('fmt', 'json');
+                    if (prov) url.searchParams.set('provincia', prov); else url.searchParams.delete('provincia');
+                    if (corp) url.searchParams.set('corporativo', corp); else url.searchParams.delete('corporativo');
+                    fetch(url.toString(), { headers: { 'Accept': 'application/json' } })
+                        .then(function (r) { return r.ok ? r.json() : null; })
+                        .then(function (j) {
+                            if (!j || !j.chart_data) return;
+                            var fechas2 = j.chart_data.fechas || [];
+                            var precios2 = j.chart_data.precios_dia || [];
+                            chPrecioDia.data.labels = fechas2;
+                            chPrecioDia.data.datasets[0].data = precios2;
+                            chPrecioDia.data.datasets[0].pointRadius = fechas2.length > 60 ? 0 : 4;
+                            chPrecioDia.update('none');
+                        })
+                        .catch(function () {});
+                } catch (e) {}
+            }, 180);
+        }
+
+        function onFiltered(ev) {
+            var top = buildTopFromFilteredTable();
+            if (top && chPeso && chValor) {
+                chPeso.data.labels = top.labels;
+                chPeso.data.datasets[0].data = top.pesos;
+                chPeso.update('none');
+
+                chValor.data.labels = top.labels;
+                chValor.data.datasets[0].data = top.valores;
+                chValor.update('none');
+            }
+
+            var det = (ev && ev.detail) || {};
+            var f = (det.filters) || (document.querySelector('table.rct-auto') && document.querySelector('table.rct-auto').__rct && document.querySelector('table.rct-auto').__rct.filters) || {};
+            fetchPrecioDiaForFilters(f);
+        }
+
+        var tableEl2 = document.querySelector('table.rct-auto');
+        if (tableEl2) tableEl2.addEventListener('rct:filtered', onFiltered);
+        onFiltered();
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', buildCharts);

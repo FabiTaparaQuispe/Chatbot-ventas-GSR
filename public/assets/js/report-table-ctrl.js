@@ -290,6 +290,12 @@
             });
         }
 
+        /* Exponer API mínima para que scripts de gráficas reaccionen a filtros client-side */
+        tableEl.__rct = tableEl.__rct || {};
+        tableEl.__rct.cols = cols;
+        tableEl.__rct.origData = origData;
+        tableEl.__rct.getFilteredIndices = getFiltered;
+
         function render() {
             var fi = getFiltered();
             var pp = st.pp;
@@ -310,6 +316,14 @@
             if (pagEl) pagEl.innerHTML = buildPag(st.page, total);
 
             renderTotals(fi);
+
+            try {
+                tableEl.__rct.filteredIndices = fi.slice();
+                tableEl.__rct.filters = { prov: st.prov, corp: st.corp, q: st.q };
+                tableEl.dispatchEvent(new CustomEvent('rct:filtered', {
+                    detail: { filteredIndices: tableEl.__rct.filteredIndices, filters: tableEl.__rct.filters }
+                }));
+            } catch (e) { /* no-op */ }
 
             if (st.view === 'lista') {
                 tableWrap.style.display = '';

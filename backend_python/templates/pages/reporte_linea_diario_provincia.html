@@ -108,7 +108,7 @@
     function buildCharts() {
         if (!window.Chart || !fechas.length) return;
 
-        new Chart(document.getElementById('chartPesoDia'), {
+        var chPeso = new Chart(document.getElementById('chartPesoDia'), {
             type: 'line',
             data: { labels: fechas, datasets: [{ label: 'Peso (kg)', data: pesos,
                 borderColor: 'rgba(34,197,94,1)', backgroundColor: 'rgba(34,197,94,0.15)',
@@ -121,7 +121,7 @@
             })}),
         });
 
-        new Chart(document.getElementById('chartValorDia'), {
+        var chValor = new Chart(document.getElementById('chartValorDia'), {
             type: 'line',
             data: { labels: fechas, datasets: [{ label: 'Valor (S/)', data: valores,
                 borderColor: 'rgba(59,130,246,1)', backgroundColor: 'rgba(59,130,246,0.15)',
@@ -133,6 +133,60 @@
                 }}},
             })}),
         });
+
+        function parseNum(s) {
+            var n = parseFloat(String(s == null ? '' : s).replace(/[^\d.\-]/g, ''));
+            return isNaN(n) ? null : n;
+        }
+        function findCol(cols, re) {
+            for (var i = 0; i < cols.length; i++) if (re.test((cols[i] || '').toLowerCase())) return i;
+            return -1;
+        }
+        function recomputeFromFilteredTable() {
+            var tableEl = document.querySelector('table.rct-auto');
+            if (!tableEl || !tableEl.__rct || !tableEl.__rct.origData) return;
+            var cols = tableEl.__rct.cols || [];
+            var data = tableEl.__rct.origData || [];
+            var fi = (tableEl.__rct.filteredIndices || (tableEl.__rct.getFilteredIndices ? tableEl.__rct.getFilteredIndices() : [])) || [];
+
+            var idxFecha = findCol(cols, /^fecha$/i);
+            if (idxFecha < 0) idxFecha = findCol(cols, /fecha/i);
+            var idxPeso = findCol(cols, /\bpeso\b/i);
+            var idxValor = findCol(cols, /\bvalor\b/i);
+            if (idxFecha < 0 || idxPeso < 0 || idxValor < 0) return;
+
+            var byDay = {};
+            fi.forEach(function (i) {
+                var row = data[i] || [];
+                var f = (row[idxFecha] || '').trim();
+                if (!f) return;
+                var p = parseNum(row[idxPeso]);  if (p == null) p = 0;
+                var v = parseNum(row[idxValor]); if (v == null) v = 0;
+                if (!byDay[f]) byDay[f] = { peso: 0, valor: 0 };
+                byDay[f].peso += p;
+                byDay[f].valor += v;
+            });
+
+            var newFechas = Object.keys(byDay).sort();
+            var newPesos = newFechas.map(function (f) { return Math.round(byDay[f].peso * 100) / 100; });
+            var newValores = newFechas.map(function (f) { return Math.round(byDay[f].valor * 100) / 100; });
+
+            chPeso.data.labels = newFechas;
+            chPeso.data.datasets[0].data = newPesos;
+            chPeso.data.datasets[0].pointRadius = newFechas.length > 60 ? 0 : 3;
+            chPeso.update('none');
+
+            chValor.data.labels = newFechas;
+            chValor.data.datasets[0].data = newValores;
+            chValor.data.datasets[0].pointRadius = newFechas.length > 60 ? 0 : 3;
+            chValor.update('none');
+        }
+
+        var tableEl2 = document.querySelector('table.rct-auto');
+        if (tableEl2) {
+            tableEl2.addEventListener('rct:filtered', recomputeFromFilteredTable);
+        }
+        recomputeFromFilteredTable();
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', buildCharts);
