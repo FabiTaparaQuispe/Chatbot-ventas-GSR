@@ -10,6 +10,55 @@
 
     {# ── Panel tabla + PDF ────────────────────────────────────────────── #}
     <div class="card-filtros-demo reporte-informe-panel">
+        <div class="card-filtros-demo__head" id="filtrosHead" role="button" tabindex="0" aria-controls="filtrosBody" aria-expanded="true">
+            <div class="card-filtros-demo__head-left">
+                <span class="card-filtros-demo__emoji" aria-hidden="true"><i class="fa-solid fa-filter"></i></span>
+                <span class="card-filtros-demo__title">Filtros</span>
+            </div>
+            <span class="card-filtros-demo__chev card-filtros-demo__chev--open" id="filtrosChev" aria-hidden="true"><i class="fa-solid fa-chevron-down"></i></span>
+        </div>
+        <div class="card-filtros-demo__body" id="filtrosBody">
+            <form method="get" class="filter-form" autocomplete="off">
+                <input type="hidden" name="desde" value="{{ d1 }}">
+                <input type="hidden" name="hasta" value="{{ d2 }}">
+                <input type="hidden" name="linea" value="{{ linea }}">
+                {% if top is not none %}<input type="hidden" name="top" value="{{ top }}">{% endif %}
+
+                <div class="filter-row">
+                    <div class="filter-field">
+                        <label for="fProv">Provincia</label>
+                        <select id="fProv" name="provincia">
+                            <option value="">— Todas —</option>
+                            {% for p in provincias_opts %}
+                            <option value="{{ p }}" {% if f_provincias and p == f_provincias[0] %}selected{% endif %}>{{ p }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="filter-field" id="wCorp" style="display:none">
+                        <label for="fCorp">Corporativo</label>
+                        <select id="fCorp" name="corporativo">
+                            <option value="">— Todos —</option>
+                        </select>
+                    </div>
+                    <div class="filter-field" id="wCli" style="display:none">
+                        <label for="fCli">Cliente</label>
+                        <select id="fCli" name="cliente">
+                            <option value="">— Todos —</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="filter-actions">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fa-solid fa-check" aria-hidden="true"></i> Aplicar
+                    </button>
+                    <a class="btn btn-ghost" href="?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}{% if top is not none %}&top={{ top }}{% endif %}">
+                        <i class="fa-solid fa-eraser" aria-hidden="true"></i> Limpiar
+                    </a>
+                </div>
+            </form>
+        </div>
+
         <div class="reporte-informe-toolbar">
             <button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button>
         </div>
@@ -97,6 +146,86 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script>
+/* Filtros en cascada: Provincia → Corporativo → Cliente */
+(function () {
+    var TREE  = {{ opts_tree | tojson }};
+    var fProv = document.getElementById('fProv');
+    var fCorp = document.getElementById('fCorp');
+    var fCli  = document.getElementById('fCli');
+    var wCorp = document.getElementById('wCorp');
+    var wCli  = document.getElementById('wCli');
+    if (!fProv) return;
+
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function onProvChange() {
+        var prov = fProv.value;
+        if (fCorp) fCorp.innerHTML = '<option value="">— Todos —</option>';
+        if (fCli)  fCli.innerHTML  = '<option value="">— Todos —</option>';
+        if (wCorp) wCorp.style.display = 'none';
+        if (wCli)  wCli.style.display  = 'none';
+        if (!prov || !TREE[prov]) return;
+        var corps = TREE[prov].corps || [];
+        corps.forEach(function (c) {
+            fCorp.insertAdjacentHTML('beforeend', '<option value="' + esc(c) + '">' + esc(c) + '</option>');
+        });
+        if (corps.length) wCorp.style.display = '';
+    }
+    function onCorpChange() {
+        var prov = fProv.value;
+        var corp = fCorp ? fCorp.value : '';
+        if (fCli) fCli.innerHTML = '<option value="">— Todos —</option>';
+        if (wCli) wCli.style.display = 'none';
+        if (!prov || !corp || !TREE[prov]) return;
+        var clients = ((TREE[prov].clients || {})[corp]) || [];
+        clients.forEach(function (c) {
+            fCli.insertAdjacentHTML('beforeend',
+                '<option value="' + esc(c.cod) + '">' + esc(c.cod) + ' — ' + esc(c.nombre) + '</option>');
+        });
+        if (clients.length) wCli.style.display = '';
+    }
+
+    fProv.addEventListener('change', onProvChange);
+    if (fCorp) fCorp.addEventListener('change', onCorpChange);
+
+    /* Restaurar estado tras envío de formulario */
+    var iP = {{ (f_provincias[0] if f_provincias else '') | tojson }};
+    var iC = {{ (f_corporativos[0] if f_corporativos else '') | tojson }};
+    var iL = {{ (f_clientes[0] if f_clientes else '') | tojson }};
+    if (iP) {
+        fProv.value = iP;
+        onProvChange();
+        if (iC && fCorp) {
+            fCorp.value = iC;
+            onCorpChange();
+            if (iL && fCli) fCli.value = iL;
+        }
+    }
+})();
+/* Panel colapsable */
+(function () {
+    var head = document.getElementById('filtrosHead');
+    var body = document.getElementById('filtrosBody');
+    var chev = document.getElementById('filtrosChev');
+    function setOpen(isOpen) {
+        if (!body) return;
+        body.classList.toggle('hidden', !isOpen);
+        if (chev) chev.classList.toggle('card-filtros-demo__chev--open', isOpen);
+        if (head) head.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    }
+    function toggle() { setOpen(body && body.classList.contains('hidden')); }
+    if (head && body) {
+        head.addEventListener('click', toggle);
+        head.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+        });
+        setOpen(true);
+    }
+})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
 <script src="/assets/js/reporte_pdf.js"></script>

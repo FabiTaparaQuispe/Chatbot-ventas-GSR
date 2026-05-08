@@ -718,6 +718,38 @@ def ventas_linea_resumen_provincia():
 
     total_precio_kg = round(total_valor / total_peso, 2) if total_peso else None
 
+    # Árbol de cascada (sin filtros multi-select) para desplegado progresivo
+    opts_tree: dict = {}
+    tree_sql = (
+        "SELECT DISTINCT"
+        " COALESCE(NULLIF(TRIM(Provincia),''),'') AS provincia,"
+        " COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'') AS nombre_corporativo,"
+        " COALESCE(NULLIF(TRIM(NombreCliente),''),'') AS nombre_cliente,"
+        " CodigoCliente AS cod_cliente"
+        f" FROM ventasgeneral2{base_where}"
+        " AND COALESCE(NULLIF(TRIM(Provincia),''),'') <> ''"
+        " ORDER BY provincia, nombre_corporativo, nombre_cliente"
+    )
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(tree_sql), base_bind)
+        for r in (cur.fetchall() or []):
+            pv      = str(r.get('provincia')         or '').strip()
+            corp    = str(r.get('nombre_corporativo') or '').strip()
+            cli_cod = str(r.get('cod_cliente')        or '').strip()
+            cli_nom = str(r.get('nombre_cliente')     or '').strip()
+            if not pv:
+                continue
+            if pv not in opts_tree:
+                opts_tree[pv] = {'corps': [], 'clients': {}}
+            node = opts_tree[pv]
+            if corp and corp not in node['corps']:
+                node['corps'].append(corp)
+            if cli_cod and corp:
+                if corp not in node['clients']:
+                    node['clients'][corp] = []
+                if not any(c['cod'] == cli_cod for c in node['clients'][corp]):
+                    node['clients'][corp].append({'cod': cli_cod, 'nombre': cli_nom})
+
     top_lead = 'Sin límite (todas las filas)' if top is None else f'Top {top}'
     ctx = _report_shell_context(f'Ventas {linea} · Resumen provincia/cliente')
     ctx.update({
@@ -742,6 +774,8 @@ def ventas_linea_resumen_provincia():
         'f_provincias': f_provincias,
         'f_corporativos': f_corporativos,
         'f_clientes': f_clientes,
+        'opts_tree': opts_tree,
+        'body_class': 'app-page-reporte-wide',
     })
 
     if (request.args.get('fmt') or '').strip().lower() == 'json':
@@ -1032,8 +1066,8 @@ def ventas_linea_precio_diario():
     )
     sql_precio_tdoc = (
         "SELECT FechaContable AS fecha, CodigoDocumento AS tipo_doc,"
-        " CASE WHEN COALESCE(SUM(Peso),0) > 0"
-        "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
+        " CASE WHEN COALESCE(SUM(Peso),0) <> 0"
+        "      THEN ROUND(ABS(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0)), 4)"
         "      ELSE NULL END AS precio_kg"
         f" FROM ventasgeneral2{tdoc_where}"
         " GROUP BY FechaContable, CodigoDocumento ORDER BY FechaContable ASC, CodigoDocumento ASC"
