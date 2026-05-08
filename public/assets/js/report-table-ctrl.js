@@ -54,6 +54,10 @@
         return isNaN(n) ? null : n;
     }
 
+    function normKey(s) {
+        return String(s == null ? '' : s).trim().toUpperCase();
+    }
+
     function initTableCtrl(tableEl) {
         var tbody = tableEl.querySelector('tbody');
         if (!tbody) return;
@@ -90,9 +94,14 @@
         var provHTML = '';
         if (provIdx >= 0) {
             var provinces = [];
+            var seenProv = {};
             origData.forEach(function (row) {
                 var p = row[provIdx] || '';
-                if (p && provinces.indexOf(p) < 0) provinces.push(p);
+                var k = normKey(p);
+                if (k && !seenProv[k]) {
+                    seenProv[k] = String(p).trim();
+                    provinces.push(seenProv[k]);
+                }
             });
             provinces.sort(function (a, b) { return a.localeCompare(b, 'es'); });
             provHTML = '<div class="dataTables_filter"><label>Provincia '
@@ -105,9 +114,14 @@
         var corpHTML = '';
         if (corpIdx >= 0) {
             var corps = [];
+            var seenCorp = {};
             origData.forEach(function (row) {
                 var c = row[corpIdx] || '';
-                if (c && corps.indexOf(c) < 0) corps.push(c);
+                var k = normKey(c);
+                if (k && !seenCorp[k]) {
+                    seenCorp[k] = String(c).trim();
+                    corps.push(seenCorp[k]);
+                }
             });
             corps.sort(function (a, b) { return a.localeCompare(b, 'es'); });
             corpHTML = '<div class="dataTables_filter"><label>Corporativo '
@@ -281,10 +295,12 @@
             var q = st.q;
             var prov = st.prov;
             var corp = st.corp;
+            var provK = prov ? normKey(prov) : '';
+            var corpK = corp ? normKey(corp) : '';
             return sortedIndices.filter(function (i) {
                 var row = origData[i];
-                if (prov && provIdx >= 0 && (row[provIdx] || '') !== prov) return false;
-                if (corp && corpIdx >= 0 && (row[corpIdx] || '') !== corp) return false;
+                if (prov && provIdx >= 0 && normKey(row[provIdx] || '') !== provK) return false;
+                if (corp && corpIdx >= 0 && normKey(row[corpIdx] || '') !== corpK) return false;
                 if (q && !row.some(function (c) { return c.toLowerCase().indexOf(q) >= 0; })) return false;
                 return true;
             });
