@@ -6,6 +6,59 @@
 </div>
 
 <div class="reporte-page">
+
+    {# ── Barra de filtros ─────────────────────────────────────────────── #}
+    <div class="card-filtros-demo reporte-informe-panel" style="margin-bottom:1rem;">
+        <form method="GET" id="form-filtros" style="display:flex; flex-wrap:wrap; gap:.75rem; align-items:flex-end; padding:.25rem 0;">
+            <input type="hidden" name="desde"  value="{{ d1 }}">
+            <input type="hidden" name="hasta"  value="{{ d2 }}">
+            <input type="hidden" name="linea"  value="{{ linea }}">
+            {% if top %}<input type="hidden" name="top" value="{{ top }}">{% endif %}
+
+            {# Provincia #}
+            <div style="display:flex; flex-direction:column; gap:.25rem; min-width:160px;">
+                <label style="font-size:.75rem; font-weight:600; color:var(--muted);">Provincia</label>
+                <select name="provincia" multiple size="4" id="sel-provincia"
+                        style="border:1px solid var(--border); border-radius:6px; padding:.25rem .4rem; font-size:.8rem; background:var(--surface); color:var(--text); min-width:150px;">
+                    {% for pv in provincias_opts %}
+                    <option value="{{ pv }}" {% if pv in f_provincias %}selected{% endif %}>{{ pv }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            {# Corporativo #}
+            <div style="display:flex; flex-direction:column; gap:.25rem; min-width:190px;">
+                <label style="font-size:.75rem; font-weight:600; color:var(--muted);">Corporativo</label>
+                <select name="corporativo" multiple size="4" id="sel-corporativo"
+                        style="border:1px solid var(--border); border-radius:6px; padding:.25rem .4rem; font-size:.8rem; background:var(--surface); color:var(--text); min-width:180px;">
+                    {% for c in corporativos_opts %}
+                    <option value="{{ c.nombre }}" {% if c.nombre in f_corporativos %}selected{% endif %}>{{ c.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            {# Cliente (dependiente de corporativo) #}
+            <div style="display:flex; flex-direction:column; gap:.25rem; min-width:220px;">
+                <label style="font-size:.75rem; font-weight:600; color:var(--muted);">Cliente</label>
+                <select name="cliente" multiple size="4" id="sel-cliente"
+                        style="border:1px solid var(--border); border-radius:6px; padding:.25rem .4rem; font-size:.8rem; background:var(--surface); color:var(--text); min-width:210px;">
+                    {% for c in clientes_opts %}
+                    <option value="{{ c.cod }}"
+                            data-corp="{{ c.corporativo }}"
+                            {% if c.cod in f_clientes %}selected{% endif %}>{{ c.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:.4rem;">
+                <button type="submit" class="btn btn-primary" style="white-space:nowrap;">Aplicar filtros</button>
+                <a href="?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}{% if top %}&top={{ top }}{% endif %}"
+                   class="btn btn-secondary" style="white-space:nowrap; text-align:center; font-size:.8rem;">Limpiar</a>
+            </div>
+        </form>
+    </div>
+
+    {# ── Panel tabla + PDF ────────────────────────────────────────────── #}
     <div class="card-filtros-demo reporte-informe-panel">
         <div class="reporte-informe-toolbar">
             <button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button>
@@ -17,6 +70,14 @@
                 Total líneas: <strong>{{ total_lineas }}</strong> ·
                 Peso total: <strong>{{ total_peso }} kg</strong> ·
                 Valor total: <strong>S/ {{ total_valor }}</strong>
+                {% if f_provincias or f_corporativos or f_clientes %}
+                · <em style="color:var(--muted); font-size:.85em;">
+                    Filtros:
+                    {% if f_provincias %}Provincia: {{ f_provincias|join(', ') }}{% endif %}
+                    {% if f_corporativos %}{% if f_provincias %} · {% endif %}Corporativo: {{ f_corporativos|join(', ') }}{% endif %}
+                    {% if f_clientes %}{% if f_provincias or f_corporativos %} · {% endif %}Cliente: {{ f_clientes|join(', ') }}{% endif %}
+                </em>
+                {% endif %}
             </p>
 
             {% if filas %}
@@ -26,11 +87,13 @@
                         <tr>
                             <th>#</th>
                             <th>Provincia</th>
+                            <th>Corporativo</th>
                             <th>Nombre cliente</th>
                             <th style="text-align:right;">Líneas</th>
                             <th style="text-align:right;">Cantidad (un.)</th>
                             <th style="text-align:right;">Peso (kg)</th>
                             <th style="text-align:right;">Valor (S/)</th>
+                            <th style="text-align:right;">Precio (S//kg)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -38,41 +101,56 @@
                         <tr>
                             <td>{{ f.rank }}</td>
                             <td>{{ f.provincia }}</td>
+                            <td>{{ f.nombre_corporativo }}</td>
                             <td>{{ f.nombre_cliente }}</td>
                             <td style="text-align:right;">{{ f.lineas }}</td>
                             <td style="text-align:right;">{{ f.suma_cantidad }}</td>
                             <td style="text-align:right;">{{ f.suma_peso }}</td>
                             <td style="text-align:right;">{{ f.suma_valor }}</td>
+                            <td style="text-align:right;">{{ f.precio_kg }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
                     <tfoot>
                         <tr>
-                            <th colspan="3" style="text-align:right;">Total período</th>
+                            <th colspan="4" style="text-align:right;">Total período</th>
                             <th style="text-align:right;">{{ total_lineas }}</th>
                             <th style="text-align:right;">{{ total_cantidad }}</th>
                             <th style="text-align:right;">{{ total_peso }}</th>
                             <th style="text-align:right;">{{ total_valor }}</th>
+                            <th style="text-align:right;">{{ total_precio_kg }}</th>
                         </tr>
                     </tfoot>
                 </table>
             </div>
             {% else %}
-            <p style="color:var(--muted);">No se encontraron ventas para la línea "{{ linea }}" en el período seleccionado.</p>
+            <p style="color:var(--muted);">No se encontraron ventas para la línea "{{ linea }}" en el período y filtros seleccionados.</p>
             {% endif %}
         </div>
     </div>
 
     {% if filas %}
+    {# ── Gráfico 1: Peso por cliente ─────────────────────────────────── #}
     <section class="reporte-chart-section" aria-label="Gráfico peso por cliente">
         <h3 class="reporte-chart-heading">Peso (kg) por cliente · Top {{ [filas|length, 20]|min }}</h3>
         <div class="chart-inner"><canvas id="chartPeso"></canvas></div>
     </section>
+
+    {# ── Gráfico 2: Valor por cliente ────────────────────────────────── #}
     <section class="reporte-chart-section" aria-label="Gráfico valor por cliente">
         <h3 class="reporte-chart-heading">Valor (S/) por cliente</h3>
         <div class="chart-inner"><canvas id="chartValor"></canvas></div>
     </section>
     {% endif %}
+
+    {% if chart_data.fechas %}
+    {# ── Gráfico 3: Precio promedio ponderado por día ─────────────────── #}
+    <section class="reporte-chart-section" aria-label="Gráfico precio diario">
+        <h3 class="reporte-chart-heading">Precio promedio ponderado (S//kg) por día</h3>
+        <div class="chart-inner"><canvas id="chartPrecioDia"></canvas></div>
+    </section>
+    {% endif %}
+
 </div>
 {% endblock %}
 
@@ -83,73 +161,150 @@
 <script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
 <script>
 (function () {
-    var d = {{ chart_data | tojson }};
-    var SHOW = 20;
-    var labels = (d.labels || []).slice(0, SHOW);
-    var pesos  = (d.pesos  || []).slice(0, SHOW);
-    var valores= (d.valores|| []).slice(0, SHOW);
+    /* ── Datos del servidor ─────────────────────────────────────────── */
+    var d     = {{ chart_data | tojson }};
+    var SHOW  = 20;
+    var labels      = (d.labels      || []).slice(0, SHOW);
+    var pesos       = (d.pesos       || []).slice(0, SHOW);
+    var valores     = (d.valores     || []).slice(0, SHOW);
+    var fechas      = d.fechas      || [];
+    var preciosDia  = d.precios_dia || [];
 
+    /* ── Gráficos ───────────────────────────────────────────────────── */
     function buildCharts() {
-        if (!window.Chart || !labels.length) return;
+        if (!window.Chart) return;
 
-        new Chart(document.getElementById('chartPeso'), {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Peso (kg)',
-                    data: pesos,
-                    backgroundColor: 'rgba(34,197,94,0.65)',
-                    borderColor: 'rgba(34,197,94,1)',
-                    borderWidth: 1,
-                }],
-            },
-            options: {
-                indexAxis: 'y',
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { labels: { color: '#cbd5e1', boxWidth: 14 } },
-                    tooltip: { callbacks: { label: function(ctx) {
-                        return ctx.dataset.label + ': ' + (ctx.parsed.x || 0).toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' kg';
-                    }}},
+        if (labels.length) {
+            new Chart(document.getElementById('chartPeso'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Peso (kg)',
+                        data: pesos,
+                        backgroundColor: 'rgba(34,197,94,0.65)',
+                        borderColor: 'rgba(34,197,94,1)',
+                        borderWidth: 1,
+                    }],
                 },
-                scales: {
-                    x: { ticks: { color: '#94a3b8', callback: function(v){ return v.toLocaleString('es-PE'); } }, grid: { color: 'rgba(148,163,184,0.15)' } },
-                    y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1', boxWidth: 14 } },
+                        tooltip: { callbacks: { label: function(ctx) {
+                            return ctx.dataset.label + ': ' + (ctx.parsed.x || 0).toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' kg';
+                        }}},
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8', callback: function(v){ return v.toLocaleString('es-PE'); } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                        y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                    },
                 },
-            },
-        });
+            });
 
-        new Chart(document.getElementById('chartValor'), {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Valor (S/)',
-                    data: valores,
-                    backgroundColor: 'rgba(59,130,246,0.65)',
-                    borderColor: 'rgba(59,130,246,1)',
-                    borderWidth: 1,
-                }],
-            },
-            options: {
-                indexAxis: 'y',
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { labels: { color: '#cbd5e1', boxWidth: 14 } },
-                    tooltip: { callbacks: { label: function(ctx) {
-                        return 'S/ ' + (ctx.parsed.x || 0).toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2});
-                    }}},
+            new Chart(document.getElementById('chartValor'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Valor (S/)',
+                        data: valores,
+                        backgroundColor: 'rgba(59,130,246,0.65)',
+                        borderColor: 'rgba(59,130,246,1)',
+                        borderWidth: 1,
+                    }],
                 },
-                scales: {
-                    x: { ticks: { color: '#94a3b8', callback: function(v){ return 'S/ ' + v.toLocaleString('es-PE'); } }, grid: { color: 'rgba(148,163,184,0.15)' } },
-                    y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1', boxWidth: 14 } },
+                        tooltip: { callbacks: { label: function(ctx) {
+                            return 'S/ ' + (ctx.parsed.x || 0).toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2});
+                        }}},
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8', callback: function(v){ return 'S/ ' + v.toLocaleString('es-PE'); } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                        y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                    },
                 },
-            },
-        });
+            });
+        }
+
+        if (fechas.length) {
+            new Chart(document.getElementById('chartPrecioDia'), {
+                type: 'line',
+                data: {
+                    labels: fechas,
+                    datasets: [{
+                        label: 'Precio/kg (S/)',
+                        data: preciosDia,
+                        borderColor: 'rgba(251,146,60,1)',
+                        backgroundColor: 'rgba(251,146,60,0.15)',
+                        borderWidth: 2,
+                        tension: 0.2,
+                        fill: true,
+                        pointRadius: fechas.length > 60 ? 0 : 4,
+                        pointBackgroundColor: 'rgba(251,146,60,1)',
+                        spanGaps: true,
+                    }],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1', boxWidth: 14 } },
+                        tooltip: { callbacks: { label: function(ctx) {
+                            return 'S/ ' + (ctx.parsed.y != null ? ctx.parsed.y.toLocaleString('es-PE', {minimumFractionDigits:4, maximumFractionDigits:4}) : '—') + '/kg';
+                        }}},
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 10 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                        y: {
+                            ticks: { color: '#94a3b8', callback: function(v){ return 'S/ ' + v.toLocaleString('es-PE', {minimumFractionDigits:2}); } },
+                            grid: { color: 'rgba(148,163,184,0.15)' },
+                            title: { display: true, text: 'S//kg', color: '#94a3b8', font: { size: 11 } },
+                        },
+                    },
+                },
+            });
+        }
     }
+
+    /* ── Dropdown cliente dependiente de corporativo ────────────────── */
+    (function () {
+        var selCorp   = document.getElementById('sel-corporativo');
+        var selCli    = document.getElementById('sel-cliente');
+        if (!selCorp || !selCli) return;
+
+        var allOpts = Array.from(selCli.options).map(function(o) {
+            return { value: o.value, text: o.textContent, corp: o.dataset.corp, selected: o.selected };
+        });
+
+        function filterClientes() {
+            var selCorps = Array.from(selCorp.selectedOptions).map(function(o){ return o.value; });
+            var prevSel  = Array.from(selCli.selectedOptions).map(function(o){ return o.value; });
+            selCli.innerHTML = '';
+            allOpts.forEach(function(opt) {
+                if (selCorps.length === 0 || selCorps.indexOf(opt.corp) !== -1) {
+                    var el = document.createElement('option');
+                    el.value = opt.value;
+                    el.textContent = opt.text;
+                    el.dataset.corp = opt.corp;
+                    el.selected = prevSel.indexOf(opt.value) !== -1;
+                    selCli.appendChild(el);
+                }
+            });
+        }
+
+        selCorp.addEventListener('change', filterClientes);
+        // Aplicar estado inicial si ya hay corporativos seleccionados
+        if (selCorp.selectedOptions.length > 0) filterClientes();
+    })();
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', buildCharts);
     else buildCharts();
