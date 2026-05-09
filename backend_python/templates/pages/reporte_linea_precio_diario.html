@@ -2,7 +2,7 @@
 {% block content %}
 <div class="page-head">
     <h1>{{ linea }} · Precio por día y cliente</h1>
-    <p class="page-lead">FechaContable del <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong> · orden por <strong>fecha</strong> y <strong>peso (kg) de mayor a menor</strong> dentro de cada día.</p>
+    <p class="page-lead"><strong>{{ fecha_eje_leyenda|default('Fecha contable') }}</strong> del <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong> · orden por <strong>fecha</strong> y <strong>peso (kg) de mayor a menor</strong> dentro de cada día.</p>
 </div>
 
 <div class="reporte-page">
@@ -17,15 +17,31 @@
         </div>
         <div class="card-filtros-demo__body" id="filtrosBody">
             <form method="get" class="filter-form filter-form--reporte" autocomplete="off">
-                <input type="hidden" name="desde" value="{{ d1 }}">
-                <input type="hidden" name="hasta" value="{{ d2 }}">
                 <input type="hidden" name="top" value="{{ top }}">
+
+                <div class="filter-row">
+                    <div class="filter-field">
+                        <label for="fDesde">Desde</label>
+                        <input type="date" id="fDesde" name="desde" value="{{ d1 }}" required />
+                    </div>
+                    <div class="filter-field">
+                        <label for="fHasta">Hasta</label>
+                        <input type="date" id="fHasta" name="hasta" value="{{ d2 }}" required />
+                    </div>
+                </div>
 
                 <div class="filter-row filter-row--reporte-line-prov">
                     <div class="filter-field filter-field--linea-comercial">
                         <label for="fLinea">Línea comercial</label>
                         <select id="fLinea" name="linea">
                             {% if linea %}<option value="{{ linea|e }}" selected>{{ linea|e }}</option>{% endif %}
+                        </select>
+                    </div>
+                    <div class="filter-field">
+                        <label for="fTipoFecha">Período según</label>
+                        <select id="fTipoFecha" name="tipo_fecha">
+                            <option value="contable" {% if (tipo_fecha|default('contable')) != 'proceso' %}selected{% endif %}>Fecha contable</option>
+                            <option value="proceso" {% if (tipo_fecha|default('contable')) == 'proceso' %}selected{% endif %}>Día de proceso (fechaProceso)</option>
                         </select>
                     </div>
                     <div class="filter-field filter-field--provincia">
@@ -59,7 +75,7 @@
                         <button type="submit" class="btn btn-primary">
                             <i class="fa-solid fa-check" aria-hidden="true"></i> Aplicar
                         </button>
-                        <a class="btn btn-ghost" href="?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}&top={{ top }}">
+                        <a class="btn btn-ghost" href="?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}&top={{ top }}{% if (tipo_fecha|default('contable')) == 'proceso' %}&tipo_fecha=proceso{% endif %}">
                             <i class="fa-solid fa-eraser" aria-hidden="true"></i> Limpiar
                         </a>
                     </div>
@@ -74,6 +90,9 @@
 
         <div id="reporte-pdf-root">
             <h2 class="reporte-informe-title">{{ linea }} · Precio por día provincia/cliente</h2>
+            <p class="reporte-informe-meta" style="margin-top:0.35rem;">
+                Período ({{ fecha_eje_leyenda|default('Fecha contable') }}): <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong>
+            </p>
 
             {% if filas %}
             <div class="table-wrapper overflow-x-auto productos-dt-skin">
@@ -81,7 +100,7 @@
                     <thead>
                         <tr>
                             <th>#</th>
-                            <th>Fecha</th>
+                            <th>{{ fecha_columna_th|default('Fecha contable') }}</th>
                             <th>Provincia</th>
                             <th>Corporativo</th>
                             <th>Nombre cliente</th>
@@ -114,7 +133,7 @@
             <p style="color:var(--muted);">
                 No se encontraron ventas para la línea "{{ linea }}" en el período seleccionado.
                 {% if f_provincias or f_corporativos or f_clientes %}
-                <a href="?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}&top={{ top }}"
+                <a href="?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}&top={{ top }}{% if (tipo_fecha|default('contable')) == 'proceso' %}&tipo_fecha=proceso{% endif %}"
                    style="color:var(--accent);">Limpiar filtros</a>
                 {% endif %}
             </p>
@@ -124,14 +143,14 @@
 
     {% if chart_data.fechas %}
     <section class="reporte-chart-section" aria-label="Gráfico precio diario">
-        <h3 class="reporte-chart-heading">Precio promedio ponderado (S//kg) por día</h3>
+        <h3 class="reporte-chart-heading">Precio promedio ponderado (S//kg) por día · {{ fecha_eje_leyenda|default('Fecha contable') }}</h3>
         <div class="chart-inner"><canvas id="chartPrecioDia"></canvas></div>
     </section>
     {% endif %}
 
     {% if chart_data_tdoc.fechas %}
     <section class="reporte-chart-section" aria-label="Gráfico precio por tipo de documento">
-        <h3 class="reporte-chart-heading">Precio (S//kg) por tipo de documento · Factura (01) · Boleta (03) · N.Crédito (07)</h3>
+        <h3 class="reporte-chart-heading">Precio (S//kg) por tipo de documento · Factura (01) · Boleta (03) · N.Crédito (07) · {{ fecha_eje_leyenda|default('Fecha contable') }}</h3>
         <div class="chart-inner"><canvas id="chartPrecioTdoc"></canvas></div>
     </section>
     {% endif %}

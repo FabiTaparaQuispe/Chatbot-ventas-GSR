@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-head">
     <h1>{{ linea }} · Ventas diarias por provincia y cliente</h1>
-    <p class="page-lead">FechaContable del <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong> · ordenado por fecha ASC y peso DESC.</p>
+    <p class="page-lead"><strong>{{ fecha_eje_leyenda|default('Fecha contable') }}</strong> del <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong> · ordenado por fecha ASC y peso DESC.</p>
 </div>
 
 <div class="reporte-page">
@@ -19,15 +19,31 @@
         </div>
         <div class="card-filtros-demo__body" id="filtrosBody">
             <form method="get" class="filter-form filter-form--reporte" autocomplete="off">
-                <input type="hidden" name="desde" value="{{ d1 }}">
-                <input type="hidden" name="hasta" value="{{ d2 }}">
                 <input type="hidden" name="top"   value="{{ top }}">
+
+                <div class="filter-row">
+                    <div class="filter-field">
+                        <label for="fDesde">Desde</label>
+                        <input type="date" id="fDesde" name="desde" value="{{ d1 }}" required />
+                    </div>
+                    <div class="filter-field">
+                        <label for="fHasta">Hasta</label>
+                        <input type="date" id="fHasta" name="hasta" value="{{ d2 }}" required />
+                    </div>
+                </div>
 
                 <div class="filter-row filter-row--reporte-line-prov">
                     <div class="filter-field filter-field--linea-comercial">
                         <label for="fLinea">Línea comercial</label>
                         <select id="fLinea" name="linea">
                             {% if linea %}<option value="{{ linea|e }}" selected>{{ linea|e }}</option>{% endif %}
+                        </select>
+                    </div>
+                    <div class="filter-field">
+                        <label for="fTipoFecha">Período según</label>
+                        <select id="fTipoFecha" name="tipo_fecha">
+                            <option value="contable" {% if (tipo_fecha|default('contable')) != 'proceso' %}selected{% endif %}>Fecha contable</option>
+                            <option value="proceso" {% if (tipo_fecha|default('contable')) == 'proceso' %}selected{% endif %}>Día de proceso (fechaProceso)</option>
                         </select>
                     </div>
                     <div class="filter-field filter-field--provincia">
@@ -49,9 +65,8 @@
 
                 <div class="filter-row filter-row--reporte-cliente">
                     <div class="filter-field" id="wCli" style="display:none">
-                        <label for="fCli">Cliente</label>
-                        <select id="fCli" name="cliente">
-                            <option value="">— Todos —</option>
+                        <label for="fCli">Cliente <span style="font-weight:400;color:var(--muted);">(varios para comparar en gráficos)</span></label>
+                        <select id="fCli" name="cliente" multiple="multiple">
                         </select>
                     </div>
                 </div>
@@ -61,7 +76,7 @@
                         <button type="submit" class="btn btn-primary">
                             <i class="fa-solid fa-check" aria-hidden="true"></i> Aplicar
                         </button>
-                        <a class="btn btn-ghost" href="?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}&top={{ top }}">
+                        <a class="btn btn-ghost" href="?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}&top={{ top }}{% if (tipo_fecha|default('contable')) == 'proceso' %}&tipo_fecha=proceso{% endif %}">
                             <i class="fa-solid fa-eraser" aria-hidden="true"></i> Limpiar
                         </a>
                     </div>
@@ -77,7 +92,7 @@
         <div id="reporte-pdf-root">
             <h2 class="reporte-informe-title">{{ linea }} · Detalle diario</h2>
             <p class="reporte-informe-meta">
-                Período: <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong> ·
+                Período ({{ fecha_eje_leyenda|default('Fecha contable') }}): <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong> ·
                 Peso total: <strong>{{ total_peso }} kg</strong> ·
                 Valor total: <strong>S/ {{ total_valor }}</strong>
             </p>
@@ -88,9 +103,10 @@
                     <thead>
                         <tr>
                             <th>#</th>
-                            <th>Fecha</th>
+                            <th>{{ fecha_columna_th|default('Fecha contable') }}</th>
                             <th>Provincia</th>
                             <th>Corporativo</th>
+                            <th>Cód. cliente</th>
                             <th>Nombre cliente</th>
                             <th style="text-align:right;">Líneas</th>
                             <th style="text-align:right;">Cantidad (un.)</th>
@@ -106,6 +122,7 @@
                             <td>{{ f.fecha }}</td>
                             <td>{{ f.provincia }}</td>
                             <td>{{ f.nombre_corporativo }}</td>
+                            <td>{{ f.cod_cliente }}</td>
                             <td>{{ f.nombre_cliente }}</td>
                             <td style="text-align:right;">{{ f.lineas }}</td>
                             <td style="text-align:right;">{{ f.suma_cantidad }}</td>
@@ -121,7 +138,7 @@
             <p style="color:var(--muted);padding:.5rem 0;">
                 No se encontraron ventas para la línea "{{ linea }}" en el período y filtros seleccionados.
                 {% if f_provincias or f_corporativos or f_clientes %}
-                <a href="?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}&top={{ top }}"
+                <a href="?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}&top={{ top }}{% if (tipo_fecha|default('contable')) == 'proceso' %}&tipo_fecha=proceso{% endif %}"
                    style="color:var(--accent);">Limpiar filtros</a>
                 {% endif %}
             </p>
@@ -131,11 +148,11 @@
 
     {% if chart_data.fechas %}
     <section class="reporte-chart-section" aria-label="Gráfico peso diario">
-        <h3 class="reporte-chart-heading">Peso total (kg) por día</h3>
+        <h3 class="reporte-chart-heading">{% if chart_data.modo == 'clientes' %}Comparativa de peso (kg) por día · clientes seleccionados · {% else %}Peso total (kg) por día · {% endif %}{{ fecha_eje_leyenda|default('Fecha contable') }}</h3>
         <div class="chart-inner"><canvas id="chartPesoDia"></canvas></div>
     </section>
     <section class="reporte-chart-section" aria-label="Gráfico valor diario">
-        <h3 class="reporte-chart-heading">Valor total (S/) por día</h3>
+        <h3 class="reporte-chart-heading">{% if chart_data.modo == 'clientes' %}Comparativa de valor (S/) por día · clientes seleccionados · {% else %}Valor total (S/) por día · {% endif %}{{ fecha_eje_leyenda|default('Fecha contable') }}</h3>
         <div class="chart-inner"><canvas id="chartValorDia"></canvas></div>
     </section>
     {% endif %}
@@ -161,7 +178,7 @@
     var TREE = {{ opts_tree | tojson }};
     var iP   = {{ (f_provincias[0]   if f_provincias   else '') | tojson }};
     var iC   = {{ (f_corporativos[0] if f_corporativos else '') | tojson }};
-    var iL   = {{ (f_clientes[0]     if f_clientes     else '') | tojson }};
+    var iClients = {{ f_clientes | tojson }};
 
     var S2_BASE = {
         width: '100%',
@@ -183,6 +200,15 @@
 
     function initS2(selId, placeholder) {
         $('#' + selId).prop('disabled', false).select2($.extend({}, S2_BASE, { placeholder: placeholder }));
+    }
+
+    function initS2ClientesMulti() {
+        $('#fCli').prop('disabled', false).select2($.extend({}, S2_BASE, {
+            placeholder: 'Elija uno o varios clientes',
+            allowClear: true,
+            multiple: true,
+            closeOnSelect: false,
+        }));
     }
 
     function onProvChange() {
@@ -211,7 +237,7 @@
             $('#fCli').append('<option value="' + esc(c.cod) + '">' + esc(c.cod) + ' — ' + esc(c.nombre) + '</option>');
         });
         $('#wCli').show();
-        initS2('fCli', '— Todos —');
+        initS2ClientesMulti();
     }
 
     $(function () {
@@ -244,7 +270,11 @@
                 setTimeout(function () {
                     $('#fCorp').val(iC).trigger('change.select2');
                     onCorpChange();
-                    if (iL) setTimeout(function () { $('#fCli').val(iL).trigger('change.select2'); }, 0);
+                    if (Array.isArray(iClients) && iClients.length) {
+                        setTimeout(function () {
+                            $('#fCli').val(iClients).trigger('change.select2');
+                        }, 0);
+                    }
                 }, 0);
             }
         }
@@ -283,16 +313,108 @@
     var fechas  = d.fechas  || [];
     var pesos   = d.pesos   || [];
     var valores = d.valores || [];
+    var modo    = d.modo || 'total';
+    var seriesClientes = d.series_clientes || [];
+
+    var srvFechas = fechas.slice();
+    var srvPesos = pesos.slice();
+    var srvValores = valores.slice();
+    var srvSeries = JSON.parse(JSON.stringify(seriesClientes));
 
     var DL = window.VENTAS_CHART_DATALABELS || {};
     var legCol = typeof reporteChartLegendColor === 'function' ? reporteChartLegendColor() : '#1e293b';
     var anim = window.reporteChartAnimate || {};
 
+    var PALETTE = [
+        { b: 'rgba(34,197,94,1)', f: 'rgba(34,197,94,0.08)' },
+        { b: 'rgba(59,130,246,1)', f: 'rgba(59,130,246,0.08)' },
+        { b: 'rgba(234,88,12,1)', f: 'rgba(234,88,12,0.08)' },
+        { b: 'rgba(168,85,247,1)', f: 'rgba(168,85,247,0.08)' },
+        { b: 'rgba(236,72,153,1)', f: 'rgba(236,72,153,0.08)' },
+        { b: 'rgba(20,184,166,1)', f: 'rgba(20,184,166,0.08)' },
+        { b: 'rgba(234,179,8,1)', f: 'rgba(234,179,8,0.08)' },
+        { b: 'rgba(239,68,68,1)', f: 'rgba(239,68,68,0.08)' },
+    ];
+
+    function esModoClientes() {
+        return modo === 'clientes' && srvSeries.length >= 2;
+    }
+
+    function datasetsPeso(dataPesos, series, labels) {
+        if (esModoClientes()) {
+            return (series || []).map(function (s, i) {
+                var c = PALETTE[i % PALETTE.length];
+                var pr = (labels && labels.length) ? (labels.length > 60 ? 0 : 3) : (fechas.length > 60 ? 0 : 3);
+                return {
+                    label: s.label || s.cod,
+                    data: (s.pesos || []).slice(),
+                    borderColor: c.b,
+                    backgroundColor: c.f,
+                    borderWidth: 2,
+                    tension: 0.2,
+                    fill: false,
+                    pointRadius: pr,
+                    pointBackgroundColor: c.b,
+                };
+            });
+        }
+        var pr = (labels && labels.length) ? (labels.length > 60 ? 0 : 3) : (fechas.length > 60 ? 0 : 3);
+        return [{
+            label: 'Peso (kg)',
+            data: (dataPesos || pesos).slice(),
+            borderColor: 'rgba(34,197,94,1)',
+            backgroundColor: 'rgba(34,197,94,0.15)',
+            borderWidth: 2,
+            tension: 0.2,
+            fill: true,
+            pointRadius: pr,
+            pointBackgroundColor: 'rgba(34,197,94,1)',
+        }];
+    }
+
+    function datasetsValor(dataValores, series, labels) {
+        if (esModoClientes()) {
+            return (series || []).map(function (s, i) {
+                var c = PALETTE[i % PALETTE.length];
+                var pr = (labels && labels.length) ? (labels.length > 60 ? 0 : 3) : (fechas.length > 60 ? 0 : 3);
+                return {
+                    label: s.label || s.cod,
+                    data: (s.valores || []).slice(),
+                    borderColor: c.b,
+                    backgroundColor: c.f,
+                    borderWidth: 2,
+                    tension: 0.2,
+                    fill: false,
+                    pointRadius: pr,
+                    pointBackgroundColor: c.b,
+                };
+            });
+        }
+        var pr = (labels && labels.length) ? (labels.length > 60 ? 0 : 3) : (fechas.length > 60 ? 0 : 3);
+        return [{
+            label: 'Valor (S/)',
+            data: (dataValores || valores).slice(),
+            borderColor: 'rgba(59,130,246,1)',
+            backgroundColor: 'rgba(59,130,246,0.15)',
+            borderWidth: 2,
+            tension: 0.2,
+            fill: true,
+            pointRadius: pr,
+            pointBackgroundColor: 'rgba(59,130,246,1)',
+        }];
+    }
+
     var baseOpts = Object.assign({}, anim, {
         responsive: true,
         maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { labels: { color: legCol, boxWidth: 14 } } },
+        plugins: {
+            legend: {
+                display: true,
+                position: esModoClientes() ? 'bottom' : 'top',
+                labels: { color: legCol, boxWidth: 14, padding: esModoClientes() ? 10 : 16 },
+            },
+        },
         scales: {
             x: { ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 10 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
             y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' } },
@@ -302,31 +424,34 @@
     function buildCharts() {
         if (!window.Chart || !fechas.length) return;
 
+        var dlPeso = esModoClientes() ? false : (DL.linePesoKg || false);
+        var dlVal = esModoClientes() ? false : (DL.lineValorSol || false);
+
         var chPeso = new Chart(document.getElementById('chartPesoDia'), {
             type: 'line',
-            data: { labels: fechas, datasets: [{ label: 'Peso (kg)', data: pesos,
-                borderColor: 'rgba(34,197,94,1)', backgroundColor: 'rgba(34,197,94,0.15)',
-                borderWidth: 2, tension: 0.2, fill: true,
-                pointRadius: fechas.length > 60 ? 0 : 3, pointBackgroundColor: 'rgba(34,197,94,1)' }] },
+            data: { labels: srvFechas.slice(), datasets: datasetsPeso(srvPesos, srvSeries, srvFechas) },
             options: Object.assign({}, baseOpts, { plugins: Object.assign({}, baseOpts.plugins, {
                 tooltip: { callbacks: { label: function(ctx) {
-                    return 'Peso: ' + (ctx.parsed.y||0).toLocaleString('es-PE',{minimumFractionDigits:2}) + ' kg';
+                    var v = ctx.parsed.y != null ? ctx.parsed.y : 0;
+                    var s = v.toLocaleString('es-PE', { minimumFractionDigits: 2 }) + ' kg';
+                    if (esModoClientes()) return (ctx.dataset.label || '') + ': ' + s;
+                    return 'Peso: ' + s;
                 }}},
-                datalabels: DL.linePesoKg || false,
+                datalabels: dlPeso,
             })}),
         });
 
         var chValor = new Chart(document.getElementById('chartValorDia'), {
             type: 'line',
-            data: { labels: fechas, datasets: [{ label: 'Valor (S/)', data: valores,
-                borderColor: 'rgba(59,130,246,1)', backgroundColor: 'rgba(59,130,246,0.15)',
-                borderWidth: 2, tension: 0.2, fill: true,
-                pointRadius: fechas.length > 60 ? 0 : 3, pointBackgroundColor: 'rgba(59,130,246,1)' }] },
+            data: { labels: srvFechas.slice(), datasets: datasetsValor(srvValores, srvSeries, srvFechas) },
             options: Object.assign({}, baseOpts, { plugins: Object.assign({}, baseOpts.plugins, {
                 tooltip: { callbacks: { label: function(ctx) {
-                    return 'S/ ' + (ctx.parsed.y||0).toLocaleString('es-PE',{minimumFractionDigits:2});
+                    var v = ctx.parsed.y != null ? ctx.parsed.y : 0;
+                    var s = 'S/ ' + v.toLocaleString('es-PE', { minimumFractionDigits: 2 });
+                    if (esModoClientes()) return (ctx.dataset.label || '') + ': ' + s;
+                    return s;
                 }}},
-                datalabels: DL.lineValorSol || false,
+                datalabels: dlVal,
             })}),
         });
 
@@ -338,6 +463,7 @@
             for (var i = 0; i < cols.length; i++) if (re.test((cols[i] || '').toLowerCase())) return i;
             return -1;
         }
+
         function recomputeFromFilteredTable() {
             var tableEl = document.querySelector('table.rct-auto');
             if (!tableEl || !tableEl.__rct || !tableEl.__rct.origData) return;
@@ -345,24 +471,64 @@
             var data = tableEl.__rct.origData || [];
             var fi = (tableEl.__rct.filteredIndices || (tableEl.__rct.getFilteredIndices ? tableEl.__rct.getFilteredIndices() : [])) || [];
 
-            /* Sin filtro activo: el chart muestra los datos del servidor (período completo, sin LIMIT de tabla) */
             if (!fi.length || fi.length >= data.length) {
-                chPeso.data.labels = fechas.slice();
-                chPeso.data.datasets[0].data = pesos.slice();
-                chPeso.data.datasets[0].pointRadius = fechas.length > 60 ? 0 : 3;
+                chPeso.data.labels = srvFechas.slice();
+                chPeso.data.datasets = datasetsPeso(srvPesos, srvSeries, srvFechas);
                 chPeso.update('none');
-                chValor.data.labels = fechas.slice();
-                chValor.data.datasets[0].data = valores.slice();
-                chValor.data.datasets[0].pointRadius = fechas.length > 60 ? 0 : 3;
+                chValor.data.labels = srvFechas.slice();
+                chValor.data.datasets = datasetsValor(srvValores, srvSeries, srvFechas);
                 chValor.update('none');
                 return;
             }
 
-            var idxFecha = findCol(cols, /^fecha$/i);
-            if (idxFecha < 0) idxFecha = findCol(cols, /fecha/i);
+            var idxFecha = findCol(cols, /^fecha/i);
+            if (idxFecha < 0) idxFecha = findCol(cols, /contable|proceso/i);
+            var idxCod = findCol(cols, /c[oó]d.*cliente/i);
             var idxPeso = findCol(cols, /\bpeso\b/i);
             var idxValor = findCol(cols, /\bvalor\b/i);
             if (idxFecha < 0 || idxPeso < 0 || idxValor < 0) return;
+
+            if (esModoClientes() && idxCod >= 0) {
+                var byCli = {};
+                var allDays = {};
+                fi.forEach(function (ri) {
+                    var row = data[ri] || [];
+                    var f = (row[idxFecha] || '').trim();
+                    var cod = (row[idxCod] || '').trim();
+                    if (!f || !cod) return;
+                    var p = parseNum(row[idxPeso]);  if (p == null) p = 0;
+                    var v = parseNum(row[idxValor]); if (v == null) v = 0;
+                    allDays[f] = true;
+                    if (!byCli[cod]) byCli[cod] = {};
+                    if (!byCli[cod][f]) byCli[cod][f] = { peso: 0, valor: 0 };
+                    byCli[cod][f].peso += p;
+                    byCli[cod][f].valor += v;
+                });
+                var newFechas = Object.keys(allDays).sort();
+                var newSeries = srvSeries.map(function (s) {
+                    var cod = String(s.cod || '');
+                    var bp = {};
+                    var bv = {};
+                    newFechas.forEach(function (fd) {
+                        var cell = (byCli[cod] || {})[fd];
+                        bp[fd] = cell ? Math.round(cell.peso * 100) / 100 : 0;
+                        bv[fd] = cell ? Math.round(cell.valor * 100) / 100 : 0;
+                    });
+                    return {
+                        cod: cod,
+                        label: s.label,
+                        pesos: newFechas.map(function (fd) { return bp[fd] || 0; }),
+                        valores: newFechas.map(function (fd) { return bv[fd] || 0; }),
+                    };
+                });
+                chPeso.data.labels = newFechas;
+                chPeso.data.datasets = datasetsPeso(null, newSeries, newFechas);
+                chPeso.update('none');
+                chValor.data.labels = newFechas;
+                chValor.data.datasets = datasetsValor(null, newSeries, newFechas);
+                chValor.update('none');
+                return;
+            }
 
             var byDay = {};
             fi.forEach(function (i) {
@@ -375,26 +541,19 @@
                 byDay[f].peso += p;
                 byDay[f].valor += v;
             });
-
-            var newFechas = Object.keys(byDay).sort();
-            var newPesos = newFechas.map(function (f) { return Math.round(byDay[f].peso * 100) / 100; });
-            var newValores = newFechas.map(function (f) { return Math.round(byDay[f].valor * 100) / 100; });
-
-            chPeso.data.labels = newFechas;
-            chPeso.data.datasets[0].data = newPesos;
-            chPeso.data.datasets[0].pointRadius = newFechas.length > 60 ? 0 : 3;
+            var newFechas2 = Object.keys(byDay).sort();
+            var newPesos = newFechas2.map(function (f) { return Math.round(byDay[f].peso * 100) / 100; });
+            var newValores = newFechas2.map(function (f) { return Math.round(byDay[f].valor * 100) / 100; });
+            chPeso.data.labels = newFechas2;
+            chPeso.data.datasets = datasetsPeso(newPesos, null, newFechas2);
             chPeso.update('none');
-
-            chValor.data.labels = newFechas;
-            chValor.data.datasets[0].data = newValores;
-            chValor.data.datasets[0].pointRadius = newFechas.length > 60 ? 0 : 3;
+            chValor.data.labels = newFechas2;
+            chValor.data.datasets = datasetsValor(newValores, null, newFechas2);
             chValor.update('none');
         }
 
         var tableEl2 = document.querySelector('table.rct-auto');
-        if (tableEl2) {
-            tableEl2.addEventListener('rct:filtered', recomputeFromFilteredTable);
-        }
+        if (tableEl2) tableEl2.addEventListener('rct:filtered', recomputeFromFilteredTable);
         recomputeFromFilteredTable();
     }
 

@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-head">
     <h1>{{ linea }} · Resumen por provincia y cliente</h1>
-    <p class="page-lead">FechaContable del <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong> · {{ top_lead }} · ordenado por peso descendente.</p>
+    <p class="page-lead"><strong>{{ fecha_eje_leyenda }}</strong> del <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong> · {{ top_lead }} · ordenado por peso descendente.</p>
 </div>
 
 <div class="reporte-page">
@@ -19,15 +19,31 @@
         </div>
         <div class="card-filtros-demo__body" id="filtrosBody">
             <form method="get" class="filter-form filter-form--reporte" autocomplete="off">
-                <input type="hidden" name="desde" value="{{ d1 }}">
-                <input type="hidden" name="hasta" value="{{ d2 }}">
                 {% if top is not none %}<input type="hidden" name="top" value="{{ top }}">{% endif %}
+
+                <div class="filter-row">
+                    <div class="filter-field">
+                        <label for="fDesde">Desde</label>
+                        <input type="date" id="fDesde" name="desde" value="{{ d1 }}" required />
+                    </div>
+                    <div class="filter-field">
+                        <label for="fHasta">Hasta</label>
+                        <input type="date" id="fHasta" name="hasta" value="{{ d2 }}" required />
+                    </div>
+                </div>
 
                 <div class="filter-row filter-row--reporte-line-prov">
                     <div class="filter-field filter-field--linea-comercial">
                         <label for="fLinea">Línea comercial</label>
                         <select id="fLinea" name="linea">
                             {% if linea %}<option value="{{ linea|e }}" selected>{{ linea|e }}</option>{% endif %}
+                        </select>
+                    </div>
+                    <div class="filter-field">
+                        <label for="fTipoFecha">Período según</label>
+                        <select id="fTipoFecha" name="tipo_fecha">
+                            <option value="contable" {% if (tipo_fecha|default('contable')) != 'proceso' %}selected{% endif %}>Fecha contable</option>
+                            <option value="proceso" {% if (tipo_fecha|default('contable')) == 'proceso' %}selected{% endif %}>Día de proceso (fechaProceso)</option>
                         </select>
                     </div>
                     <div class="filter-field filter-field--provincia">
@@ -61,7 +77,7 @@
                         <button type="submit" class="btn btn-primary">
                             <i class="fa-solid fa-check" aria-hidden="true"></i> Aplicar
                         </button>
-                        <a class="btn btn-ghost" href="?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}{% if top is not none %}&top={{ top }}{% endif %}">
+                        <a class="btn btn-ghost" href="?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}{% if top is not none %}&top={{ top }}{% endif %}{% if (tipo_fecha|default('contable')) == 'proceso' %}&tipo_fecha=proceso{% endif %}">
                             <i class="fa-solid fa-eraser" aria-hidden="true"></i> Limpiar
                         </a>
                     </div>
@@ -77,7 +93,8 @@
         <div id="reporte-pdf-root">
             <h2 class="reporte-informe-title">{{ linea }} · Ventas por provincia y cliente</h2>
             <p class="reporte-informe-meta">
-                Período: <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong> ·
+                Rango aplicado (<strong>{{ fecha_eje_leyenda|default('Fecha contable') }}</strong>): <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong>.
+                Las columnas «Fechas contables» y «Días proceso» son el min–max de las líneas de cada fila. ·
                 Total líneas: <strong>{{ total_lineas }}</strong> ·
                 Peso total: <strong>{{ total_peso }} kg</strong> ·
                 Valor total: <strong>S/ {{ total_valor }}</strong>
@@ -92,6 +109,8 @@
                             <th>Provincia</th>
                             <th>Corporativo</th>
                             <th>Nombre cliente</th>
+                            <th>Fechas contables en datos</th>
+                            <th>Días proceso en datos</th>
                             <th style="text-align:right;">Líneas</th>
                             <th style="text-align:right;">Cantidad (un.)</th>
                             <th style="text-align:right;">Peso (kg)</th>
@@ -106,6 +125,8 @@
                             <td>{{ f.provincia }}</td>
                             <td>{{ f.nombre_corporativo }}</td>
                             <td>{{ f.nombre_cliente }}</td>
+                            <td style="font-size:0.9em;white-space:nowrap;">{{ f.rango_fecha_contable }}</td>
+                            <td style="font-size:0.9em;white-space:nowrap;">{{ f.rango_dia_proceso }}</td>
                             <td style="text-align:right;">{{ f.lineas }}</td>
                             <td style="text-align:right;">{{ f.suma_cantidad }}</td>
                             <td style="text-align:right;">{{ f.suma_peso }}</td>
@@ -116,7 +137,7 @@
                     </tbody>
                     <tfoot>
                         <tr>
-                            <th colspan="4" style="text-align:right;">Total período</th>
+                            <th colspan="6" style="text-align:right;">Total período</th>
                             <th style="text-align:right;">{{ total_lineas }}</th>
                             <th style="text-align:right;">{{ total_cantidad }}</th>
                             <th style="text-align:right;">{{ total_peso }}</th>
@@ -149,7 +170,7 @@
     {% if chart_data.fechas %}
     {# ── Gráfico 3: Precio promedio ponderado por día ─────────────────── #}
     <section class="reporte-chart-section" aria-label="Gráfico precio diario">
-        <h3 class="reporte-chart-heading">Precio promedio ponderado (S//kg) por día</h3>
+        <h3 class="reporte-chart-heading">Precio promedio ponderado (S//kg) por día · {{ fecha_eje_leyenda|default('Fecha contable') }}</h3>
         <div class="chart-inner"><canvas id="chartPrecioDia"></canvas></div>
     </section>
     {% endif %}

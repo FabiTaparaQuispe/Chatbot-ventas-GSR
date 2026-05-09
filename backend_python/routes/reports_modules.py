@@ -95,6 +95,50 @@ def _parse_date_string(raw: str | None) -> str | None:
     return d.strftime('%Y-%m-%d')
 
 
+def _tipo_fecha_param() -> str:
+    """`contable` (FechaContable) o `proceso` (columna fechaProceso, con respaldo a contable)."""
+    t = (request.args.get('tipo_fecha') or '').strip().lower()
+    return 'proceso' if t == 'proceso' else 'contable'
+
+
+def _sql_fecha_dimension(tipo_fecha: str) -> str:
+    if tipo_fecha == 'proceso':
+        return 'COALESCE(fechaProceso, FechaContable)'
+    return 'FechaContable'
+
+
+def _fecha_eje_leyenda(tipo_fecha: str) -> str:
+    if tipo_fecha == 'proceso':
+        return 'Día de proceso (fechaProceso)'
+    return 'Fecha contable'
+
+
+def _fecha_columna_th(tipo_fecha: str) -> str:
+    """Encabezado de columna única de fecha en tablas (el eje activo del período)."""
+    return 'Día de proceso' if tipo_fecha == 'proceso' else 'Fecha contable'
+
+
+def _fmt_min_max_date(mn: Any, mx: Any) -> str:
+    """Rango min–max de fechas en filas agregadas (resumen por cliente)."""
+    def _s(d: Any) -> str:
+        if d is None:
+            return ''
+        if hasattr(d, 'strftime'):
+            return d.strftime('%Y-%m-%d')
+        return str(d).strip()[:10]
+
+    a, b = _s(mn), _s(mx)
+    if not a and not b:
+        return '—'
+    if a == b:
+        return a or b or '—'
+    if not a:
+        return b
+    if not b:
+        return a
+    return f'{a} — {b}'
+
+
 def _colon_params_to_pymysql(sql: str) -> str:
     return re.sub(r':([a-zA-Z_][a-zA-Z0-9_]*)', r'%(\1)s', sql)
 
@@ -580,6 +624,11 @@ def ventas_linea_resumen_provincia():
     if not linea:
         return _bad('Parámetro requerido: linea (ej. "Pollo Vivo").')
 
+    tipo_fecha = _tipo_fecha_param()
+    fe = _sql_fecha_dimension(tipo_fecha)
+    fecha_eje_leyenda = _fecha_eje_leyenda(tipo_fecha)
+    fecha_columna_th = _fecha_columna_th(tipo_fecha)
+
     raw_top = request.args.get('top')
     top = None
     if raw_top is not None and str(raw_top).strip() != '':
@@ -601,7 +650,7 @@ def ventas_linea_resumen_provincia():
     f_clientes     = [v.strip() for v in request.args.getlist('cliente')     if v.strip()]
 
     # WHERE base: fecha + linea + cod_item + mercado (se usa para opciones de dropdowns)
-    base_where = (" WHERE FechaContable BETWEEN :d1 AND :d2"
+    base_where = (f" WHERE {fe} BETWEEN :d1 AND :d2"
                   " AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))"
                   " AND CodigoDocumento IN ('01','03')")
     base_bind: dict = {'d1': d1, 'd2': d2, 'linea': linea}
@@ -637,7 +686,7 @@ def ventas_linea_resumen_provincia():
         ext_where += ' AND CodigoCliente IN (' + ','.join(f':{k}' for k in keys) + ')'
         bind.update(zip(keys, f_clientes))
 
-    # Query principal de agregación
+    # Query principal de agregación (rangos de fechas por fila: líneas incluidas en el resumen)
     sql = ("SELECT"
            " COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
            " MAX(COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'')) AS nombre_corporativo,"
@@ -647,6 +696,10 @@ def ventas_linea_resumen_provincia():
            " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
            " COALESCE(SUM(Peso),0) AS suma_peso,"
            " COALESCE(SUM(Valor),0) AS suma_valor,"
+           " MIN(FechaContable) AS fc_min,"
+           " MAX(FechaContable) AS fc_max,"
+           " MIN(COALESCE(fechaProceso, FechaContable)) AS fp_min,"
+           " MAX(COALESCE(fechaProceso, FechaContable)) AS fp_max,"
            " CASE WHEN COALESCE(SUM(Peso),0) > 0"
            "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 2)"
            "      ELSE NULL END AS precio_kg"
@@ -656,7 +709,7 @@ def ventas_linea_resumen_provincia():
         sql += f" LIMIT {top}"
 
     # Query precio ponderado por día (para el 3er gráfico, mismos filtros)
-    sql_precio_dia = ("SELECT FechaContable AS fecha,"
+    sql_precio_dia = (f"SELECT {fe} AS fecha,"
                       " COALESCE(SUM(Peso),0) AS suma_peso,"
                       " CASE WHEN COALESCE(SUM(Peso),0) > 0"
                       "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
@@ -705,6 +758,8 @@ def ventas_linea_resumen_provincia():
             'suma_peso': f'{sp:,.2f}',
             'suma_valor': f'{sv:,.2f}',
             'precio_kg': f'S/ {float(pk):.2f}' if pk is not None else '—',
+            'rango_fecha_contable': _fmt_min_max_date(r.get('fc_min'), r.get('fc_max')),
+            'rango_dia_proceso': _fmt_min_max_date(r.get('fp_min'), r.get('fp_max')),
         })
 
     # Datos gráfico precio diario
@@ -754,6 +809,9 @@ def ventas_linea_resumen_provincia():
     ctx = _report_shell_context(f'Ventas {linea} · Resumen provincia/cliente')
     ctx.update({
         'd1': d1, 'd2': d2, 'linea': linea, 'top': top, 'top_lead': top_lead,
+        'tipo_fecha': tipo_fecha,
+        'fecha_eje_leyenda': fecha_eje_leyenda,
+        'fecha_columna_th': fecha_columna_th,
         'filas': filas,
         'total_lineas': f'{total_lineas:,}',
         'total_cantidad': f'{total_cantidad:,.2f}',
@@ -806,6 +864,11 @@ def ventas_linea_diario_provincia():
     if not linea:
         return _bad('Parámetro requerido: linea (ej. "Pollo Vivo").')
 
+    tipo_fecha = _tipo_fecha_param()
+    fe = _sql_fecha_dimension(tipo_fecha)
+    fecha_eje_leyenda = _fecha_eje_leyenda(tipo_fecha)
+    fecha_columna_th = _fecha_columna_th(tipo_fecha)
+
     try:
         top = max(1, min(10_000, int(request.args.get('top') or 2000)))
     except (TypeError, ValueError):
@@ -820,7 +883,7 @@ def ventas_linea_diario_provincia():
     f_clientes     = [v.strip() for v in request.args.getlist('cliente')     if v.strip()]
 
     # WHERE base (para opciones de dropdowns)
-    base_where = (" WHERE FechaContable BETWEEN :d1 AND :d2"
+    base_where = (f" WHERE {fe} BETWEEN :d1 AND :d2"
                   " AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))"
                   " AND CodigoDocumento IN ('01','03')")
     base_bind: dict = {'d1': d1, 'd2': d2, 'linea': linea}
@@ -857,7 +920,7 @@ def ventas_linea_diario_provincia():
         bind.update(zip(keys, f_clientes))
 
     # Query detalle diario (tabla)
-    sql = ("SELECT FechaContable AS fecha,"
+    sql = (f"SELECT {fe} AS fecha,"
            " COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
            " MAX(COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'')) AS nombre_corporativo,"
            " CodigoCliente AS cod_cliente,"
@@ -873,7 +936,7 @@ def ventas_linea_diario_provincia():
            f" GROUP BY fecha, provincia, CodigoCliente ORDER BY fecha ASC, suma_peso DESC LIMIT {top}")
 
     # Query agregado por día (gráficos — respeta los mismos filtros)
-    sql_dia = ("SELECT FechaContable AS fecha,"
+    sql_dia = (f"SELECT {fe} AS fecha,"
                " COALESCE(SUM(Peso),0) AS suma_peso,"
                " COALESCE(SUM(Valor),0) AS suma_valor"
                f" FROM ventasgeneral2{ext_where}"
@@ -885,6 +948,56 @@ def ventas_linea_diario_provincia():
     with conn.cursor() as cur:
         cur.execute(_colon_params_to_pymysql(sql_dia), bind)
         raw_dia = cur.fetchall() or []
+
+    # Gráficos comparativos por cliente (2+ seleccionados en el filtro)
+    chart_modo = 'total'
+    series_clientes: list[dict[str, Any]] = []
+    if len(f_clientes) >= 2:
+        sql_dia_cli = (
+            f"SELECT {fe} AS fecha, CodigoCliente AS cod_cliente,"
+            " MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
+            " COALESCE(SUM(Peso),0) AS suma_peso,"
+            " COALESCE(SUM(Valor),0) AS suma_valor"
+            f" FROM ventasgeneral2{ext_where}"
+            " GROUP BY fecha, CodigoCliente ORDER BY fecha ASC, cod_cliente"
+        )
+        with conn.cursor() as cur:
+            cur.execute(_colon_params_to_pymysql(sql_dia_cli), bind)
+            raw_cli = cur.fetchall() or []
+        cod_to_name: dict[str, str] = {}
+        per_p: dict[str, dict[str, float]] = {}
+        per_v: dict[str, dict[str, float]] = {}
+        for r in raw_cli:
+            cod = str(r.get('cod_cliente') or '').strip()
+            if not cod:
+                continue
+            fecha = r.get('fecha')
+            fd = fecha.strftime('%Y-%m-%d') if hasattr(fecha, 'strftime') else str(fecha or '')
+            if not fd:
+                continue
+            per_p.setdefault(cod, {})[fd] = float(r.get('suma_peso') or 0)
+            per_v.setdefault(cod, {})[fd] = float(r.get('suma_valor') or 0)
+            cod_to_name[cod] = str(r.get('nombre_cliente') or '').strip() or cod
+        chart_fechas_pre: list[str] = []
+        for r in raw_dia:
+            fecha = r.get('fecha')
+            chart_fechas_pre.append(
+                fecha.strftime('%Y-%m-%d') if hasattr(fecha, 'strftime') else str(fecha or '')
+            )
+        for cod in f_clientes:
+            c = str(cod).strip()
+            if not c:
+                continue
+            nm = cod_to_name.get(c, c)
+            label = (f'{c} — {nm}')[:80]
+            series_clientes.append({
+                'cod': c,
+                'label': label,
+                'pesos': [round(per_p.get(c, {}).get(f, 0.0), 2) for f in chart_fechas_pre],
+                'valores': [round(per_v.get(c, {}).get(f, 0.0), 2) for f in chart_fechas_pre],
+            })
+        if len(series_clientes) >= 2:
+            chart_modo = 'clientes'
 
     # Filas tabla
     filas = []
@@ -955,11 +1068,20 @@ def ventas_linea_diario_provincia():
     ctx = _report_shell_context(f'Ventas {linea} · Diario por provincia/cliente')
     ctx.update({
         'd1': d1, 'd2': d2, 'linea': linea, 'top': top,
+        'tipo_fecha': tipo_fecha,
+        'fecha_eje_leyenda': fecha_eje_leyenda,
+        'fecha_columna_th': fecha_columna_th,
         'filas': filas,
         'total_peso':  f'{total_peso:,.2f}',
         'total_valor': f'{total_valor:,.2f}',
         'pdf_filename': f'linea_diario_{d1}_{d2}.pdf',
-        'chart_data': {'fechas': chart_fechas, 'pesos': chart_pesos_dia, 'valores': chart_valores_dia},
+        'chart_data': {
+            'fechas': chart_fechas,
+            'pesos': chart_pesos_dia,
+            'valores': chart_valores_dia,
+            'modo': chart_modo,
+            'series_clientes': series_clientes,
+        },
         'provincias_opts': provincias_opts,
         'corporativos_opts': corporativos_opts,
         'clientes_opts': clientes_opts,
@@ -986,6 +1108,11 @@ def ventas_linea_precio_diario():
     if not linea:
         return _bad('Parámetro requerido: linea (ej. "Pollo Vivo").')
 
+    tipo_fecha = _tipo_fecha_param()
+    fe = _sql_fecha_dimension(tipo_fecha)
+    fecha_eje_leyenda = _fecha_eje_leyenda(tipo_fecha)
+    fecha_columna_th = _fecha_columna_th(tipo_fecha)
+
     try:
         top = max(1, min(10_000, int(request.args.get('top') or 2000)))
     except (TypeError, ValueError):
@@ -1000,7 +1127,7 @@ def ventas_linea_precio_diario():
     f_clientes     = [v.strip() for v in request.args.getlist('cliente')     if v.strip()]
 
     # WHERE base (para opciones de dropdowns)
-    base_where = (" WHERE FechaContable BETWEEN :d1 AND :d2"
+    base_where = (f" WHERE {fe} BETWEEN :d1 AND :d2"
                   " AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))"
                   " AND CodigoDocumento IN ('01','03')")
     base_bind: dict = {'d1': d1, 'd2': d2, 'linea': linea}
@@ -1036,7 +1163,7 @@ def ventas_linea_precio_diario():
         ext_where += ' AND CodigoCliente IN (' + ','.join(f':{k}' for k in keys) + ')'
         bind.update(zip(keys, f_clientes))
 
-    sql = ("SELECT FechaContable AS fecha,"
+    sql = (f"SELECT {fe} AS fecha,"
            " COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
            " MAX(COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'')) AS nombre_corporativo,"
            " CodigoCliente AS cod_cliente,"
@@ -1051,7 +1178,7 @@ def ventas_linea_precio_diario():
            f" FROM ventasgeneral2{ext_where}"
            f" GROUP BY fecha, provincia, CodigoCliente ORDER BY fecha ASC, suma_peso DESC LIMIT {top}")
 
-    sql_precio_dia = ("SELECT FechaContable AS fecha,"
+    sql_precio_dia = (f"SELECT {fe} AS fecha,"
                       " COALESCE(SUM(Peso),0) AS suma_peso,"
                       " COALESCE(SUM(Valor),0) AS suma_valor,"
                       " CASE WHEN COALESCE(SUM(Peso),0) > 0"
@@ -1066,12 +1193,12 @@ def ventas_linea_precio_diario():
         "AND CodigoDocumento IN ('01','03','07')"
     )
     sql_precio_tdoc = (
-        "SELECT FechaContable AS fecha, CodigoDocumento AS tipo_doc,"
+        f"SELECT {fe} AS fecha, CodigoDocumento AS tipo_doc,"
         " CASE WHEN COALESCE(SUM(Peso),0) <> 0"
         "      THEN ROUND(ABS(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0)), 4)"
         "      ELSE NULL END AS precio_kg"
         f" FROM ventasgeneral2{tdoc_where}"
-        " GROUP BY FechaContable, CodigoDocumento ORDER BY FechaContable ASC, CodigoDocumento ASC"
+        f" GROUP BY {fe}, CodigoDocumento ORDER BY {fe} ASC, CodigoDocumento ASC"
     )
 
     with conn.cursor() as cur:
@@ -1174,6 +1301,9 @@ def ventas_linea_precio_diario():
     ctx = _report_shell_context(f'Ventas {linea} · Precio por día provincia/cliente')
     ctx.update({
         'd1': d1, 'd2': d2, 'linea': linea, 'top': top,
+        'tipo_fecha': tipo_fecha,
+        'fecha_eje_leyenda': fecha_eje_leyenda,
+        'fecha_columna_th': fecha_columna_th,
         'filas': filas,
         'total_peso': f'{total_peso_periodo:,.2f}',
         'total_valor': f'{total_valor_periodo:,.2f}',
