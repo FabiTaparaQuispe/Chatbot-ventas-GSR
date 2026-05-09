@@ -103,7 +103,13 @@ function ventasBindPdfDownload(buttonId, rootId, filename, opts) {
         table.querySelectorAll('tbody tr').forEach(function(tr){
             var r = [];
             tr.querySelectorAll('td').forEach(function(td){ r.push(safeText(td.textContent)); });
-            if (r.length) rows.push(r);
+            if (!r.length) return;
+            /* Fila de grupo (cascada): un solo td colSpan → rellenar columnas para el PDF */
+            if (head.length > 1 && r.length === 1) {
+                rows.push([r[0]].concat(Array(head.length - 1).fill('')));
+            } else {
+                rows.push(r);
+            }
         });
         if (head.length > 0) {
             var h0 = String(head[0] || '').toLowerCase().replace(/\./g, '').trim();

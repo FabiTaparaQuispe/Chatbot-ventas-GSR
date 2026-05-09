@@ -18,14 +18,19 @@
             <span class="card-filtros-demo__chev card-filtros-demo__chev--open" id="filtrosChev" aria-hidden="true"><i class="fa-solid fa-chevron-down"></i></span>
         </div>
         <div class="card-filtros-demo__body" id="filtrosBody">
-            <form method="get" class="filter-form" autocomplete="off">
+            <form method="get" class="filter-form filter-form--reporte" autocomplete="off">
                 <input type="hidden" name="desde" value="{{ d1 }}">
                 <input type="hidden" name="hasta" value="{{ d2 }}">
-                <input type="hidden" name="linea" value="{{ linea }}">
                 {% if top is not none %}<input type="hidden" name="top" value="{{ top }}">{% endif %}
 
-                <div class="filter-row">
-                    <div class="filter-field">
+                <div class="filter-row filter-row--reporte-line-prov">
+                    <div class="filter-field filter-field--linea-comercial">
+                        <label for="fLinea">Línea comercial</label>
+                        <select id="fLinea" name="linea">
+                            {% if linea %}<option value="{{ linea|e }}" selected>{{ linea|e }}</option>{% endif %}
+                        </select>
+                    </div>
+                    <div class="filter-field filter-field--provincia">
                         <label for="fProv">Provincia</label>
                         <select id="fProv" name="provincia">
                             <option value="">— Todas —</option>
@@ -40,6 +45,9 @@
                             <option value="">— Todos —</option>
                         </select>
                     </div>
+                </div>
+
+                <div class="filter-row filter-row--reporte-cliente">
                     <div class="filter-field" id="wCli" style="display:none">
                         <label for="fCli">Cliente</label>
                         <select id="fCli" name="cliente">
@@ -48,20 +56,24 @@
                     </div>
                 </div>
 
-                <div class="filter-actions">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fa-solid fa-check" aria-hidden="true"></i> Aplicar
-                    </button>
-                    <a class="btn btn-ghost" href="?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}{% if top is not none %}&top={{ top }}{% endif %}">
-                        <i class="fa-solid fa-eraser" aria-hidden="true"></i> Limpiar
-                    </a>
+                <div class="reporte-filter-bar">
+                    <div class="filter-actions">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fa-solid fa-check" aria-hidden="true"></i> Aplicar
+                        </button>
+                        <a class="btn btn-ghost" href="?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}{% if top is not none %}&top={{ top }}{% endif %}">
+                            <i class="fa-solid fa-eraser" aria-hidden="true"></i> Limpiar
+                        </a>
+                    </div>
+                    <div class="reporte-filter-bar__export">
+                        <button type="button" class="btn btn-primary" id="btn-pdf">
+                            <i class="fa-solid fa-file-pdf" aria-hidden="true"></i> Descargar PDF
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>
 
-        <div class="reporte-informe-toolbar">
-            <button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button>
-        </div>
         <div id="reporte-pdf-root">
             <h2 class="reporte-informe-title">{{ linea }} · Ventas por provincia y cliente</h2>
             <p class="reporte-informe-meta">
@@ -145,65 +157,118 @@
 </div>
 {% endblock %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css">
+<style>
+.select2-container { width: 100% !important; }
+.select2-selection { min-height: 38px !important; display: flex !important; align-items: center !important; }
+.select2-selection__rendered { line-height: normal !important; }
+.select2-selection__arrow { height: 100% !important; }
+</style>
+{% endblock %}
+
 {% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
-/* Filtros en cascada: Provincia → Corporativo → Cliente */
+/* Filtros en cascada con Select2: Línea → Provincia → Corporativo → Cliente */
 (function () {
-    var TREE  = {{ opts_tree | tojson }};
-    var fProv = document.getElementById('fProv');
-    var fCorp = document.getElementById('fCorp');
-    var fCli  = document.getElementById('fCli');
-    var wCorp = document.getElementById('wCorp');
-    var wCli  = document.getElementById('wCli');
-    if (!fProv) return;
+    var TREE = {{ opts_tree | tojson }};
+    var iP   = {{ (f_provincias[0]   if f_provincias   else '') | tojson }};
+    var iC   = {{ (f_corporativos[0] if f_corporativos else '') | tojson }};
+    var iL   = {{ (f_clientes[0]     if f_clientes     else '') | tojson }};
+
+    var S2_BASE = {
+        width: '100%',
+        allowClear: true,
+        language: { noResults: function () { return 'Sin resultados'; } }
+    };
 
     function esc(s) {
         return String(s == null ? '' : s)
             .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
+
+    /* Destruye Select2 en el elemento, limpia opciones y lo oculta */
+    function resetSelect(wrapperId, selId) {
+        var $s = $('#' + selId);
+        try { $s.select2('destroy'); } catch(e) {}
+        $s.empty().append('<option value="">— Todos —</option>').prop('disabled', true);
+        $('#' + wrapperId).hide();
+    }
+
+    /* Inicializa Select2 en un select ya poblado */
+    function initS2(selId, placeholder) {
+        $('#' + selId).prop('disabled', false).select2($.extend({}, S2_BASE, { placeholder: placeholder }));
+    }
+
     function onProvChange() {
-        var prov = fProv.value;
-        if (fCorp) fCorp.innerHTML = '<option value="">— Todos —</option>';
-        if (fCli)  fCli.innerHTML  = '<option value="">— Todos —</option>';
-        if (wCorp) wCorp.style.display = 'none';
-        if (wCli)  wCli.style.display  = 'none';
+        var prov = $('#fProv').val();
+        resetSelect('wCorp', 'fCorp');
+        resetSelect('wCli',  'fCli');
         if (!prov || !TREE[prov]) return;
         var corps = TREE[prov].corps || [];
+        if (!corps.length) return;
         corps.forEach(function (c) {
-            fCorp.insertAdjacentHTML('beforeend', '<option value="' + esc(c) + '">' + esc(c) + '</option>');
+            $('#fCorp').append('<option value="' + esc(c) + '">' + esc(c) + '</option>');
         });
-        if (corps.length) wCorp.style.display = '';
+        $('#wCorp').show();
+        initS2('fCorp', '— Todos —');
+        $('#fCorp').on('change', onCorpChange);
     }
+
     function onCorpChange() {
-        var prov = fProv.value;
-        var corp = fCorp ? fCorp.value : '';
-        if (fCli) fCli.innerHTML = '<option value="">— Todos —</option>';
-        if (wCli) wCli.style.display = 'none';
+        var prov = $('#fProv').val();
+        var corp = $('#fCorp').val();
+        resetSelect('wCli', 'fCli');
         if (!prov || !corp || !TREE[prov]) return;
         var clients = ((TREE[prov].clients || {})[corp]) || [];
+        if (!clients.length) return;
         clients.forEach(function (c) {
-            fCli.insertAdjacentHTML('beforeend',
-                '<option value="' + esc(c.cod) + '">' + esc(c.cod) + ' — ' + esc(c.nombre) + '</option>');
+            $('#fCli').append('<option value="' + esc(c.cod) + '">' + esc(c.cod) + ' — ' + esc(c.nombre) + '</option>');
         });
-        if (clients.length) wCli.style.display = '';
+        $('#wCli').show();
+        initS2('fCli', '— Todos —');
     }
 
-    fProv.addEventListener('change', onProvChange);
-    if (fCorp) fCorp.addEventListener('change', onCorpChange);
+    $(function () {
+        /* Select2 AJAX para Línea comercial */
+        $('#fLinea').select2($.extend({}, S2_BASE, {
+            placeholder: 'Buscar línea…',
+            allowClear: false,
+            ajax: {
+                url: '/api/lineas',
+                dataType: 'json',
+                delay: 250,
+                data: function (p) { return { q: p.term || '', page: p.page || 1 }; },
+                processResults: function (d) { return { results: d.results || [], pagination: d.pagination || { more: false } }; },
+                cache: true
+            },
+            minimumInputLength: 0
+        }));
 
-    /* Restaurar estado tras envío de formulario */
-    var iP = {{ (f_provincias[0] if f_provincias else '') | tojson }};
-    var iC = {{ (f_corporativos[0] if f_corporativos else '') | tojson }};
-    var iL = {{ (f_clientes[0] if f_clientes else '') | tojson }};
-    if (iP) {
-        fProv.value = iP;
-        onProvChange();
-        if (iC && fCorp) {
-            fCorp.value = iC;
-            onCorpChange();
-            if (iL && fCli) fCli.value = iL;
+        /* Al cambiar línea → deshabilitar cascada y recargar página */
+        $('#fLinea').on('change', function () {
+            $('#fProv, #fCorp, #fCli').prop('disabled', true);
+            $(this).closest('form')[0].submit();
+        });
+
+        /* Select2 para Provincia (opciones ya renderizadas por servidor) */
+        initS2('fProv', '— Todas —');
+        $('#fProv').on('change', onProvChange);
+
+        /* Restaurar estado tras envío de formulario */
+        if (iP) {
+            $('#fProv').val(iP).trigger('change.select2');
+            onProvChange();
+            if (iC) {
+                setTimeout(function () {
+                    $('#fCorp').val(iC).trigger('change.select2');
+                    onCorpChange();
+                    if (iL) setTimeout(function () { $('#fCli').val(iL).trigger('change.select2'); }, 0);
+                }, 0);
+            }
         }
-    }
+    });
 })();
 /* Panel colapsable */
 (function () {
@@ -227,12 +292,17 @@
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/chart_reporte_datalabels.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
 <script src="/assets/js/reporte_pdf.js"></script>
 <script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
 <script>
 (function () {
     var d    = {{ chart_data | tojson }};
+    var DL   = window.VENTAS_CHART_DATALABELS || {};
+    var legCol = typeof reporteChartLegendColor === 'function' ? reporteChartLegendColor() : '#1e293b';
+    var anim = window.reporteChartAnimate || {};
     var SHOW = 20;
     var labels     = (d.labels     || []).slice(0, SHOW);
     var pesos      = (d.pesos      || []).slice(0, SHOW);
@@ -252,38 +322,40 @@
                 type: 'bar',
                 data: { labels: labels, datasets: [{ label: 'Peso (kg)', data: pesos,
                     backgroundColor: 'rgba(34,197,94,0.65)', borderColor: 'rgba(34,197,94,1)', borderWidth: 1 }] },
-                options: {
+                options: Object.assign({}, anim, {
                     indexAxis: 'y', responsive: true, maintainAspectRatio: false,
                     plugins: {
-                        legend: { labels: { color: '#cbd5e1', boxWidth: 14 } },
+                        legend: { labels: { color: legCol, boxWidth: 14 } },
                         tooltip: { callbacks: { label: function(ctx) {
                             return ctx.dataset.label + ': ' + (ctx.parsed.x||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' kg';
                         }}},
+                        datalabels: DL.hbarPesoKg || false,
                     },
                     scales: {
                         x: { ticks: { color: '#94a3b8', callback: function(v){ return v.toLocaleString('es-PE'); } }, grid: { color: 'rgba(148,163,184,0.15)' } },
                         y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
                     },
-                },
+                }),
             });
 
             chValor = new Chart(document.getElementById('chartValor'), {
                 type: 'bar',
                 data: { labels: labels, datasets: [{ label: 'Valor (S/)', data: valores,
                     backgroundColor: 'rgba(59,130,246,0.65)', borderColor: 'rgba(59,130,246,1)', borderWidth: 1 }] },
-                options: {
+                options: Object.assign({}, anim, {
                     indexAxis: 'y', responsive: true, maintainAspectRatio: false,
                     plugins: {
-                        legend: { labels: { color: '#cbd5e1', boxWidth: 14 } },
+                        legend: { labels: { color: legCol, boxWidth: 14 } },
                         tooltip: { callbacks: { label: function(ctx) {
                             return 'S/ ' + (ctx.parsed.x||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});
                         }}},
+                        datalabels: DL.hbarValorSol || false,
                     },
                     scales: {
                         x: { ticks: { color: '#94a3b8', callback: function(v){ return 'S/ '+v.toLocaleString('es-PE'); } }, grid: { color: 'rgba(148,163,184,0.15)' } },
                         y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
                     },
-                },
+                }),
             });
         }
 
@@ -295,14 +367,15 @@
                     borderWidth: 2, tension: 0.2, fill: true,
                     pointRadius: fechas.length > 60 ? 0 : 4,
                     pointBackgroundColor: 'rgba(251,146,60,1)', spanGaps: true }] },
-                options: {
+                options: Object.assign({}, anim, {
                     responsive: true, maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
                     plugins: {
-                        legend: { labels: { color: '#cbd5e1', boxWidth: 14 } },
+                        legend: { labels: { color: legCol, boxWidth: 14 } },
                         tooltip: { callbacks: { label: function(ctx) {
                             return 'S/ ' + (ctx.parsed.y!=null ? ctx.parsed.y.toLocaleString('es-PE',{minimumFractionDigits:4,maximumFractionDigits:4}) : '—') + '/kg';
                         }}},
+                        datalabels: DL.linePrecioKg || false,
                     },
                     scales: {
                         x: { ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 10 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
@@ -312,7 +385,7 @@
                             title: { display: true, text: 'S//kg', color: '#94a3b8', font: { size: 11 } },
                         },
                     },
-                },
+                }),
             });
         }
 

@@ -81,6 +81,7 @@
 
 {% block extra_scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/chart_reporte_datalabels.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
 <script src="/assets/js/reporte_pdf.js"></script>
 <script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
@@ -102,6 +103,8 @@
         'rgba(236,72,153,0.75)',
     ];
     var BORDERS = COLORS.map(function(c){ return c.replace('0.75','1'); });
+    var legCol = typeof reporteChartLegendColor === 'function' ? reporteChartLegendColor() : '#1e293b';
+    var anim = window.reporteChartAnimate || {};
 
     function buildCharts() {
         if (!window.Chart || !labels.length) return;
@@ -118,11 +121,11 @@
                     borderWidth: 1,
                 }],
             },
-            options: {
+            options: Object.assign({}, anim, {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { position: 'right', labels: { color: '#cbd5e1', boxWidth: 14, padding: 14 } },
+                    legend: { position: 'right', labels: { color: legCol, boxWidth: 14, padding: 14 } },
                     tooltip: { callbacks: { label: function(ctx) {
                         var val = ctx.parsed || 0;
                         var total = (ctx.dataset.data || []).reduce(function(a,b){ return a+(b||0); }, 0);
@@ -130,7 +133,7 @@
                         return ctx.label + ': ' + val.toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' kg (' + pct + '%)';
                     }}},
                 },
-            },
+            }),
         });
 
         new Chart(document.getElementById('chartValor'), {
@@ -145,12 +148,12 @@
                     borderWidth: 1,
                 }],
             },
-            options: {
+            options: Object.assign({}, anim, {
                 indexAxis: 'y',
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { labels: { color: '#cbd5e1', boxWidth: 14 } },
+                    legend: { labels: { color: legCol, boxWidth: 14 } },
                     tooltip: { callbacks: { label: function(ctx) {
                         return 'S/ ' + (ctx.parsed.x || 0).toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2});
                     }}},
@@ -159,7 +162,7 @@
                     x: { ticks: { color: '#94a3b8', callback: function(v){ return 'S/ ' + v.toLocaleString('es-PE'); } }, grid: { color: 'rgba(148,163,184,0.15)' } },
                     y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
                 },
-            },
+            }),
         });
     }
 

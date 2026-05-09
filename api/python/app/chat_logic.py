@@ -41,7 +41,7 @@ Productos dentro de Pollo Vivo: cod_item 100 = carne, cod_item 103 = brasa. Usa 
 Mercados (DescripcionZonaPrecio) disponibles para Pollo Vivo: AQPMERCADO, TACNA, ILO, MOQUEGUA, MOLLENDO, CAMANA, LAJOYA, PEDREGAL. Pasa el valor como parámetro "mercado" cuando el usuario filtre por mercado/zona.
 - resumen provincia/cliente → ventasgeneral_linea_resumen_provincia (linea_comercial obligatorio, pasar el texto exacto). No pases top_n salvo que el usuario pida explícitamente un top N; sin top_n se devuelven todas las filas provincia+cliente.
 - ventas por día provincia/cliente → ventasgeneral_linea_diario_provincia
-- precio por día provincia/cliente → ventasgeneral_linea_precio_diario (incluye precio_kg = Valor/Peso)
+- precio por día provincia/cliente (resumen: fecha, provincia, cliente, cantidad, peso, valor, precio/kg; orden por fecha y por peso dentro del día) → ventasgeneral_linea_precio_diario
 - mix carne vs brasa / comparar productos → ventasgeneral_linea_mix_productos (agrupa por CodigoItem, incluye pct_peso)
 La comparación es case-insensitive. Si el usuario no especifica la línea, pregúntala antes de llamar la herramienta.
 

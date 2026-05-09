@@ -312,7 +312,7 @@ def ventas_tool_definitions() -> list[dict[str, Any]]:
             "type": "function",
             "function": {
                 "name": "ventasgeneral_linea_precio_diario",
-                "description": "Precio por día (precio_kg = Valor/Peso) de una línea comercial por fecha, provincia y cliente. Filtros opcionales: cod_item y mercado. reporte_url=ventas-linea-precio-diario",
+                "description": "Precio por día (precio/kg = Valor/Peso): fecha, provincia, cliente, cantidad, peso, valor. Reporte web orden cronológico y por peso mayor a menor dentro de cada día. Filtros opcionales: cod_item, mercado. reporte_url=ventas-linea-precio-diario",
                 "parameters": {
                     "type": "object",
                     "properties": {

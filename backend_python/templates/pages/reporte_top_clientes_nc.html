@@ -85,6 +85,7 @@
 
 {% block extra_scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/chart_reporte_datalabels.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
 <script src="/assets/js/reporte_pdf.js"></script>
 <script>ventasBindPdfDownload('btn-pdf-nc', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
@@ -92,6 +93,8 @@
 (function () {
     var d = {{ chart_data | tojson }};
     var created = false;
+    var legCol = typeof reporteChartLegendColor === 'function' ? reporteChartLegendColor() : '#1e293b';
+    var anim = window.reporteChartAnimate || {};
 
     function buildCharts() {
         if (created || !window.Chart) return;
@@ -129,12 +132,12 @@
                         },
                     ],
                 },
-                options: {
+                options: Object.assign({}, anim, {
                     responsive: true,
                     maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
                     plugins: {
-                        legend: { labels: { color: '#cbd5e1', boxWidth: 14 } },
+                        legend: { labels: { color: legCol, boxWidth: 14 } },
                         tooltip: {
                             callbacks: {
                                 label: function (ctx) {
@@ -165,7 +168,7 @@
                             title: { display: true, text: '% acumulado', color: '#fca5a5', font: { size: 11 } },
                         },
                     },
-                },
+                }),
             });
         }
 
@@ -193,13 +196,13 @@
                         },
                     ],
                 },
-                options: {
+                options: Object.assign({}, anim, {
                     indexAxis: 'y',
                     responsive: true,
                     maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
                     plugins: {
-                        legend: { labels: { color: '#cbd5e1', boxWidth: 14 } },
+                        legend: { labels: { color: legCol, boxWidth: 14 } },
                         tooltip: {
                             callbacks: {
                                 label: function (ctx) {
@@ -219,7 +222,7 @@
                             grid: { color: 'rgba(148,163,184,0.15)' },
                         },
                     },
-                },
+                }),
             });
         }
     }

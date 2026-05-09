@@ -1169,6 +1169,74 @@ body.app-sidebar-open .app-sidebar-backdrop {
     gap: 1rem;
     margin-bottom: 1rem;
 }
+
+/* Informes ventas: filtros alineados en rejilla lógica */
+.filter-form--reporte .filter-row--reporte-line-prov {
+    margin-bottom: 1rem;
+}
+
+.filter-form--reporte .filter-field--linea-comercial {
+    flex: 2 1 280px;
+    min-width: min(100%, 240px);
+    max-width: 100%;
+}
+
+.filter-form--reporte .filter-field--provincia {
+    flex: 1 1 200px;
+    min-width: min(100%, 160px);
+    max-width: 100%;
+}
+
+.filter-form--reporte .filter-row--reporte-line-prov > .filter-field#wCorp {
+    flex: 1 1 220px;
+    min-width: min(100%, 14rem);
+    max-width: 100%;
+}
+
+/* Cliente: fila completa debajo (nombres largos + Select2) */
+.filter-form--reporte .filter-row--reporte-cliente > .filter-field#wCli {
+    flex: 1 1 100%;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+}
+
+.filter-form--reporte .filter-field#wCli .select2-container {
+    width: 100% !important;
+    max-width: 100%;
+}
+
+.reporte-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1.25rem;
+    padding-top: 1rem;
+    margin-bottom: 0;
+    border-top: 1px solid var(--border);
+}
+
+.reporte-filter-bar .filter-actions {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.reporte-filter-bar__export {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+@media (max-width: 520px) {
+    .reporte-filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .reporte-filter-bar .reporte-filter-bar__export .btn {
+        justify-content: center;
+    }
+}
 .filter-field label {
     display: block;
     font-size: 0.8rem;
@@ -1207,6 +1275,80 @@ body.app-sidebar-open .app-sidebar-backdrop {
     gap: 0.65rem;
     align-items: center;
     margin-top: 0.5rem;
+}
+
+/* Select2: modo oscuro (reportes y cualquier pantalla con desplegable) */
+html[data-theme="dark"] .select2-container--default .select2-selection--single {
+    background-color: var(--input-bg);
+    border-color: var(--input-border);
+}
+html[data-theme="dark"] .select2-container--default .select2-selection--single .select2-selection__rendered {
+    color: var(--text);
+}
+html[data-theme="dark"] .select2-container--default .select2-selection--single .select2-selection__placeholder {
+    color: var(--muted);
+}
+html[data-theme="dark"] .select2-container--default .select2-selection--single .select2-selection__arrow b {
+    border-color: var(--muted) transparent transparent transparent;
+}
+html[data-theme="dark"] .select2-container--default.select2-container--disabled .select2-selection--single {
+    background-color: var(--surface-2);
+    opacity: 0.88;
+}
+html[data-theme="dark"] .select2-container--default .select2-selection--single .select2-selection__clear {
+    color: var(--muted);
+}
+
+html[data-theme="dark"] .select2-dropdown {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
+}
+
+html[data-theme="dark"] .select2-container--default .select2-results__option {
+    background-color: var(--surface);
+    color: var(--text);
+}
+
+html[data-theme="dark"] .select2-container--default .select2-results__option--selectable {
+    color: var(--text);
+}
+
+html[data-theme="dark"] .select2-container--default .select2-results__option[aria-selected="true"] {
+    background-color: var(--surface-2) !important;
+    color: var(--text) !important;
+}
+
+html[data-theme="dark"]
+    .select2-container--default
+    .select2-results__option--highlighted.select2-results__option--selectable {
+    background-color: #52525b !important;
+    color: #fafafa !important;
+}
+
+html[data-theme="dark"] .select2-results__option--highlighted {
+    background-color: #52525b !important;
+    color: #fafafa !important;
+}
+
+html[data-theme="dark"] .select2-search--dropdown {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0.45rem 0.5rem;
+}
+
+html[data-theme="dark"] .select2-search--dropdown .select2-search__field {
+    background: var(--input-bg) !important;
+    color: var(--text) !important;
+    border: 1px solid var(--input-border) !important;
+    border-radius: var(--radius-sm);
+}
+
+html[data-theme="dark"] .select2-container--default .select2-results__message,
+html[data-theme="dark"] .select2-container--default .select2-results__option.select2-results__message {
+    color: var(--muted);
+    background: var(--surface);
 }
 
 .btn {
@@ -1260,6 +1402,48 @@ body.app-sidebar-open .app-sidebar-backdrop {
 /* Informes bajo /modules/… servidos por Flask (mismo shell que el resto de la app) */
 .reporte-informe-panel {
     padding: 1rem 1.25rem 1.25rem;
+}
+.reporte-informe-panel > #reporte-pdf-root {
+    margin-top: 1rem;
+}
+
+/* Tabla precio por día: grupo por fecha (cascada / “comparado por día”) */
+.reporte-precio-cascade .reporte-cascade-day__cell {
+    background: var(--surface-2);
+    color: var(--text);
+    font-weight: 600;
+    font-size: 0.88rem;
+    padding: 0.5rem 0.75rem !important;
+    border-top: 1px solid var(--border);
+    vertical-align: middle;
+}
+.reporte-precio-cascade tbody tr.reporte-cascade-day:first-child .reporte-cascade-day__cell {
+    border-top: none;
+}
+.reporte-precio-cascade .reporte-cascade-day__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-right: 0.65rem;
+}
+.reporte-precio-cascade .reporte-cascade-day__meta {
+    font-weight: 500;
+    color: var(--muted);
+    font-size: 0.82rem;
+}
+.reporte-precio-cascade .reporte-cascade-detail td:first-child,
+.reporte-precio-cascade .reporte-cascade-detail td:nth-child(2) {
+    padding-left: 0.85rem;
+}
+.reporte-precio-cascade .reporte-cascade-detail td:first-child {
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 0.82rem;
+}
+
+/* Select2: dropdown por encima de la tabla del informe */
+.select2-container--open .select2-dropdown {
+    z-index: 10900 !important;
 }
 .reporte-informe-panel .reporte-informe-toolbar {
     padding-bottom: 1rem;

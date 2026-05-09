@@ -1049,10 +1049,11 @@ def ventas_linea_precio_diario():
            "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
            "      ELSE NULL END AS precio_kg"
            f" FROM ventasgeneral2{ext_where}"
-           f" GROUP BY fecha, provincia, CodigoCliente ORDER BY suma_peso DESC, fecha ASC LIMIT {top}")
+           f" GROUP BY fecha, provincia, CodigoCliente ORDER BY fecha ASC, suma_peso DESC LIMIT {top}")
 
     sql_precio_dia = ("SELECT FechaContable AS fecha,"
                       " COALESCE(SUM(Peso),0) AS suma_peso,"
+                      " COALESCE(SUM(Valor),0) AS suma_valor,"
                       " CASE WHEN COALESCE(SUM(Peso),0) > 0"
                       "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
                       "      ELSE NULL END AS precio_kg"
@@ -1084,12 +1085,14 @@ def ventas_linea_precio_diario():
         raw_precio_tdoc = cur.fetchall() or []
 
     filas = []
-    for i, r in enumerate(raw, 1):
+    rank = 0
+    for r in raw:
         fecha = r.get('fecha')
         fecha_str = fecha.strftime('%Y-%m-%d') if hasattr(fecha, 'strftime') else str(fecha or '')
         precio = r.get('precio_kg')
-        filas.append({
-            'rank': i,
+        rank += 1
+        row = {
+            'rank': rank,
             'fecha': fecha_str,
             'provincia': str(r.get('provincia') or ''),
             'nombre_corporativo': str(r.get('nombre_corporativo') or ''),
@@ -1100,15 +1103,21 @@ def ventas_linea_precio_diario():
             'suma_peso': f"{float(r.get('suma_peso') or 0):,.2f}",
             'suma_valor': f"{float(r.get('suma_valor') or 0):,.2f}",
             'precio_kg': f"{float(precio):,.4f}" if precio is not None else '—',
-        })
+        }
+        filas.append(row)
 
     chart_fechas = []
     chart_precios = []
+    total_peso_periodo = 0.0
+    total_valor_periodo = 0.0
     for r in raw_precio:
         fecha = r.get('fecha')
         chart_fechas.append(fecha.strftime('%Y-%m-%d') if hasattr(fecha, 'strftime') else str(fecha or ''))
         p = r.get('precio_kg')
         chart_precios.append(round(float(p), 4) if p is not None else None)
+        total_peso_periodo += float(r.get('suma_peso') or 0)
+        total_valor_periodo += float(r.get('suma_valor') or 0)
+    total_precio_kg_periodo = (total_valor_periodo / total_peso_periodo) if total_peso_periodo > 0 else None
 
     # Precio por tipo de documento (01 Factura, 03 Boleta, 07 Nota de Crédito)
     _tdoc_by_date: dict = {}
@@ -1166,6 +1175,9 @@ def ventas_linea_precio_diario():
     ctx.update({
         'd1': d1, 'd2': d2, 'linea': linea, 'top': top,
         'filas': filas,
+        'total_peso': f'{total_peso_periodo:,.2f}',
+        'total_valor': f'{total_valor_periodo:,.2f}',
+        'total_precio_kg_periodo': f'{total_precio_kg_periodo:,.4f}' if total_precio_kg_periodo is not None else '—',
         'pdf_filename': f'linea_precio_diario_{d1}_{d2}.pdf',
         'chart_data': {'fechas': chart_fechas, 'precios': chart_precios},
         'chart_data_tdoc': chart_data_tdoc,

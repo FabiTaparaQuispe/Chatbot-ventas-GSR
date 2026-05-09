@@ -164,7 +164,13 @@ def ventas_tool_definitions():
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_linea_precio_diario',
-            'description': f'Precio por día (precio_kg = Valor/Peso) de una línea comercial por fecha, provincia y cliente. Filtros opcionales: cod_item y mercado. reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_LINEA_PRECIO_DIARIO}?…',
+            'description': (
+                f'Precio por día (precio/kg = Valor/Peso) de una línea por fecha, provincia, cliente y '
+                f'cantidades: incluye líneas, cantidad, peso, valor. Orden en el reporte web: días en orden cronológico y '
+                f'dentro de cada día por peso de mayor a menor. Usar cuando pidan precio por día '
+                f'como resumen con provincia/cliente/cantidad/peso/valor. Filtros opcionales: cod_item, mercado. '
+                f'reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_LINEA_PRECIO_DIARIO}?…'
+            ),
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt,
                 'linea_comercial': {'type': 'string', 'description': "Texto de LineaComercial, ej. 'Pollo Vivo'"},

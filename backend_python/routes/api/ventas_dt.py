@@ -40,6 +40,36 @@ def _text_cell(v) -> str:
         return s
 
 
+@bp.route('/api/lineas')
+def api_lineas():
+    q = (request.args.get('q') or '').strip()
+    page = max(1, int(request.args.get('page') or 1))
+    page_size = 30
+    offset = (page - 1) * page_size
+    like = f'%{q}%' if q else '%'
+
+    try:
+        conn = get_connection()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT DISTINCT TRIM(LineaComercial) AS linea FROM ventasgeneral2"
+                " WHERE LineaComercial IS NOT NULL AND TRIM(LineaComercial) != ''"
+                " AND TRIM(LineaComercial) LIKE %s"
+                " ORDER BY linea LIMIT %s OFFSET %s",
+                (like, page_size + 1, offset),
+            )
+            rows = cur.fetchall()
+        has_more = len(rows) > page_size
+        lineas = [r['linea'] for r in rows[:page_size]]
+        return jsonify({
+            'results': [{'id': l, 'text': l} for l in lineas],
+            'pagination': {'more': has_more},
+        })
+    except Exception as e:
+        logger.exception('api_lineas')
+        return jsonify({'results': [], 'pagination': {'more': False}, 'error': str(e)}), 500
+
+
 @bp.route('/api/ventasgeneral', methods=['GET'])
 @bp.route('/api/ventasgeneral_dt.php', methods=['GET'])
 def ventas_dt():
