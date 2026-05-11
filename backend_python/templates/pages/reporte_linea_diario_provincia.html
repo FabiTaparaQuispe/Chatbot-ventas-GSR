@@ -76,7 +76,7 @@
                         <button type="submit" class="btn btn-primary">
                             <i class="fa-solid fa-check" aria-hidden="true"></i> Aplicar
                         </button>
-                        <a class="btn btn-ghost" href="?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}&top={{ top }}{% if (tipo_fecha|default('contable')) == 'proceso' %}&tipo_fecha=proceso{% endif %}">
+                        <a class="btn btn-ghost" href="{{ request.path }}?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}&top={{ top }}{% if (tipo_fecha|default('contable')) == 'proceso' %}&tipo_fecha=proceso{% endif %}">
                             <i class="fa-solid fa-eraser" aria-hidden="true"></i> Limpiar
                         </a>
                     </div>
@@ -138,7 +138,7 @@
             <p style="color:var(--muted);padding:.5rem 0;">
                 No se encontraron ventas para la línea "{{ linea }}" en el período y filtros seleccionados.
                 {% if f_provincias or f_corporativos or f_clientes %}
-                <a href="?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}&top={{ top }}{% if (tipo_fecha|default('contable')) == 'proceso' %}&tipo_fecha=proceso{% endif %}"
+                <a href="{{ request.path }}?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}&top={{ top }}{% if (tipo_fecha|default('contable')) == 'proceso' %}&tipo_fecha=proceso{% endif %}"
                    style="color:var(--accent);">Limpiar filtros</a>
                 {% endif %}
             </p>
@@ -421,11 +421,52 @@
         },
     });
 
+    function hasVal(v) { return v != null && !isNaN(v); }
+
+    function dlMultiBase() {
+        return {
+            clamp: true,
+            clip: true,
+            backgroundColor: null,
+            borderRadius: 0,
+            padding: 0,
+            font: { size: 9, weight: '600' },
+            color: function (ctx) {
+                var ds = ctx && ctx.dataset;
+                return (ds && (ds.borderColor || ds.pointBackgroundColor)) || legCol;
+            },
+            align: 'top',
+            offset: function (ctx) { return 6 + (ctx.datasetIndex || 0) * 12; },
+            display: function (ctx) {
+                var v = ctx.dataset.data[ctx.dataIndex];
+                return hasVal(v) && Number(v) > 0;
+            },
+        };
+    }
+
+    function dlMultiPeso() {
+        return Object.assign({}, dlMultiBase(), {
+            formatter: function (value) {
+                if (!hasVal(value)) return '';
+                return Number(value).toLocaleString('es-PE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+            },
+        });
+    }
+
+    function dlMultiValor() {
+        return Object.assign({}, dlMultiBase(), {
+            formatter: function (value) {
+                if (!hasVal(value)) return '';
+                return 'S/ ' + Number(value).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            },
+        });
+    }
+
     function buildCharts() {
         if (!window.Chart || !fechas.length) return;
 
-        var dlPeso = esModoClientes() ? false : (DL.linePesoKg || false);
-        var dlVal = esModoClientes() ? false : (DL.lineValorSol || false);
+        var dlPeso = esModoClientes() ? dlMultiPeso() : (DL.linePesoKg || false);
+        var dlVal = esModoClientes() ? dlMultiValor() : (DL.lineValorSol || false);
 
         var chPeso = new Chart(document.getElementById('chartPesoDia'), {
             type: 'line',

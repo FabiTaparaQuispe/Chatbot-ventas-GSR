@@ -686,7 +686,7 @@ def ventas_linea_resumen_provincia():
         ext_where += ' AND CodigoCliente IN (' + ','.join(f':{k}' for k in keys) + ')'
         bind.update(zip(keys, f_clientes))
 
-    # Query principal de agregación (rangos de fechas por fila: líneas incluidas en el resumen)
+    # Query principal de agregación
     sql = ("SELECT"
            " COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
            " MAX(COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'')) AS nombre_corporativo,"
@@ -696,10 +696,6 @@ def ventas_linea_resumen_provincia():
            " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
            " COALESCE(SUM(Peso),0) AS suma_peso,"
            " COALESCE(SUM(Valor),0) AS suma_valor,"
-           " MIN(FechaContable) AS fc_min,"
-           " MAX(FechaContable) AS fc_max,"
-           " MIN(COALESCE(fechaProceso, FechaContable)) AS fp_min,"
-           " MAX(COALESCE(fechaProceso, FechaContable)) AS fp_max,"
            " CASE WHEN COALESCE(SUM(Peso),0) > 0"
            "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 2)"
            "      ELSE NULL END AS precio_kg"
@@ -758,8 +754,6 @@ def ventas_linea_resumen_provincia():
             'suma_peso': f'{sp:,.2f}',
             'suma_valor': f'{sv:,.2f}',
             'precio_kg': f'S/ {float(pk):.2f}' if pk is not None else '—',
-            'rango_fecha_contable': _fmt_min_max_date(r.get('fc_min'), r.get('fc_max')),
-            'rango_dia_proceso': _fmt_min_max_date(r.get('fp_min'), r.get('fp_max')),
         })
 
     # Datos gráfico precio diario
@@ -812,6 +806,7 @@ def ventas_linea_resumen_provincia():
         'tipo_fecha': tipo_fecha,
         'fecha_eje_leyenda': fecha_eje_leyenda,
         'fecha_columna_th': fecha_columna_th,
+        'fechas_dim_label': 'fecha contable' if tipo_fecha == 'contable' else 'día de proceso',
         'filas': filas,
         'total_lineas': f'{total_lineas:,}',
         'total_cantidad': f'{total_cantidad:,.2f}',
@@ -1211,6 +1206,108 @@ def ventas_linea_precio_diario():
         cur.execute(_colon_params_to_pymysql(sql_precio_tdoc), bind)
         raw_precio_tdoc = cur.fetchall() or []
 
+    # Comparativa por cliente (2+ seleccionados): precio promedio ponderado y por tipo-doc por cliente
+    chart_modo = 'total'
+    series_clientes_precio: list[dict[str, Any]] = []
+    tdoc_por_cliente: list[dict[str, Any]] = []
+    if len(f_clientes) >= 2:
+        sql_precio_cli = (
+            f"SELECT {fe} AS fecha, CodigoCliente AS cod_cliente,"
+            " MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
+            " CASE WHEN COALESCE(SUM(Peso),0) > 0"
+            "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
+            "      ELSE NULL END AS precio_kg"
+            f" FROM ventasgeneral2{ext_where}"
+            f" GROUP BY {fe}, CodigoCliente ORDER BY fecha ASC, cod_cliente"
+        )
+        sql_tdoc_cli = (
+            f"SELECT {fe} AS fecha, CodigoCliente AS cod_cliente,"
+            " CodigoDocumento AS tipo_doc,"
+            " CASE WHEN COALESCE(SUM(Peso),0) <> 0"
+            "      THEN ROUND(ABS(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0)), 4)"
+            "      ELSE NULL END AS precio_kg"
+            f" FROM ventasgeneral2{tdoc_where}"
+            f" GROUP BY {fe}, CodigoCliente, CodigoDocumento"
+            f" ORDER BY {fe} ASC, CodigoCliente, CodigoDocumento"
+        )
+        with conn.cursor() as cur:
+            cur.execute(_colon_params_to_pymysql(sql_precio_cli), bind)
+            raw_precio_cli = cur.fetchall() or []
+        with conn.cursor() as cur:
+            cur.execute(_colon_params_to_pymysql(sql_tdoc_cli), bind)
+            raw_tdoc_cli = cur.fetchall() or []
+
+        cod_to_name: dict[str, str] = {}
+        per_precio: dict[str, dict[str, float]] = {}
+        for r in raw_precio_cli:
+            cod = str(r.get('cod_cliente') or '').strip()
+            if not cod:
+                continue
+            fecha = r.get('fecha')
+            fd = fecha.strftime('%Y-%m-%d') if hasattr(fecha, 'strftime') else str(fecha or '')
+            if not fd:
+                continue
+            p = r.get('precio_kg')
+            per_precio.setdefault(cod, {})[fd] = round(float(p), 4) if p is not None else None
+            cod_to_name[cod] = str(r.get('nombre_cliente') or '').strip() or cod
+
+        for cod in f_clientes:
+            c = str(cod).strip()
+            if not c:
+                continue
+            nm = cod_to_name.get(c, c)
+            label = (f'{c} — {nm}')[:80]
+            series_clientes_precio.append({
+                'cod': c,
+                'label': label,
+                'precios': [per_precio.get(c, {}).get(f) for f in chart_fechas],
+            })
+
+        # Por cliente: fechas únicas y series por tipo-doc
+        per_cli_tdoc: dict[str, dict[str, dict[str, float | None]]] = {}
+        per_cli_dates: dict[str, set[str]] = {}
+        per_cli_tipos: dict[str, set[str]] = {}
+        for r in raw_tdoc_cli:
+            cod = str(r.get('cod_cliente') or '').strip()
+            if not cod:
+                continue
+            fecha = r.get('fecha')
+            fd = fecha.strftime('%Y-%m-%d') if hasattr(fecha, 'strftime') else str(fecha or '')
+            tdoc = str(r.get('tipo_doc') or '').strip()
+            if not fd or not tdoc:
+                continue
+            p = r.get('precio_kg')
+            per_cli_tdoc.setdefault(cod, {}).setdefault(fd, {})[tdoc] = (
+                round(float(p), 4) if p is not None else None
+            )
+            per_cli_dates.setdefault(cod, set()).add(fd)
+            per_cli_tipos.setdefault(cod, set()).add(tdoc)
+
+        for cod in f_clientes:
+            c = str(cod).strip()
+            if not c:
+                continue
+            nm = cod_to_name.get(c, c)
+            label = (f'{c} — {nm}')[:80]
+            fechas_cli = sorted(per_cli_dates.get(c, set()))
+            tipos_cli = sorted(per_cli_tipos.get(c, set()))
+            series_t = {
+                t: [
+                    per_cli_tdoc.get(c, {}).get(f, {}).get(t)
+                    for f in fechas_cli
+                ]
+                for t in tipos_cli
+            }
+            tdoc_por_cliente.append({
+                'cod': c,
+                'label': label,
+                'fechas': fechas_cli,
+                'series': series_t,
+            })
+
+        if len(series_clientes_precio) >= 2:
+            chart_modo = 'clientes'
+
     filas = []
     rank = 0
     for r in raw:
@@ -1309,8 +1406,14 @@ def ventas_linea_precio_diario():
         'total_valor': f'{total_valor_periodo:,.2f}',
         'total_precio_kg_periodo': f'{total_precio_kg_periodo:,.4f}' if total_precio_kg_periodo is not None else '—',
         'pdf_filename': f'linea_precio_diario_{d1}_{d2}.pdf',
-        'chart_data': {'fechas': chart_fechas, 'precios': chart_precios},
+        'chart_data': {
+            'fechas': chart_fechas,
+            'precios': chart_precios,
+            'modo': chart_modo,
+            'series_clientes': series_clientes_precio,
+        },
         'chart_data_tdoc': chart_data_tdoc,
+        'chart_data_tdoc_clientes': tdoc_por_cliente,
         'provincias_opts': provincias_opts,
         'corporativos_opts': corporativos_opts,
         'clientes_opts': clientes_opts,

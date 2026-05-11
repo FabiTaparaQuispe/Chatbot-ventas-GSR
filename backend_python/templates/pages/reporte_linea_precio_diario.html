@@ -63,9 +63,8 @@
 
                 <div class="filter-row filter-row--reporte-cliente">
                     <div class="filter-field" id="wCli" style="display:none">
-                        <label for="fCli">Cliente</label>
-                        <select id="fCli" name="cliente">
-                            <option value="">— Todos —</option>
+                        <label for="fCli">Cliente <span style="font-weight:400;color:var(--muted);">(varios para comparar en gráficos)</span></label>
+                        <select id="fCli" name="cliente" multiple="multiple">
                         </select>
                     </div>
                 </div>
@@ -75,7 +74,7 @@
                         <button type="submit" class="btn btn-primary">
                             <i class="fa-solid fa-check" aria-hidden="true"></i> Aplicar
                         </button>
-                        <a class="btn btn-ghost" href="?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}&top={{ top }}{% if (tipo_fecha|default('contable')) == 'proceso' %}&tipo_fecha=proceso{% endif %}">
+                        <a class="btn btn-ghost" href="{{ request.path }}?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}&top={{ top }}{% if (tipo_fecha|default('contable')) == 'proceso' %}&tipo_fecha=proceso{% endif %}">
                             <i class="fa-solid fa-eraser" aria-hidden="true"></i> Limpiar
                         </a>
                     </div>
@@ -133,7 +132,7 @@
             <p style="color:var(--muted);">
                 No se encontraron ventas para la línea "{{ linea }}" en el período seleccionado.
                 {% if f_provincias or f_corporativos or f_clientes %}
-                <a href="?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}&top={{ top }}{% if (tipo_fecha|default('contable')) == 'proceso' %}&tipo_fecha=proceso{% endif %}"
+                <a href="{{ request.path }}?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}&top={{ top }}{% if (tipo_fecha|default('contable')) == 'proceso' %}&tipo_fecha=proceso{% endif %}"
                    style="color:var(--accent);">Limpiar filtros</a>
                 {% endif %}
             </p>
@@ -143,12 +142,21 @@
 
     {% if chart_data.fechas %}
     <section class="reporte-chart-section" aria-label="Gráfico precio diario">
-        <h3 class="reporte-chart-heading">Precio promedio ponderado (S//kg) por día · {{ fecha_eje_leyenda|default('Fecha contable') }}</h3>
+        <h3 class="reporte-chart-heading">{% if chart_data.modo == 'clientes' %}Comparativa de precio (S//kg) por día · clientes seleccionados · {% else %}Precio promedio ponderado (S//kg) por día · {% endif %}{{ fecha_eje_leyenda|default('Fecha contable') }}</h3>
         <div class="chart-inner"><canvas id="chartPrecioDia"></canvas></div>
     </section>
     {% endif %}
 
-    {% if chart_data_tdoc.fechas %}
+    {% if chart_data.modo == 'clientes' and chart_data_tdoc_clientes %}
+        {% for tc in chart_data_tdoc_clientes %}
+            {% if tc.fechas %}
+            <section class="reporte-chart-section" aria-label="Gráfico precio por tipo de documento · {{ tc.cod }}">
+                <h3 class="reporte-chart-heading">Precio (S//kg) por tipo de documento · {{ tc.label }} · {{ fecha_eje_leyenda|default('Fecha contable') }}</h3>
+                <div class="chart-inner"><canvas class="chartPrecioTdocCli" data-tc-idx="{{ loop.index0 }}"></canvas></div>
+            </section>
+            {% endif %}
+        {% endfor %}
+    {% elif chart_data_tdoc.fechas %}
     <section class="reporte-chart-section" aria-label="Gráfico precio por tipo de documento">
         <h3 class="reporte-chart-heading">Precio (S//kg) por tipo de documento · Factura (01) · Boleta (03) · N.Crédito (07) · {{ fecha_eje_leyenda|default('Fecha contable') }}</h3>
         <div class="chart-inner"><canvas id="chartPrecioTdoc"></canvas></div>
@@ -176,7 +184,7 @@
     var TREE = {{ opts_tree | tojson }};
     var iP   = {{ (f_provincias[0]   if f_provincias   else '') | tojson }};
     var iC   = {{ (f_corporativos[0] if f_corporativos else '') | tojson }};
-    var iL   = {{ (f_clientes[0]     if f_clientes     else '') | tojson }};
+    var iClients = {{ f_clientes | tojson }};
 
     var S2_BASE = {
         width: '100%',
@@ -198,6 +206,15 @@
 
     function initS2(selId, placeholder) {
         $('#' + selId).prop('disabled', false).select2($.extend({}, S2_BASE, { placeholder: placeholder }));
+    }
+
+    function initS2ClientesMulti() {
+        $('#fCli').prop('disabled', false).select2($.extend({}, S2_BASE, {
+            placeholder: 'Elija uno o varios clientes',
+            allowClear: true,
+            multiple: true,
+            closeOnSelect: false,
+        }));
     }
 
     function onProvChange() {
@@ -226,7 +243,7 @@
             $('#fCli').append('<option value="' + esc(c.cod) + '">' + esc(c.cod) + ' — ' + esc(c.nombre) + '</option>');
         });
         $('#wCli').show();
-        initS2('fCli', '— Todos —');
+        initS2ClientesMulti();
     }
 
     $(function () {
@@ -259,7 +276,11 @@
                 setTimeout(function () {
                     $('#fCorp').val(iC).trigger('change.select2');
                     onCorpChange();
-                    if (iL) setTimeout(function () { $('#fCli').val(iL).trigger('change.select2'); }, 0);
+                    if (Array.isArray(iClients) && iClients.length) {
+                        setTimeout(function () {
+                            $('#fCli').val(iClients).trigger('change.select2');
+                        }, 0);
+                    }
                 }, 0);
             }
         }
@@ -300,6 +321,79 @@
     var anim = window.reporteChartAnimate || {};
     var fechas  = d.fechas  || [];
     var precios = d.precios || [];
+    var modo    = d.modo || 'total';
+    var seriesClientes = d.series_clientes || [];
+
+    var PALETTE = [
+        { b: 'rgba(34,197,94,1)' },
+        { b: 'rgba(59,130,246,1)' },
+        { b: 'rgba(234,88,12,1)' },
+        { b: 'rgba(168,85,247,1)' },
+        { b: 'rgba(236,72,153,1)' },
+        { b: 'rgba(20,184,166,1)' },
+        { b: 'rgba(234,179,8,1)' },
+        { b: 'rgba(239,68,68,1)' },
+    ];
+
+    function esModoClientes() {
+        return modo === 'clientes' && seriesClientes.length >= 2;
+    }
+
+    function hasVal(v) { return v != null && !isNaN(v); }
+
+    function dlPrecioMulti() {
+        return {
+            clamp: true,
+            clip: true,
+            backgroundColor: null,
+            borderRadius: 0,
+            padding: 0,
+            font: { size: 9, weight: '600' },
+            color: function (ctx) {
+                var ds = ctx && ctx.dataset;
+                return (ds && (ds.borderColor || ds.pointBackgroundColor)) || legCol;
+            },
+            align: 'top',
+            offset: function (ctx) { return 6 + (ctx.datasetIndex || 0) * 12; },
+            display: function (ctx) { return hasVal(ctx.dataset.data[ctx.dataIndex]); },
+            formatter: function (value) {
+                if (!hasVal(value)) return '';
+                return 'S/ ' + Number(value).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + '/kg';
+            },
+        };
+    }
+
+    function datasetsPrecio() {
+        if (esModoClientes()) {
+            return seriesClientes.map(function (s, i) {
+                var c = PALETTE[i % PALETTE.length];
+                return {
+                    label: s.label || s.cod,
+                    data: (s.precios || []).slice(),
+                    borderColor: c.b,
+                    backgroundColor: c.b,
+                    borderWidth: 2,
+                    tension: 0.2,
+                    fill: false,
+                    pointRadius: fechas.length > 60 ? 0 : 4,
+                    pointBackgroundColor: c.b,
+                    spanGaps: true,
+                };
+            });
+        }
+        return [{
+            label: 'Precio/kg (S/)',
+            data: precios,
+            borderColor: 'rgba(251,146,60,1)',
+            backgroundColor: 'rgba(251,146,60,0.15)',
+            borderWidth: 2,
+            tension: 0.2,
+            fill: true,
+            pointRadius: fechas.length > 60 ? 0 : 4,
+            pointBackgroundColor: 'rgba(251,146,60,1)',
+            spanGaps: true,
+        }];
+    }
 
     function buildCharts() {
         if (!window.Chart || !fechas.length) return;
@@ -308,29 +402,25 @@
             type: 'line',
             data: {
                 labels: fechas,
-                datasets: [{
-                    label: 'Precio/kg (S/)',
-                    data: precios,
-                    borderColor: 'rgba(251,146,60,1)',
-                    backgroundColor: 'rgba(251,146,60,0.15)',
-                    borderWidth: 2,
-                    tension: 0.2,
-                    fill: true,
-                    pointRadius: fechas.length > 60 ? 0 : 4,
-                    pointBackgroundColor: 'rgba(251,146,60,1)',
-                    spanGaps: true,
-                }],
+                datasets: datasetsPrecio(),
             },
             options: Object.assign({}, anim, {
                 responsive: true,
                 maintainAspectRatio: false,
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
-                    legend: { labels: { color: legCol, boxWidth: 14 } },
+                    legend: {
+                        display: true,
+                        position: esModoClientes() ? 'bottom' : 'top',
+                        labels: { color: legCol, boxWidth: 14, padding: esModoClientes() ? 10 : 16 },
+                    },
                     tooltip: { callbacks: { label: function(ctx) {
-                        return 'S/ ' + (ctx.parsed.y != null ? ctx.parsed.y.toLocaleString('es-PE', {minimumFractionDigits:4, maximumFractionDigits:4}) : '—') + '/kg';
+                        var v = ctx.parsed.y;
+                        var s = 'S/ ' + (v != null ? v.toLocaleString('es-PE', {minimumFractionDigits:4, maximumFractionDigits:4}) : '—') + '/kg';
+                        if (esModoClientes()) return (ctx.dataset.label || '') + ': ' + s;
+                        return s;
                     }}},
-                    datalabels: DL.linePrecioKg || false,
+                    datalabels: esModoClientes() ? dlPrecioMulti() : (DL.linePrecioKg || false),
                 },
                 scales: {
                     x: { ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 10 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
@@ -352,6 +442,7 @@
             return -1;
         }
         function recomputeFromFilteredTable() {
+            if (esModoClientes()) return; /* en multi-cliente se respeta lo del servidor */
             var tableEl = document.querySelector('table.rct-auto');
             if (!tableEl || !tableEl.__rct || !tableEl.__rct.origData) return;
             var cols = tableEl.__rct.cols || [];
@@ -367,8 +458,8 @@
                 return;
             }
 
-            var idxFecha = findCol(cols, /^fecha$/i);
-            if (idxFecha < 0) idxFecha = findCol(cols, /fecha/i);
+            var idxFecha = findCol(cols, /^fecha/i);
+            if (idxFecha < 0) idxFecha = findCol(cols, /contable|proceso/i);
             var idxPeso = findCol(cols, /\bpeso\b/i);
             var idxValor = findCol(cols, /\bvalor\b/i);
             if (idxFecha < 0 || idxPeso < 0 || idxValor < 0) return;
@@ -410,12 +501,11 @@
 </script>
 <script>
 (function () {
-    var d      = {{ chart_data_tdoc | tojson }};
+    var dTotal = {{ chart_data_tdoc | tojson }};
+    var dCli   = {{ chart_data_tdoc_clientes | default([]) | tojson }};
     var DL     = window.VENTAS_CHART_DATALABELS || {};
     var legCol = typeof reporteChartLegendColor === 'function' ? reporteChartLegendColor() : '#1e293b';
     var anim = window.reporteChartAnimate || {};
-    var fechas = d.fechas  || [];
-    var series = d.series  || {};
 
     var COLORS = {
         '01': { border: 'rgba(59,130,246,1)',  bg: 'rgba(59,130,246,0.12)'  },
@@ -424,12 +514,38 @@
     };
     var LABELS = { '01': 'Factura (01)', '03': 'Boleta (03)', '07': 'N. Crédito (07)' };
 
-    function buildTdocChart() {
-        if (!window.Chart || !fechas.length) return;
-        var el = document.getElementById('chartPrecioTdoc');
-        if (!el) return;
+    function commonOpts() {
+        return Object.assign({}, anim, {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            layout: { padding: { bottom: 8 } },
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { color: legCol, boxWidth: 12, padding: 16, font: { size: 12, weight: '500' } },
+                },
+                tooltip: { callbacks: { label: function (ctx) {
+                    return ctx.dataset.label + ': ' +
+                        (ctx.parsed.y != null
+                            ? 'S/ ' + ctx.parsed.y.toLocaleString('es-PE', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + '/kg'
+                            : '—');
+                }}},
+                datalabels: DL.linePrecioKgMulti || false,
+            },
+            scales: {
+                x: { ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 10 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                y: {
+                    ticks: { color: '#94a3b8', callback: function (v) { return 'S/ ' + v.toLocaleString('es-PE', { minimumFractionDigits: 2 }); } },
+                    grid: { color: 'rgba(148,163,184,0.15)' },
+                    title: { display: true, text: 'S//kg', color: '#94a3b8', font: { size: 11 } },
+                },
+            },
+        });
+    }
 
-        var datasets = Object.keys(series).sort().map(function (t) {
+    function datasetsFor(series, fechasLen) {
+        return Object.keys(series).sort().map(function (t) {
             var c = COLORS[t] || { border: 'rgba(148,163,184,1)', bg: 'rgba(148,163,184,0.1)' };
             return {
                 label: LABELS[t] || ('Tipo ' + t),
@@ -440,51 +556,46 @@
                 tension: 0.2,
                 fill: false,
                 spanGaps: true,
-                pointRadius: fechas.length > 60 ? 0 : 4,
+                pointRadius: fechasLen > 60 ? 0 : 4,
                 pointBackgroundColor: c.border,
             };
         });
+    }
 
+    function buildAll() {
+        if (!window.Chart) return;
+
+        /* Modo multi-cliente: un gráfico por cliente */
+        if (Array.isArray(dCli) && dCli.length) {
+            var canvases = document.querySelectorAll('canvas.chartPrecioTdocCli');
+            canvases.forEach(function (el) {
+                var idx = parseInt(el.getAttribute('data-tc-idx'), 10);
+                var tc = dCli[idx];
+                if (!tc || !tc.fechas || !tc.fechas.length) return;
+                new Chart(el, {
+                    type: 'line',
+                    data: { labels: tc.fechas, datasets: datasetsFor(tc.series || {}, tc.fechas.length) },
+                    options: commonOpts(),
+                });
+            });
+            return;
+        }
+
+        /* Modo total: el gráfico agregado original */
+        var fechas = dTotal.fechas || [];
+        var series = dTotal.series || {};
+        if (!fechas.length) return;
+        var el = document.getElementById('chartPrecioTdoc');
+        if (!el) return;
         new Chart(el, {
             type: 'line',
-            data: { labels: fechas, datasets: datasets },
-            options: Object.assign({}, anim, {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: { mode: 'index', intersect: false },
-                layout: { padding: { bottom: 8 } },
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: {
-                            color: legCol,
-                            boxWidth: 12,
-                            padding: 16,
-                            font: { size: 12, weight: '500' },
-                        },
-                    },
-                    tooltip: { callbacks: { label: function (ctx) {
-                        return ctx.dataset.label + ': ' +
-                            (ctx.parsed.y != null
-                                ? 'S/ ' + ctx.parsed.y.toLocaleString('es-PE', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + '/kg'
-                                : '—');
-                    }}},
-                    datalabels: DL.linePrecioKgMulti || false,
-                },
-                scales: {
-                    x: { ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 10 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
-                    y: {
-                        ticks: { color: '#94a3b8', callback: function (v) { return 'S/ ' + v.toLocaleString('es-PE', { minimumFractionDigits: 2 }); } },
-                        grid: { color: 'rgba(148,163,184,0.15)' },
-                        title: { display: true, text: 'S//kg', color: '#94a3b8', font: { size: 11 } },
-                    },
-                },
-            }),
+            data: { labels: fechas, datasets: datasetsFor(series, fechas.length) },
+            options: commonOpts(),
         });
     }
 
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', buildTdocChart);
-    else buildTdocChart();
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', buildAll);
+    else buildAll();
 })();
 </script>
 {% endblock %}
