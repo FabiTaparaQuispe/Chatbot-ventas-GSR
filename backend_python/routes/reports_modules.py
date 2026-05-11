@@ -285,6 +285,170 @@ def _sanear_filtros_linea(
     )
 
 
+_ARBOL_CACHE: dict[tuple, tuple[float, list[dict[str, str]]]] = {}
+_ARBOL_CACHE_TTL_S = 120.0
+_ARBOL_CACHE_MAX = 32
+
+
+def _linea_arbol_distinct(
+    conn,
+    base_where: str,
+    base_bind: dict[str, Any],
+) -> list[dict[str, str]]:
+    """
+    Trae UNA sola vez las tripletas (provincia, corporativo, cliente) válidas según el WHERE base.
+    Reemplaza a 3 consultas DISTINCT independientes y evita los full-scans repetidos.
+    Devuelve filas con: provincia, nombre_corporativo, cod_corporativo, cod_cliente, nombre_cliente.
+    Cachea el resultado por (base_where, parámetros) durante _ARBOL_CACHE_TTL_S segundos.
+    """
+    import time as _t
+    cache_key = (base_where, tuple(sorted((k, str(v)) for k, v in base_bind.items())))
+    now = _t.time()
+    cached = _ARBOL_CACHE.get(cache_key)
+    if cached and (now - cached[0]) < _ARBOL_CACHE_TTL_S:
+        return cached[1]
+
+    sql = (
+        'SELECT DISTINCT'
+        " COALESCE(NULLIF(TRIM(Provincia),''),'') AS provincia,"
+        " COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'') AS nombre_corporativo,"
+        " COALESCE(NULLIF(TRIM(CodigoCoorporativo),''),'') AS cod_corporativo,"
+        ' CodigoCliente AS cod_cliente,'
+        " COALESCE(NULLIF(TRIM(NombreCliente),''),'') AS nombre_cliente"
+        f' FROM ventasgeneral2{base_where}'
+        " AND COALESCE(NULLIF(TRIM(Provincia),''),'') <> ''"
+        " AND COALESCE(NULLIF(TRIM(CodigoCliente),''),'') <> ''"
+    )
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql), base_bind)
+        rows = cur.fetchall() or []
+    out: list[dict[str, str]] = []
+    for r in rows:
+        d = dict(r) if not isinstance(r, dict) else r
+        out.append({
+            'provincia':          str(d.get('provincia')          or '').strip(),
+            'nombre_corporativo': str(d.get('nombre_corporativo') or '').strip(),
+            'cod_corporativo':    str(d.get('cod_corporativo')    or '').strip(),
+            'cod_cliente':        str(d.get('cod_cliente')        or '').strip(),
+            'nombre_cliente':     str(d.get('nombre_cliente')     or '').strip(),
+        })
+
+    if len(_ARBOL_CACHE) >= _ARBOL_CACHE_MAX:
+        oldest = min(_ARBOL_CACHE.items(), key=lambda kv: kv[1][0])[0]
+        _ARBOL_CACHE.pop(oldest, None)
+    _ARBOL_CACHE[cache_key] = (now, out)
+    return out
+
+
+def _opciones_desde_arbol(
+    arbol: list[dict[str, str]],
+    f_provincias: list[str],
+    f_corporativos: list[str],
+    f_clientes: list[str],
+) -> tuple[list[str], list[dict[str, Any]], list[dict[str, Any]]]:
+    """
+    Replica la lógica de _linea_dropdowns_opciones_validas SIN tocar la base.
+    Cada lista de opciones omite su propia dimensión al cruzar con los filtros activos.
+    """
+    sP = set(f_provincias)
+    sC = set(f_corporativos)
+    sK = set(f_clientes)
+
+    prov_set: set[str] = set()
+    corp_map: dict[str, str] = {}  # nombre -> cod (se usa el primero visto)
+    cli_map: dict[str, dict[str, str]] = {}
+
+    for r in arbol:
+        pv   = r['provincia']
+        corp = r['nombre_corporativo']
+        ccod = r['cod_corporativo']
+        ki   = r['cod_cliente']
+        knom = r['nombre_cliente']
+        if not pv or not ki:
+            continue
+
+        # provincias_opts: filtra por corporativo+cliente, NO por provincia
+        if (not sC or corp in sC) and (not sK or ki in sK):
+            prov_set.add(pv)
+
+        # corporativos_opts: filtra por provincia+cliente, NO por corporativo
+        if corp and (not sP or pv in sP) and (not sK or ki in sK):
+            corp_map.setdefault(corp, ccod)
+
+        # clientes_opts: filtra por provincia+corporativo, NO por cliente
+        if (not sP or pv in sP) and (not sC or corp in sC):
+            if ki not in cli_map:
+                cli_map[ki] = {
+                    'cod': ki,
+                    'nombre': knom or '(sin nombre)',
+                    'corporativo': corp,
+                }
+
+    provincias_opts = sorted(prov_set)
+    corporativos_opts = sorted(
+        ({'nombre': k, 'cod': v} for k, v in corp_map.items()),
+        key=lambda d: d['nombre'].lower(),
+    )
+    clientes_opts = sorted(
+        cli_map.values(),
+        key=lambda d: ((d.get('corporativo') or '').lower(), (d.get('nombre') or '').lower()),
+    )
+    return provincias_opts, corporativos_opts, clientes_opts
+
+
+def _construir_opts_tree(arbol: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
+    """Construye el árbol Provincia → Corporativos → Clientes a partir del DISTINCT en memoria."""
+    tree: dict[str, dict[str, Any]] = {}
+    for r in arbol:
+        pv      = r['provincia']
+        corp    = r['nombre_corporativo']
+        cli_cod = r['cod_cliente']
+        cli_nom = r['nombre_cliente']
+        if not pv:
+            continue
+        node = tree.setdefault(pv, {'corps': [], 'clients': {}})
+        if corp and corp not in node['corps']:
+            node['corps'].append(corp)
+        if cli_cod and corp:
+            bucket = node['clients'].setdefault(corp, [])
+            if not any(c['cod'] == cli_cod for c in bucket):
+                bucket.append({'cod': cli_cod, 'nombre': cli_nom or '(sin nombre)'})
+    for pv, node in tree.items():
+        node['corps'].sort(key=lambda s: s.lower())
+        for corp, items in node['clients'].items():
+            items.sort(key=lambda d: (d.get('nombre') or '').lower())
+    return tree
+
+
+def _cascada_y_arbol(
+    conn,
+    base_where: str,
+    base_bind: dict[str, Any],
+    f_provincias: list[str],
+    f_corporativos: list[str],
+    f_clientes: list[str],
+) -> tuple[list[str], list[dict[str, Any]], list[dict[str, Any]],
+           list[str], list[str], list[str], dict[str, dict[str, Any]]]:
+    """
+    Una sola consulta a DB (DISTINCT del árbol) y todas las opciones + saneo en memoria.
+    Reemplaza a `for _ in range(2): _linea_dropdowns_opciones_validas + _sanear_filtros_linea`
+    seguido de una llamada final y la query `tree_sql`. Pasa de ~10 consultas a 1.
+    """
+    arbol = _linea_arbol_distinct(conn, base_where, base_bind)
+    fP, fC, fK = list(f_provincias), list(f_corporativos), list(f_clientes)
+
+    # Iterar hasta converger (en memoria); típicamente 1-2 vueltas, sin tocar DB.
+    for _ in range(4):
+        prov_opts, corp_opts, cli_opts = _opciones_desde_arbol(arbol, fP, fC, fK)
+        nP, nC, nK = _sanear_filtros_linea(prov_opts, corp_opts, cli_opts, fP, fC, fK)
+        if (nP, nC, nK) == (fP, fC, fK):
+            break
+        fP, fC, fK = nP, nC, nK
+    prov_opts, corp_opts, cli_opts = _opciones_desde_arbol(arbol, fP, fC, fK)
+    opts_tree = _construir_opts_tree(arbol)
+    return prov_opts, corp_opts, cli_opts, fP, fC, fK, opts_tree
+
+
 def _bad(msg: str, code: int = 400) -> Response:
     return Response(msg, status=code, mimetype='text/plain; charset=utf-8')
 
@@ -662,13 +826,8 @@ def ventas_linea_resumen_provincia():
         base_bind['prefzo'] = mercado + '%'
 
     conn = get_connection()
-    for _ in range(2):
-        provincias_opts, corporativos_opts, clientes_opts = _linea_dropdowns_opciones_validas(
-            conn, base_where, base_bind, f_provincias, f_corporativos, f_clientes)
-        f_provincias, f_corporativos, f_clientes = _sanear_filtros_linea(
-            provincias_opts, corporativos_opts, clientes_opts,
-            f_provincias, f_corporativos, f_clientes)
-    provincias_opts, corporativos_opts, clientes_opts = _linea_dropdowns_opciones_validas(
+    (provincias_opts, corporativos_opts, clientes_opts,
+     f_provincias, f_corporativos, f_clientes, opts_tree) = _cascada_y_arbol(
         conn, base_where, base_bind, f_provincias, f_corporativos, f_clientes)
 
     ext_where = base_where
@@ -767,38 +926,6 @@ def ventas_linea_resumen_provincia():
 
     total_precio_kg = round(total_valor / total_peso, 2) if total_peso else None
 
-    # Árbol de cascada (sin filtros multi-select) para desplegado progresivo
-    opts_tree: dict = {}
-    tree_sql = (
-        "SELECT DISTINCT"
-        " COALESCE(NULLIF(TRIM(Provincia),''),'') AS provincia,"
-        " COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'') AS nombre_corporativo,"
-        " COALESCE(NULLIF(TRIM(NombreCliente),''),'') AS nombre_cliente,"
-        " CodigoCliente AS cod_cliente"
-        f" FROM ventasgeneral2{base_where}"
-        " AND COALESCE(NULLIF(TRIM(Provincia),''),'') <> ''"
-        " ORDER BY provincia, nombre_corporativo, nombre_cliente"
-    )
-    with conn.cursor() as cur:
-        cur.execute(_colon_params_to_pymysql(tree_sql), base_bind)
-        for r in (cur.fetchall() or []):
-            pv      = str(r.get('provincia')         or '').strip()
-            corp    = str(r.get('nombre_corporativo') or '').strip()
-            cli_cod = str(r.get('cod_cliente')        or '').strip()
-            cli_nom = str(r.get('nombre_cliente')     or '').strip()
-            if not pv:
-                continue
-            if pv not in opts_tree:
-                opts_tree[pv] = {'corps': [], 'clients': {}}
-            node = opts_tree[pv]
-            if corp and corp not in node['corps']:
-                node['corps'].append(corp)
-            if cli_cod and corp:
-                if corp not in node['clients']:
-                    node['clients'][corp] = []
-                if not any(c['cod'] == cli_cod for c in node['clients'][corp]):
-                    node['clients'][corp].append({'cod': cli_cod, 'nombre': cli_nom})
-
     top_lead = 'Sin límite (todas las filas)' if top is None else f'Top {top}'
     ctx = _report_shell_context(f'Ventas {linea} · Resumen provincia/cliente')
     ctx.update({
@@ -890,13 +1017,8 @@ def ventas_linea_diario_provincia():
         base_bind['prefzo'] = mercado + '%'
 
     conn = get_connection()
-    for _ in range(2):
-        provincias_opts, corporativos_opts, clientes_opts = _linea_dropdowns_opciones_validas(
-            conn, base_where, base_bind, f_provincias, f_corporativos, f_clientes)
-        f_provincias, f_corporativos, f_clientes = _sanear_filtros_linea(
-            provincias_opts, corporativos_opts, clientes_opts,
-            f_provincias, f_corporativos, f_clientes)
-    provincias_opts, corporativos_opts, clientes_opts = _linea_dropdowns_opciones_validas(
+    (provincias_opts, corporativos_opts, clientes_opts,
+     f_provincias, f_corporativos, f_clientes, opts_tree) = _cascada_y_arbol(
         conn, base_where, base_bind, f_provincias, f_corporativos, f_clientes)
 
     ext_where = base_where
@@ -1028,38 +1150,6 @@ def ventas_linea_diario_provincia():
     total_peso  = sum(chart_pesos_dia)
     total_valor = sum(chart_valores_dia)
 
-    # Árbol de cascada (sin filtros multi-select) para desplegado progresivo
-    opts_tree: dict = {}
-    tree_sql = (
-        "SELECT DISTINCT"
-        " COALESCE(NULLIF(TRIM(Provincia),''),'') AS provincia,"
-        " COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'') AS nombre_corporativo,"
-        " COALESCE(NULLIF(TRIM(NombreCliente),''),'') AS nombre_cliente,"
-        " CodigoCliente AS cod_cliente"
-        f" FROM ventasgeneral2{base_where}"
-        " AND COALESCE(NULLIF(TRIM(Provincia),''),'') <> ''"
-        " ORDER BY provincia, nombre_corporativo, nombre_cliente"
-    )
-    with conn.cursor() as cur:
-        cur.execute(_colon_params_to_pymysql(tree_sql), base_bind)
-        for r in (cur.fetchall() or []):
-            pv      = str(r.get('provincia')         or '').strip()
-            corp    = str(r.get('nombre_corporativo') or '').strip()
-            cli_cod = str(r.get('cod_cliente')        or '').strip()
-            cli_nom = str(r.get('nombre_cliente')     or '').strip()
-            if not pv:
-                continue
-            if pv not in opts_tree:
-                opts_tree[pv] = {'corps': [], 'clients': {}}
-            node = opts_tree[pv]
-            if corp and corp not in node['corps']:
-                node['corps'].append(corp)
-            if cli_cod and corp:
-                if corp not in node['clients']:
-                    node['clients'][corp] = []
-                if not any(c['cod'] == cli_cod for c in node['clients'][corp]):
-                    node['clients'][corp].append({'cod': cli_cod, 'nombre': cli_nom})
-
     ctx = _report_shell_context(f'Ventas {linea} · Diario por provincia/cliente')
     ctx.update({
         'd1': d1, 'd2': d2, 'linea': linea, 'top': top,
@@ -1134,13 +1224,8 @@ def ventas_linea_precio_diario():
         base_bind['prefzo'] = mercado + '%'
 
     conn = get_connection()
-    for _ in range(2):
-        provincias_opts, corporativos_opts, clientes_opts = _linea_dropdowns_opciones_validas(
-            conn, base_where, base_bind, f_provincias, f_corporativos, f_clientes)
-        f_provincias, f_corporativos, f_clientes = _sanear_filtros_linea(
-            provincias_opts, corporativos_opts, clientes_opts,
-            f_provincias, f_corporativos, f_clientes)
-    provincias_opts, corporativos_opts, clientes_opts = _linea_dropdowns_opciones_validas(
+    (provincias_opts, corporativos_opts, clientes_opts,
+     f_provincias, f_corporativos, f_clientes, opts_tree) = _cascada_y_arbol(
         conn, base_where, base_bind, f_provincias, f_corporativos, f_clientes)
 
     ext_where = base_where
@@ -1205,6 +1290,21 @@ def ventas_linea_precio_diario():
     with conn.cursor() as cur:
         cur.execute(_colon_params_to_pymysql(sql_precio_tdoc), bind)
         raw_precio_tdoc = cur.fetchall() or []
+
+    # Eje X común (fechas del período) — debe calcularse antes del bloque multi-cliente,
+    # que mapea precios diarios por cliente sobre estas mismas fechas.
+    chart_fechas: list = []
+    chart_precios: list = []
+    total_peso_periodo = 0.0
+    total_valor_periodo = 0.0
+    for r in raw_precio:
+        fecha = r.get('fecha')
+        chart_fechas.append(fecha.strftime('%Y-%m-%d') if hasattr(fecha, 'strftime') else str(fecha or ''))
+        p = r.get('precio_kg')
+        chart_precios.append(round(float(p), 4) if p is not None else None)
+        total_peso_periodo += float(r.get('suma_peso') or 0)
+        total_valor_periodo += float(r.get('suma_valor') or 0)
+    total_precio_kg_periodo = (total_valor_periodo / total_peso_periodo) if total_peso_periodo > 0 else None
 
     # Comparativa por cliente (2+ seleccionados): precio promedio ponderado y por tipo-doc por cliente
     chart_modo = 'total'
@@ -1330,19 +1430,6 @@ def ventas_linea_precio_diario():
         }
         filas.append(row)
 
-    chart_fechas = []
-    chart_precios = []
-    total_peso_periodo = 0.0
-    total_valor_periodo = 0.0
-    for r in raw_precio:
-        fecha = r.get('fecha')
-        chart_fechas.append(fecha.strftime('%Y-%m-%d') if hasattr(fecha, 'strftime') else str(fecha or ''))
-        p = r.get('precio_kg')
-        chart_precios.append(round(float(p), 4) if p is not None else None)
-        total_peso_periodo += float(r.get('suma_peso') or 0)
-        total_valor_periodo += float(r.get('suma_valor') or 0)
-    total_precio_kg_periodo = (total_valor_periodo / total_peso_periodo) if total_peso_periodo > 0 else None
-
     # Precio por tipo de documento (01 Factura, 03 Boleta, 07 Nota de Crédito)
     _tdoc_by_date: dict = {}
     _tdoc_tipos: list = []
@@ -1362,38 +1449,6 @@ def ventas_linea_precio_diario():
         'fechas': _tdoc_fechas,
         'series': {t: [_tdoc_by_date[f].get(t) for f in _tdoc_fechas] for t in _tdoc_tipos},
     }
-
-    # Árbol de cascada completo (sin filtros multi-select) para desplegado progresivo en el formulario
-    opts_tree: dict = {}
-    tree_sql = (
-        "SELECT DISTINCT"
-        " COALESCE(NULLIF(TRIM(Provincia),''),'') AS provincia,"
-        " COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'') AS nombre_corporativo,"
-        " COALESCE(NULLIF(TRIM(NombreCliente),''),'') AS nombre_cliente,"
-        " CodigoCliente AS cod_cliente"
-        f" FROM ventasgeneral2{base_where}"
-        " AND COALESCE(NULLIF(TRIM(Provincia),''),'') <> ''"
-        " ORDER BY provincia, nombre_corporativo, nombre_cliente"
-    )
-    with conn.cursor() as cur:
-        cur.execute(_colon_params_to_pymysql(tree_sql), base_bind)
-        for r in (cur.fetchall() or []):
-            pv      = str(r.get('provincia')         or '').strip()
-            corp    = str(r.get('nombre_corporativo') or '').strip()
-            cli_cod = str(r.get('cod_cliente')        or '').strip()
-            cli_nom = str(r.get('nombre_cliente')     or '').strip()
-            if not pv:
-                continue
-            if pv not in opts_tree:
-                opts_tree[pv] = {'corps': [], 'clients': {}}
-            node = opts_tree[pv]
-            if corp and corp not in node['corps']:
-                node['corps'].append(corp)
-            if cli_cod and corp:
-                if corp not in node['clients']:
-                    node['clients'][corp] = []
-                if not any(c['cod'] == cli_cod for c in node['clients'][corp]):
-                    node['clients'][corp].append({'cod': cli_cod, 'nombre': cli_nom})
 
     ctx = _report_shell_context(f'Ventas {linea} · Precio por día provincia/cliente')
     ctx.update({
