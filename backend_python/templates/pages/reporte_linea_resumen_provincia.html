@@ -92,13 +92,6 @@
 
         <div id="reporte-pdf-root">
             <h2 class="reporte-informe-title">{{ linea }} · Ventas por provincia y cliente</h2>
-            <p class="reporte-informe-meta">
-                Rango aplicado (<strong>{{ fecha_eje_leyenda|default('Fecha contable') }}</strong>): <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong>.
-                Las columnas «Fechas contables» y «Días proceso» son el min–max de las líneas de cada fila. ·
-                Total líneas: <strong>{{ total_lineas }}</strong> ·
-                Peso total: <strong>{{ total_peso }} kg</strong> ·
-                Valor total: <strong>S/ {{ total_valor }}</strong>
-            </p>
 
             {% if filas %}
             <div class="table-wrapper overflow-x-auto productos-dt-skin">
