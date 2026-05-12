@@ -106,7 +106,7 @@
                             <th style="text-align:right;">Cantidad (un.)</th>
                             <th style="text-align:right;">Peso (kg)</th>
                             <th style="text-align:right;">Valor (S/)</th>
-                            <th style="text-align:right;">Precio (S//kg)</th>
+                            <th style="text-align:right;">Precio (S/)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -160,7 +160,7 @@
     {% if chart_data.fechas %}
     {# ── Gráfico 3: Precio promedio ponderado por día ─────────────────── #}
     <section class="reporte-chart-section" aria-label="Gráfico precio diario">
-        <h3 class="reporte-chart-heading">Precio promedio ponderado (S//kg) por día · {{ fecha_eje_leyenda|default('Fecha contable') }}</h3>
+        <h3 class="reporte-chart-heading">Precio promedio ponderado (S/) por día · {{ fecha_eje_leyenda|default('Fecha contable') }}</h3>
         <div class="chart-inner"><canvas id="chartPrecioDia"></canvas></div>
     </section>
     {% endif %}
@@ -379,7 +379,7 @@
         if (fechas.length) {
             chPrecioDia = new Chart(document.getElementById('chartPrecioDia'), {
                 type: 'line',
-                data: { labels: fechas, datasets: [{ label: 'Precio/kg (S/)', data: preciosDia,
+                data: { labels: fechas, datasets: [{ label: 'Precio (S/)', data: preciosDia,
                     borderColor: 'rgba(251,146,60,1)', backgroundColor: 'rgba(251,146,60,0.15)',
                     borderWidth: 2, tension: 0.2, fill: true,
                     pointRadius: fechas.length > 60 ? 0 : 4,
@@ -390,7 +390,7 @@
                     plugins: {
                         legend: { labels: { color: legCol, boxWidth: 14 } },
                         tooltip: { callbacks: { label: function(ctx) {
-                            return 'S/ ' + (ctx.parsed.y!=null ? ctx.parsed.y.toLocaleString('es-PE',{minimumFractionDigits:4,maximumFractionDigits:4}) : '—') + '/kg';
+                            return 'S/ ' + (ctx.parsed.y!=null ? ctx.parsed.y.toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—');
                         }}},
                         datalabels: DL.linePrecioKg || false,
                     },
@@ -399,7 +399,7 @@
                         y: {
                             ticks: { color: '#94a3b8', callback: function(v){ return 'S/ '+v.toLocaleString('es-PE',{minimumFractionDigits:2}); } },
                             grid: { color: 'rgba(148,163,184,0.15)' },
-                            title: { display: true, text: 'S//kg', color: '#94a3b8', font: { size: 11 } },
+                            title: { display: true, text: 'S/', color: '#94a3b8', font: { size: 11 } },
                         },
                     },
                 }),

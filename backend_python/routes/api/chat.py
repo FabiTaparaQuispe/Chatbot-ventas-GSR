@@ -45,6 +45,7 @@ Mercados (DescripcionZonaPrecio) disponibles para Pollo Vivo: AQPMERCADO, TACNA,
 - resumen provincia/cliente → ventasgeneral_linea_resumen_provincia (linea_comercial obligatorio, pasar el texto exacto). No pases top_n salvo que el usuario pida explícitamente un top N; sin top_n se devuelven todas las filas provincia+cliente.
 - ventas por día provincia/cliente → ventasgeneral_linea_diario_provincia
 - precio por día provincia/cliente (resumen con cantidad/peso/valor, orden por fecha y por peso dentro de cada día) → ventasgeneral_linea_precio_diario
+- precio resumen por provincia (UNA fila por provincia, SIN clientes ni días, con precio/kg ponderado del período) → ventasgeneral_linea_precio_resumen_provincia. Úsala cuando el usuario pida "precio por provincia", "precio resumen por provincia" o "precio promedio por provincia" sin querer ver clientes ni diario. Requiere fecha_desde/fecha_hasta y linea_comercial; si falta período o línea, pregúntalos antes de llamar.
 - mix carne vs brasa / comparar productos → ventasgeneral_linea_mix_productos (agrupa por CodigoItem, incluye pct_peso)
 La comparación es case-insensitive. Si el usuario no especifica la línea, pregúntala antes de llamar la herramienta.
 
@@ -63,6 +64,7 @@ Mapeo herramientas:
 - ventas línea resumen → ventasgeneral_linea_resumen_provincia
 - ventas línea por día → ventasgeneral_linea_diario_provincia
 - precio línea por día → ventasgeneral_linea_precio_diario
+- precio línea resumen por provincia → ventasgeneral_linea_precio_resumen_provincia
 - mix productos / carne vs brasa → ventasgeneral_linea_mix_productos
 - líneas sueltas → ventasgeneral_buscar
 - totales → ventasgeneral_resumen

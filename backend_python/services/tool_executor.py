@@ -2,6 +2,7 @@ import json
 from datetime import date
 from urllib.parse import urlencode
 
+from services.linea_codigo import index_hint_ventasgeneral2, linea_where_fragment
 from services.urlmap import (
     REPORT_SLUG_PARETO_CLIENTES_ZONA,
     REPORT_SLUG_PARETO_NC_ZONA,
@@ -12,6 +13,7 @@ from services.urlmap import (
     REPORT_SLUG_VENTAS_LINEA_DIARIO_PROVINCIA,
     REPORT_SLUG_VENTAS_LINEA_MIX_PRODUCTOS,
     REPORT_SLUG_VENTAS_LINEA_PRECIO_DIARIO,
+    REPORT_SLUG_VENTAS_LINEA_PRECIO_RESUMEN_PROV,
     REPORT_SLUG_VENTAS_LINEA_RESUMEN_PROVINCIA,
     REPORT_SLUG_VENTAS_MIX_TDOC,
     REPORT_SLUG_VENTAS_SERIE_MENSUAL,
@@ -184,6 +186,7 @@ class ToolExecutor:
                 'ventasgeneral_linea_resumen_provincia': self._linea_resumen_provincia,
                 'ventasgeneral_linea_diario_provincia': self._linea_diario_provincia,
                 'ventasgeneral_linea_precio_diario': self._linea_precio_diario,
+                'ventasgeneral_linea_precio_resumen_provincia': self._linea_precio_resumen_provincia,
                 'ventasgeneral_linea_mix_productos': self._linea_mix_productos,
             }
             fn = dispatch.get(name)
@@ -729,6 +732,8 @@ class ToolExecutor:
         top = _linea_resumen_top_arg(args.get('top_n'))
         cod_item = str(args.get('cod_item') or '').strip()
         mercado = str(args.get('mercado') or '').strip().upper()
+        _linea_where, _linea_bind = linea_where_fragment(self._conn, linea, style='pyformat')
+        _from_v2 = ' FROM ventasgeneral2' + index_hint_ventasgeneral2(self._conn, linea, 'contable')
         sql = ("SELECT COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
                " CodigoCliente AS cod_cliente,"
                " MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
@@ -736,10 +741,10 @@ class ToolExecutor:
                " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
                " COALESCE(SUM(Peso),0) AS suma_peso,"
                " COALESCE(SUM(Valor),0) AS suma_valor"
-               " FROM ventasgeneral2"
-               " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
-               " AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(%(linea)s))")
-        params = {'d1': d1, 'd2': d2, 'linea': linea}
+               + _from_v2
+               + " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+               + _linea_where)
+        params = {'d1': d1, 'd2': d2, **_linea_bind}
         if cod_item:
             sql += " AND CodigoItem = %(cod_item)s"
             params['cod_item'] = cod_item
@@ -773,6 +778,8 @@ class ToolExecutor:
         top = _int_arg(args.get('top_n'), 200, 1, 1000)
         cod_item = str(args.get('cod_item') or '').strip()
         mercado = str(args.get('mercado') or '').strip().upper()
+        _linea_where, _linea_bind = linea_where_fragment(self._conn, linea, style='pyformat')
+        _from_v2 = ' FROM ventasgeneral2' + index_hint_ventasgeneral2(self._conn, linea, 'contable')
         sql = ("SELECT FechaContable AS fecha,"
                " COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
                " CodigoCliente AS cod_cliente,"
@@ -781,10 +788,10 @@ class ToolExecutor:
                " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
                " COALESCE(SUM(Peso),0) AS suma_peso,"
                " COALESCE(SUM(Valor),0) AS suma_valor"
-               " FROM ventasgeneral2"
-               " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
-               " AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(%(linea)s))")
-        params = {'d1': d1, 'd2': d2, 'linea': linea}
+               + _from_v2
+               + " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+               + _linea_where)
+        params = {'d1': d1, 'd2': d2, **_linea_bind}
         if cod_item:
             sql += " AND CodigoItem = %(cod_item)s"
             params['cod_item'] = cod_item
@@ -813,6 +820,8 @@ class ToolExecutor:
         top = _int_arg(args.get('top_n'), 200, 1, 1000)
         cod_item = str(args.get('cod_item') or '').strip()
         mercado = str(args.get('mercado') or '').strip().upper()
+        _linea_where, _linea_bind = linea_where_fragment(self._conn, linea, style='pyformat')
+        _from_v2 = ' FROM ventasgeneral2' + index_hint_ventasgeneral2(self._conn, linea, 'contable')
         sql = ("SELECT FechaContable AS fecha,"
                " COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
                " CodigoCliente AS cod_cliente,"
@@ -823,10 +832,10 @@ class ToolExecutor:
                " CASE WHEN COALESCE(SUM(Peso),0) > 0"
                "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
                "      ELSE NULL END AS precio_kg"
-               " FROM ventasgeneral2"
-               " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
-               " AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(%(linea)s))")
-        params = {'d1': d1, 'd2': d2, 'linea': linea}
+               + _from_v2
+               + " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+               + _linea_where)
+        params = {'d1': d1, 'd2': d2, **_linea_bind}
         if cod_item:
             sql += " AND CodigoItem = %(cod_item)s"
             params['cod_item'] = cod_item
@@ -847,12 +856,77 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    def _linea_precio_resumen_provincia(self, args):
+        d1, d2 = _parse_date_range(args)
+        linea = str(args.get('linea_comercial') or '').strip()
+        if not linea:
+            raise ValueError("Falta linea_comercial (ej. 'Pollo Vivo')")
+        cod_item = str(args.get('cod_item') or '').strip()
+        mercado = str(args.get('mercado') or '').strip().upper()
+        _linea_where, _linea_bind = linea_where_fragment(self._conn, linea, style='pyformat')
+        _from_v2 = ' FROM ventasgeneral2' + index_hint_ventasgeneral2(self._conn, linea, 'contable')
+        sql = ("SELECT"
+               " COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
+               " COUNT(*) AS lineas,"
+               " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
+               " COALESCE(SUM(Peso),0) AS suma_peso,"
+               " COALESCE(SUM(Valor),0) AS suma_valor,"
+               " CASE WHEN COALESCE(SUM(Peso),0) > 0"
+               "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
+               "      ELSE NULL END AS precio_kg"
+               + _from_v2
+               + " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+               + _linea_where)
+        params = {'d1': d1, 'd2': d2, **_linea_bind}
+        if cod_item:
+            sql += " AND CodigoItem = %(cod_item)s"
+            params['cod_item'] = cod_item
+        if mercado:
+            sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(prefzo)s"
+            params['prefzo'] = mercado + '%'
+        sql += " GROUP BY provincia ORDER BY suma_peso DESC"
+        rows = _q(self._conn, sql, params)
+        filas = []
+        total_peso = 0.0
+        total_valor = 0.0
+        for r in rows:
+            sp = float(r.get('suma_peso') or 0)
+            sv = float(r.get('suma_valor') or 0)
+            pk = r.get('precio_kg')
+            total_peso += sp
+            total_valor += sv
+            filas.append({
+                'provincia': str(r.get('provincia') or ''),
+                'lineas': int(r.get('lineas') or 0),
+                'suma_cantidad': float(r.get('suma_cantidad') or 0),
+                'suma_peso': sp,
+                'suma_valor': sv,
+                'precio_kg': float(pk) if pk is not None else None,
+            })
+        total_precio_kg = round(total_valor / total_peso, 4) if total_peso > 0 else None
+        q = _qs({'desde': d1, 'hasta': d2, 'linea': linea,
+                 'cod_item': cod_item or None, 'mercado': mercado or None})
+        return {
+            'tabla': 'ventasgeneral',
+            'tipo': 'linea_precio_resumen_provincia',
+            'linea_comercial': linea,
+            'periodo': {'desde': d1, 'hasta': d2},
+            'total_peso': total_peso,
+            'total_valor': total_valor,
+            'total_precio_kg': total_precio_kg,
+            'filas': filas,
+            'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_LINEA_PRECIO_RESUMEN_PROV, q),
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
     def _linea_mix_productos(self, args):
         d1, d2 = _parse_date_range(args)
         linea = str(args.get('linea_comercial') or '').strip()
         if not linea:
             raise ValueError("Falta linea_comercial (ej. 'Pollo Vivo')")
         mercado = str(args.get('mercado') or '').strip().upper()
+        _linea_where, _linea_bind = linea_where_fragment(self._conn, linea, style='pyformat')
+        _from_v2 = ' FROM ventasgeneral2' + index_hint_ventasgeneral2(self._conn, linea, 'contable')
         sql = ("SELECT CodigoItem AS cod_item,"
                " MAX(COALESCE(NULLIF(TRIM(GlosaDetalle),''),'(sin glosa)')) AS glosa,"
                " COUNT(*) AS lineas,"
@@ -862,10 +936,10 @@ class ToolExecutor:
                " CASE WHEN COALESCE(SUM(Peso),0) > 0"
                "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
                "      ELSE NULL END AS precio_kg"
-               " FROM ventasgeneral2"
-               " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
-               " AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(%(linea)s))")
-        params = {'d1': d1, 'd2': d2, 'linea': linea}
+               + _from_v2
+               + " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+               + _linea_where)
+        params = {'d1': d1, 'd2': d2, **_linea_bind}
         if mercado:
             sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(prefzo)s"
             params['prefzo'] = mercado + '%'

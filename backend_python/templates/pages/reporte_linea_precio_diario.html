@@ -107,7 +107,7 @@
                             <th style="text-align:right;">Cantidad (un.)</th>
                             <th style="text-align:right;">Peso (kg)</th>
                             <th style="text-align:right;">Valor (S/)</th>
-                            <th style="text-align:right;">Precio/kg (S/)</th>
+                            <th style="text-align:right;">Precio (S/)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -142,7 +142,7 @@
 
     {% if chart_data.fechas %}
     <section class="reporte-chart-section" aria-label="Gráfico precio diario">
-        <h3 class="reporte-chart-heading">{% if chart_data.modo == 'clientes' %}Comparativa de precio (S//kg) por día · clientes seleccionados · {% else %}Precio promedio ponderado (S//kg) por día · {% endif %}{{ fecha_eje_leyenda|default('Fecha contable') }}</h3>
+        <h3 class="reporte-chart-heading">{% if chart_data.modo == 'clientes' %}Comparativa de precio (S/) por día · clientes seleccionados · {% else %}Precio promedio ponderado (S/) por día · {% endif %}{{ fecha_eje_leyenda|default('Fecha contable') }}</h3>
         <div class="chart-inner"><canvas id="chartPrecioDia"></canvas></div>
     </section>
     {% endif %}
@@ -151,14 +151,14 @@
         {% for tc in chart_data_tdoc_clientes %}
             {% if tc.fechas %}
             <section class="reporte-chart-section" aria-label="Gráfico precio por tipo de documento · {{ tc.cod }}">
-                <h3 class="reporte-chart-heading">Precio (S//kg) por tipo de documento · {{ tc.label }} · {{ fecha_eje_leyenda|default('Fecha contable') }}</h3>
+                <h3 class="reporte-chart-heading">Precio (S/) por tipo de documento · {{ tc.label }} · {{ fecha_eje_leyenda|default('Fecha contable') }}</h3>
                 <div class="chart-inner"><canvas class="chartPrecioTdocCli" data-tc-idx="{{ loop.index0 }}"></canvas></div>
             </section>
             {% endif %}
         {% endfor %}
     {% elif chart_data_tdoc.fechas %}
     <section class="reporte-chart-section" aria-label="Gráfico precio por tipo de documento">
-        <h3 class="reporte-chart-heading">Precio (S//kg) por tipo de documento · Factura (01) · Boleta (03) · N.Crédito (07) · {{ fecha_eje_leyenda|default('Fecha contable') }}</h3>
+        <h3 class="reporte-chart-heading">Precio (S/) por tipo de documento · Factura (01) · Boleta (03) · N.Crédito (07) · {{ fecha_eje_leyenda|default('Fecha contable') }}</h3>
         <div class="chart-inner"><canvas id="chartPrecioTdoc"></canvas></div>
     </section>
     {% endif %}
@@ -348,7 +348,7 @@
             backgroundColor: null,
             borderRadius: 0,
             padding: 0,
-            font: { size: 9, weight: '600' },
+            font: { size: 12, weight: '700' },
             color: function (ctx) {
                 var ds = ctx && ctx.dataset;
                 return (ds && (ds.borderColor || ds.pointBackgroundColor)) || legCol;
@@ -358,7 +358,7 @@
             display: function (ctx) { return hasVal(ctx.dataset.data[ctx.dataIndex]); },
             formatter: function (value) {
                 if (!hasVal(value)) return '';
-                return 'S/ ' + Number(value).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + '/kg';
+                return 'S/ ' + Number(value).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             },
         };
     }
@@ -382,7 +382,7 @@
             });
         }
         return [{
-            label: 'Precio/kg (S/)',
+            label: 'Precio (S/)',
             data: precios,
             borderColor: 'rgba(251,146,60,1)',
             backgroundColor: 'rgba(251,146,60,0.15)',
@@ -416,7 +416,7 @@
                     },
                     tooltip: { callbacks: { label: function(ctx) {
                         var v = ctx.parsed.y;
-                        var s = 'S/ ' + (v != null ? v.toLocaleString('es-PE', {minimumFractionDigits:4, maximumFractionDigits:4}) : '—') + '/kg';
+                        var s = 'S/ ' + (v != null ? v.toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—');
                         if (esModoClientes()) return (ctx.dataset.label || '') + ': ' + s;
                         return s;
                     }}},
@@ -427,7 +427,7 @@
                     y: {
                         ticks: { color: '#94a3b8', callback: function(v){ return 'S/ ' + v.toLocaleString('es-PE', {minimumFractionDigits:2}); } },
                         grid: { color: 'rgba(148,163,184,0.15)' },
-                        title: { display: true, text: 'S//kg', color: '#94a3b8', font: { size: 11 } },
+                        title: { display: true, text: 'S/', color: '#94a3b8', font: { size: 11 } },
                     },
                 },
             }),
@@ -528,7 +528,7 @@
                 tooltip: { callbacks: { label: function (ctx) {
                     return ctx.dataset.label + ': ' +
                         (ctx.parsed.y != null
-                            ? 'S/ ' + ctx.parsed.y.toLocaleString('es-PE', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + '/kg'
+                            ? 'S/ ' + ctx.parsed.y.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                             : '—');
                 }}},
                 datalabels: DL.linePrecioKgMulti || false,
@@ -538,7 +538,7 @@
                 y: {
                     ticks: { color: '#94a3b8', callback: function (v) { return 'S/ ' + v.toLocaleString('es-PE', { minimumFractionDigits: 2 }); } },
                     grid: { color: 'rgba(148,163,184,0.15)' },
-                    title: { display: true, text: 'S//kg', color: '#94a3b8', font: { size: 11 } },
+                    title: { display: true, text: 'S/', color: '#94a3b8', font: { size: 11 } },
                 },
             },
         });

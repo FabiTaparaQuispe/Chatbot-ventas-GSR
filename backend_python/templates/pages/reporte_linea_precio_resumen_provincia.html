@@ -1,0 +1,354 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+    <h1>{{ linea }} · Precio resumen por provincia</h1>
+    <p class="page-lead"><strong>{{ fecha_eje_leyenda|default('Fecha contable') }}</strong> del <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong>{% if mercado %} · Mercado: <strong>{{ mercado }}</strong>{% endif %}{% if cod_item %} · Producto: <strong>{{ cod_item }}</strong>{% endif %} · agrupado por <strong>provincia</strong>, ordenado por peso descendente.</p>
+</div>
+
+<div class="reporte-page">
+
+    <div class="card-filtros-demo reporte-informe-panel">
+        <div class="card-filtros-demo__head" id="filtrosHead" role="button" tabindex="0" aria-controls="filtrosBody" aria-expanded="true">
+            <div class="card-filtros-demo__head-left">
+                <span class="card-filtros-demo__emoji" aria-hidden="true"><i class="fa-solid fa-filter"></i></span>
+                <span class="card-filtros-demo__title">Filtros</span>
+            </div>
+            <span class="card-filtros-demo__chev card-filtros-demo__chev--open" id="filtrosChev" aria-hidden="true"><i class="fa-solid fa-chevron-down"></i></span>
+        </div>
+        <div class="card-filtros-demo__body" id="filtrosBody">
+            <form method="get" class="filter-form filter-form--reporte" autocomplete="off">
+                <div class="filter-row">
+                    <div class="filter-field">
+                        <label for="fDesde">Desde</label>
+                        <input type="date" id="fDesde" name="desde" value="{{ d1 }}" required />
+                    </div>
+                    <div class="filter-field">
+                        <label for="fHasta">Hasta</label>
+                        <input type="date" id="fHasta" name="hasta" value="{{ d2 }}" required />
+                    </div>
+                </div>
+
+                <div class="filter-row filter-row--reporte-line-prov">
+                    <div class="filter-field filter-field--linea-comercial">
+                        <label for="fLinea">Línea comercial</label>
+                        <select id="fLinea" name="linea">
+                            {% if linea %}<option value="{{ linea|e }}" selected>{{ linea|e }}</option>{% endif %}
+                        </select>
+                    </div>
+                    <div class="filter-field">
+                        <label for="fTipoFecha">Período según</label>
+                        <select id="fTipoFecha" name="tipo_fecha">
+                            <option value="contable" {% if (tipo_fecha|default('contable')) != 'proceso' %}selected{% endif %}>Fecha contable</option>
+                            <option value="proceso" {% if (tipo_fecha|default('contable')) == 'proceso' %}selected{% endif %}>Día de proceso (fechaProceso)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="reporte-filter-bar">
+                    <div class="filter-actions">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fa-solid fa-check" aria-hidden="true"></i> Aplicar
+                        </button>
+                        <a class="btn btn-ghost" href="{{ request.path }}?desde={{ d1 }}&hasta={{ d2 }}&linea={{ linea|urlencode }}{% if (tipo_fecha|default('contable')) == 'proceso' %}&tipo_fecha=proceso{% endif %}">
+                            <i class="fa-solid fa-eraser" aria-hidden="true"></i> Limpiar
+                        </a>
+                    </div>
+                    <div class="reporte-filter-bar__export">
+                        <button type="button" class="btn btn-primary" id="btn-pdf">
+                            <i class="fa-solid fa-file-pdf" aria-hidden="true"></i> Descargar PDF
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div id="reporte-pdf-root">
+            <h2 class="reporte-informe-title">{{ linea }} · Precio resumen por provincia</h2>
+            <p class="reporte-informe-meta" style="margin-top:0.35rem;">
+                Período ({{ fecha_eje_leyenda|default('Fecha contable') }}): <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong>{% if mercado %} · Mercado: <strong>{{ mercado }}</strong>{% endif %}{% if cod_item %} · Producto: <strong>{{ cod_item }}</strong>{% endif %} · Precio ponderado del período: <strong>{{ total_precio_kg }}</strong>
+            </p>
+
+            {% if filas %}
+            <div class="table-wrapper overflow-x-auto productos-dt-skin">
+                <table class="data-table config-table display stripe rct-auto">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Provincia</th>
+                            <th style="text-align:right;">Líneas</th>
+                            <th style="text-align:right;">Cantidad (un.)</th>
+                            <th style="text-align:right;">Peso (kg)</th>
+                            <th style="text-align:right;">Valor (S/)</th>
+                            <th style="text-align:right;">Precio (S/)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in filas %}
+                        <tr>
+                            <td>{{ f.rank }}</td>
+                            <td>{{ f.provincia }}</td>
+                            <td style="text-align:right;">{{ f.lineas }}</td>
+                            <td style="text-align:right;">{{ f.suma_cantidad }}</td>
+                            <td style="text-align:right;">{{ f.suma_peso }}</td>
+                            <td style="text-align:right;">{{ f.suma_valor }}</td>
+                            <td style="text-align:right;">{{ f.precio_kg }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <th colspan="2" style="text-align:right;">Total período</th>
+                            <th style="text-align:right;">{{ total_lineas }}</th>
+                            <th style="text-align:right;">{{ total_cantidad }}</th>
+                            <th style="text-align:right;">{{ total_peso }}</th>
+                            <th style="text-align:right;">{{ total_valor }}</th>
+                            <th style="text-align:right;">{{ total_precio_kg }}</th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            {% else %}
+            <p style="color:var(--muted);">No se encontraron ventas para la línea "{{ linea }}" en el período seleccionado.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if filas %}
+    <section class="reporte-chart-section" aria-label="Gráfico precio por provincia">
+        <h3 class="reporte-chart-heading">Precio ponderado (S/) por provincia</h3>
+        <div class="chart-inner"><canvas id="chartPrecioProv"></canvas></div>
+    </section>
+
+    {% if chart_data.fechas %}
+    <section class="reporte-chart-section" aria-label="Gráfico precio diario">
+        <h3 class="reporte-chart-heading">Precio promedio ponderado (S/)</h3>
+        <div class="chart-inner"><canvas id="chartPrecioDia"></canvas></div>
+    </section>
+    {% endif %}
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css">
+<style>
+.select2-container { width: 100% !important; }
+.select2-selection { min-height: 38px !important; display: flex !important; align-items: center !important; }
+.select2-selection__rendered { line-height: normal !important; }
+.select2-selection__arrow { height: 100% !important; }
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+(function () {
+    var S2_BASE = {
+        width: '100%',
+        allowClear: true,
+        language: { noResults: function () { return 'Sin resultados'; } }
+    };
+    $(function () {
+        $('#fLinea').select2($.extend({}, S2_BASE, {
+            placeholder: 'Buscar línea…',
+            allowClear: false,
+            ajax: {
+                url: '/api/lineas',
+                dataType: 'json',
+                delay: 250,
+                data: function (p) { return { q: p.term || '', page: p.page || 1 }; },
+                processResults: function (d) { return { results: d.results || [], pagination: d.pagination || { more: false } }; },
+                cache: true
+            },
+            minimumInputLength: 0
+        }));
+        $('#fLinea').on('change', function () { $(this).closest('form')[0].submit(); });
+    });
+})();
+/* Panel colapsable */
+(function () {
+    var head = document.getElementById('filtrosHead');
+    var body = document.getElementById('filtrosBody');
+    var chev = document.getElementById('filtrosChev');
+    function setOpen(isOpen) {
+        if (!body) return;
+        body.classList.toggle('hidden', !isOpen);
+        if (chev) chev.classList.toggle('card-filtros-demo__chev--open', isOpen);
+        if (head) head.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    }
+    function toggle() { setOpen(body && body.classList.contains('hidden')); }
+    if (head && body) {
+        head.addEventListener('click', toggle);
+        head.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+        });
+        setOpen(true);
+    }
+})();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/chart_reporte_datalabels.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/reporte_pdf.js"></script>
+<script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
+<script>
+(function () {
+    var d = {{ chart_data | tojson }};
+    var DL = window.VENTAS_CHART_DATALABELS || {};
+    var legCol = typeof reporteChartLegendColor === 'function' ? reporteChartLegendColor() : '#1e293b';
+    var anim = window.reporteChartAnimate || {};
+
+    var labels  = d.labels  || [];
+    var precios = d.precios || [];
+    var fechas  = d.fechas  || [];
+    var preciosDia = d.precios_dia || [];
+
+    var chPrecioProv = null;
+    var chPrecioDia = null;
+
+    function buildCharts() {
+        if (!window.Chart) return;
+
+        if (labels.length) {
+            chPrecioProv = new Chart(document.getElementById('chartPrecioProv'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Precio (S/)',
+                        data: precios,
+                        backgroundColor: 'rgba(251,146,60,0.65)',
+                        borderColor: 'rgba(251,146,60,1)',
+                        borderWidth: 1,
+                    }],
+                },
+                options: Object.assign({}, anim, {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: legCol, boxWidth: 14 } },
+                        tooltip: { callbacks: { label: function(ctx) {
+                            var v = ctx.parsed.x;
+                            return 'S/ ' + (v != null ? v.toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—');
+                        }}},
+                        datalabels: {
+                            anchor: 'end', align: 'end', clamp: true, clip: true,
+                            color: (typeof reporteChartDataLabelSeriesColor === 'function' ? reporteChartDataLabelSeriesColor : legCol),
+                            font: { size: 12, weight: '700' },
+                            formatter: function (v) {
+                                if (v == null || isNaN(v)) return '';
+                                return 'S/ ' + Number(v).toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2});
+                            },
+                        },
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#94a3b8', callback: function(v){ return 'S/ ' + v.toLocaleString('es-PE', {minimumFractionDigits:2}); } },
+                            grid: { color: 'rgba(148,163,184,0.15)' },
+                            title: { display: true, text: 'S/', color: '#94a3b8', font: { size: 11 } },
+                        },
+                        y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                    },
+                }),
+            });
+        }
+
+        if (fechas.length) {
+            chPrecioDia = new Chart(document.getElementById('chartPrecioDia'), {
+                type: 'line',
+                data: {
+                    labels: fechas,
+                    datasets: [{
+                        label: 'Precio (S/)',
+                        data: preciosDia,
+                        borderColor: 'rgba(251,146,60,1)',
+                        backgroundColor: 'rgba(251,146,60,0.15)',
+                        borderWidth: 2,
+                        tension: 0.2,
+                        fill: true,
+                        pointRadius: fechas.length > 60 ? 0 : 4,
+                        pointBackgroundColor: 'rgba(251,146,60,1)',
+                        spanGaps: true,
+                    }],
+                },
+                options: Object.assign({}, anim, {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { labels: { color: legCol, boxWidth: 14 } },
+                        tooltip: { callbacks: { label: function(ctx) {
+                            var v = ctx.parsed.y;
+                            return 'S/ ' + (v != null ? v.toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—');
+                        }}},
+                        datalabels: DL.linePrecioKg || false,
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 10 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                        y: {
+                            ticks: { color: '#94a3b8', callback: function(v){ return 'S/ ' + v.toLocaleString('es-PE', {minimumFractionDigits:2}); } },
+                            grid: { color: 'rgba(148,163,184,0.15)' },
+                            title: { display: true, text: 'S/', color: '#94a3b8', font: { size: 11 } },
+                        },
+                    },
+                }),
+            });
+        }
+
+        /* Al filtrar la tabla por provincia, refrescar AMBAS gráficas pidiendo al
+           backend el chart_data filtrado (fmt=json&provincia=X). */
+        var _lastFetchKey = null;
+        var _ft;
+        function fetchPrecioForFilters(filters) {
+            filters = filters || {};
+            var prov = filters.prov || '';
+            if (prov === _lastFetchKey) return;
+            _lastFetchKey = prov;
+
+            clearTimeout(_ft);
+            _ft = setTimeout(function () {
+                try {
+                    var url = new URL(window.location.href);
+                    url.searchParams.set('fmt', 'json');
+                    if (prov) url.searchParams.set('provincia', prov); else url.searchParams.delete('provincia');
+                    fetch(url.toString(), { headers: { 'Accept': 'application/json' } })
+                        .then(function (r) { return r.ok ? r.json() : null; })
+                        .then(function (j) {
+                            if (!j || !j.chart_data) return;
+                            var cd = j.chart_data;
+                            if (chPrecioProv) {
+                                chPrecioProv.data.labels = cd.labels || [];
+                                chPrecioProv.data.datasets[0].data = cd.precios || [];
+                                chPrecioProv.update('none');
+                            }
+                            if (chPrecioDia) {
+                                var fechas2 = cd.fechas || [];
+                                chPrecioDia.data.labels = fechas2;
+                                chPrecioDia.data.datasets[0].data = cd.precios_dia || [];
+                                chPrecioDia.data.datasets[0].pointRadius = fechas2.length > 60 ? 0 : 4;
+                                chPrecioDia.update('none');
+                            }
+                        })
+                        .catch(function () {});
+                } catch (e) {}
+            }, 180);
+        }
+
+        var tableEl = document.querySelector('table.rct-auto');
+        if (tableEl) {
+            tableEl.addEventListener('rct:filtered', function (ev) {
+                var det = (ev && ev.detail) || {};
+                var f = det.filters || (tableEl.__rct && tableEl.__rct.filters) || {};
+                fetchPrecioForFilters(f);
+            });
+        }
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', buildCharts);
+    else buildCharts();
+})();
+</script>
+{% endblock %}

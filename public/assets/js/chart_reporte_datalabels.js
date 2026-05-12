@@ -89,6 +89,26 @@
         return v != null && !isNaN(v);
     }
 
+    /**
+     * Devuelve el color de la serie/punto: borderColor (líneas) o backgroundColor
+     * (barras, potencialmente arreglo por dato), para que la etiqueta tenga el mismo
+     * color que su línea o barra y sea fácil identificar a qué corresponde.
+     */
+    function dlSeriesColor(ctx) {
+        var ds = (ctx && ctx.dataset) || {};
+        var idx = ctx && ctx.dataIndex;
+        var c = ds.borderColor;
+        if (Array.isArray(c)) c = c[idx];
+        if (!c) {
+            c = ds.backgroundColor;
+            if (Array.isArray(c)) c = c[idx];
+        }
+        if (!c) c = ds.pointBackgroundColor;
+        return c || themeLegendColor();
+    }
+
+    global.reporteChartDataLabelSeriesColor = dlSeriesColor;
+
     /* clip: true evita que las etiquetas se dibujen sobre la leyenda u otros márgenes */
     var base = {
         clamp: true,
@@ -96,12 +116,12 @@
         backgroundColor: null,
         borderRadius: 0,
         padding: 0,
-        font: { size: 9, weight: '600' },
+        font: { size: 12, weight: '700' },
     };
 
     global.VENTAS_CHART_DATALABELS = {
         linePesoKg: Object.assign({}, base, {
-            color: dlThemeColor('#ecfdf5', '#14532d'),
+            color: dlSeriesColor,
             align: 'top',
             offset: 4,
             display: function (ctx) {
@@ -117,7 +137,7 @@
         }),
 
         lineValorSol: Object.assign({}, base, {
-            color: dlThemeColor('#dbeafe', '#1e3a8a'),
+            color: dlSeriesColor,
             align: 'top',
             offset: 4,
             display: function (ctx) {
@@ -136,7 +156,7 @@
         }),
 
         linePrecioKg: Object.assign({}, base, {
-            color: dlThemeColor('#ffedd5', '#9a3412'),
+            color: dlSeriesColor,
             align: 'top',
             offset: 4,
             display: function (ctx) {
@@ -148,16 +168,15 @@
                     'S/ ' +
                     Number(value).toLocaleString('es-PE', {
                         minimumFractionDigits: 2,
-                        maximumFractionDigits: 4,
-                    }) +
-                    '/kg'
+                        maximumFractionDigits: 2,
+                    })
                 );
             },
         }),
 
         /** Línea multi-serie: offset por dataset; leyenda suele ir abajo para no solaparse */
         linePrecioKgMulti: Object.assign({}, base, {
-            color: dlThemeColor('#f1f5f9', '#0f172a'),
+            color: dlSeriesColor,
             align: 'top',
             offset: function (ctx) {
                 return 6 + (ctx.datasetIndex || 0) * 12;
@@ -171,15 +190,14 @@
                     'S/ ' +
                     Number(value).toLocaleString('es-PE', {
                         minimumFractionDigits: 2,
-                        maximumFractionDigits: 4,
-                    }) +
-                    '/kg'
+                        maximumFractionDigits: 2,
+                    })
                 );
             },
         }),
 
         hbarPesoKg: Object.assign({}, base, {
-            color: dlThemeColor('#dcfce7', '#14532d'),
+            color: dlSeriesColor,
             anchor: 'end',
             align: 'end',
             offset: 4,
@@ -198,7 +216,7 @@
         }),
 
         hbarValorSol: Object.assign({}, base, {
-            color: dlThemeColor('#dbeafe', '#1e40af'),
+            color: dlSeriesColor,
             anchor: 'end',
             align: 'end',
             offset: 4,

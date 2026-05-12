@@ -193,6 +193,9 @@ def _format_payload(payload: dict) -> str:
     if str(payload.get('tipo') or '') == 'linea_resumen_provincia_cliente':
         return _lines_linea_resumen_provincia(filas)
 
+    if str(payload.get('tipo') or '') == 'linea_precio_resumen_provincia':
+        return _lines_linea_precio_resumen_provincia(filas, payload)
+
     if 'zona' in first and 'lineas_nc' in first and 'impacto_abs_valor' in first:
         return _lines_pareto_nc(filas)
     if 'nombre_cliente' in first and 'lineas_venta' in first and 'suma_valor' in first:
@@ -257,6 +260,22 @@ def _lines_linea_resumen_provincia(filas):
         peso = _fmt_num(r.get('suma_peso') or 0)
         v = _fmt_num(r.get('suma_valor') or 0)
         out.append(f'{i}. {nom} ({prov}): {ln:,} líneas, {cant} unidades, {peso} kg, S/ {v}')
+    return '\n'.join(out)
+
+
+def _lines_linea_precio_resumen_provincia(filas, payload):
+    out = []
+    for i, r in enumerate(filas, 1):
+        prov = str(r.get('provincia') or '')
+        ln = int(r.get('lineas') or 0)
+        peso = _fmt_num(r.get('suma_peso') or 0)
+        v = _fmt_num(r.get('suma_valor') or 0)
+        pk = r.get('precio_kg')
+        precio_s = f'S/ {_fmt_num(pk, 2)}' if pk is not None else 'S/ —'
+        out.append(f'{i}. {prov}: {precio_s} ({ln:,} líneas, {peso} kg, S/ {v})')
+    total_pk = payload.get('total_precio_kg')
+    if total_pk is not None:
+        out.append(f'Total ponderado del período: S/ {_fmt_num(total_pk, 2)}')
     return '\n'.join(out)
 
 

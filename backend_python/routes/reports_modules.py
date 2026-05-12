@@ -11,6 +11,7 @@ from typing import Any
 from flask import Blueprint, Response, abort, jsonify, render_template, request
 
 from routes.pages import APP_COMPANY, APP_NAME, ROLES_VENTAS_GENERAL, require_login
+from services.linea_codigo import index_hint_ventasgeneral2, linea_where_fragment
 from services.urlmap import (
     REPORT_VENTASGENERAL_BUSCAR_TABLA,
     REPORT_VENTASGENERAL_RESUMEN_TABLA,
@@ -814,10 +815,13 @@ def ventas_linea_resumen_provincia():
     f_clientes     = [v.strip() for v in request.args.getlist('cliente')     if v.strip()]
 
     # WHERE base: fecha + linea + cod_item + mercado (se usa para opciones de dropdowns)
+    conn = get_connection()
+    where_linea_sql, where_linea_bind = linea_where_fragment(conn, linea)
+    _from_v2_suffix = index_hint_ventasgeneral2(conn, linea, tipo_fecha)
     base_where = (f" WHERE {fe} BETWEEN :d1 AND :d2"
-                  " AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))"
-                  " AND CodigoDocumento IN ('01','03')")
-    base_bind: dict = {'d1': d1, 'd2': d2, 'linea': linea}
+                  + where_linea_sql
+                  + " AND CodigoDocumento IN ('01','03')")
+    base_bind: dict = {'d1': d1, 'd2': d2, **where_linea_bind}
     if cod_item:
         base_where += " AND CodigoItem = :cod_item"
         base_bind['cod_item'] = cod_item
@@ -825,7 +829,6 @@ def ventas_linea_resumen_provincia():
         base_where += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzo"
         base_bind['prefzo'] = mercado + '%'
 
-    conn = get_connection()
     (provincias_opts, corporativos_opts, clientes_opts,
      f_provincias, f_corporativos, f_clientes, opts_tree) = _cascada_y_arbol(
         conn, base_where, base_bind, f_provincias, f_corporativos, f_clientes)
@@ -858,7 +861,7 @@ def ventas_linea_resumen_provincia():
            " CASE WHEN COALESCE(SUM(Peso),0) > 0"
            "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 2)"
            "      ELSE NULL END AS precio_kg"
-           f" FROM ventasgeneral2{ext_where}"
+           f" FROM ventasgeneral2{_from_v2_suffix}{ext_where}"
            " GROUP BY provincia, CodigoCliente ORDER BY suma_peso DESC")
     if top is not None:
         sql += f" LIMIT {top}"
@@ -869,7 +872,7 @@ def ventas_linea_resumen_provincia():
                       " CASE WHEN COALESCE(SUM(Peso),0) > 0"
                       "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
                       "      ELSE NULL END AS precio_kg"
-                      f" FROM ventasgeneral2{ext_where}"
+                      f" FROM ventasgeneral2{_from_v2_suffix}{ext_where}"
                       " GROUP BY fecha ORDER BY fecha ASC")
 
     with conn.cursor() as cur:
@@ -1005,10 +1008,13 @@ def ventas_linea_diario_provincia():
     f_clientes     = [v.strip() for v in request.args.getlist('cliente')     if v.strip()]
 
     # WHERE base (para opciones de dropdowns)
+    conn = get_connection()
+    where_linea_sql, where_linea_bind = linea_where_fragment(conn, linea)
+    _from_v2_suffix = index_hint_ventasgeneral2(conn, linea, tipo_fecha)
     base_where = (f" WHERE {fe} BETWEEN :d1 AND :d2"
-                  " AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))"
-                  " AND CodigoDocumento IN ('01','03')")
-    base_bind: dict = {'d1': d1, 'd2': d2, 'linea': linea}
+                  + where_linea_sql
+                  + " AND CodigoDocumento IN ('01','03')")
+    base_bind: dict = {'d1': d1, 'd2': d2, **where_linea_bind}
     if cod_item:
         base_where += " AND CodigoItem = :cod_item"
         base_bind['cod_item'] = cod_item
@@ -1016,7 +1022,6 @@ def ventas_linea_diario_provincia():
         base_where += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzo"
         base_bind['prefzo'] = mercado + '%'
 
-    conn = get_connection()
     (provincias_opts, corporativos_opts, clientes_opts,
      f_provincias, f_corporativos, f_clientes, opts_tree) = _cascada_y_arbol(
         conn, base_where, base_bind, f_provincias, f_corporativos, f_clientes)
@@ -1049,14 +1054,14 @@ def ventas_linea_diario_provincia():
            " CASE WHEN COALESCE(SUM(Peso),0) > 0"
            "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 2)"
            "      ELSE NULL END AS precio_kg"
-           f" FROM ventasgeneral2{ext_where}"
+           f" FROM ventasgeneral2{_from_v2_suffix}{ext_where}"
            f" GROUP BY fecha, provincia, CodigoCliente ORDER BY fecha ASC, suma_peso DESC LIMIT {top}")
 
     # Query agregado por día (gráficos — respeta los mismos filtros)
     sql_dia = (f"SELECT {fe} AS fecha,"
                " COALESCE(SUM(Peso),0) AS suma_peso,"
                " COALESCE(SUM(Valor),0) AS suma_valor"
-               f" FROM ventasgeneral2{ext_where}"
+               f" FROM ventasgeneral2{_from_v2_suffix}{ext_where}"
                " GROUP BY fecha ORDER BY fecha ASC")
 
     with conn.cursor() as cur:
@@ -1075,7 +1080,7 @@ def ventas_linea_diario_provincia():
             " MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
             " COALESCE(SUM(Peso),0) AS suma_peso,"
             " COALESCE(SUM(Valor),0) AS suma_valor"
-            f" FROM ventasgeneral2{ext_where}"
+            f" FROM ventasgeneral2{_from_v2_suffix}{ext_where}"
             " GROUP BY fecha, CodigoCliente ORDER BY fecha ASC, cod_cliente"
         )
         with conn.cursor() as cur:
@@ -1212,10 +1217,13 @@ def ventas_linea_precio_diario():
     f_clientes     = [v.strip() for v in request.args.getlist('cliente')     if v.strip()]
 
     # WHERE base (para opciones de dropdowns)
+    conn = get_connection()
+    where_linea_sql, where_linea_bind = linea_where_fragment(conn, linea)
+    _from_v2_suffix = index_hint_ventasgeneral2(conn, linea, tipo_fecha)
     base_where = (f" WHERE {fe} BETWEEN :d1 AND :d2"
-                  " AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))"
-                  " AND CodigoDocumento IN ('01','03')")
-    base_bind: dict = {'d1': d1, 'd2': d2, 'linea': linea}
+                  + where_linea_sql
+                  + " AND CodigoDocumento IN ('01','03')")
+    base_bind: dict = {'d1': d1, 'd2': d2, **where_linea_bind}
     if cod_item:
         base_where += " AND CodigoItem = :cod_item"
         base_bind['cod_item'] = cod_item
@@ -1223,7 +1231,6 @@ def ventas_linea_precio_diario():
         base_where += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzo"
         base_bind['prefzo'] = mercado + '%'
 
-    conn = get_connection()
     (provincias_opts, corporativos_opts, clientes_opts,
      f_provincias, f_corporativos, f_clientes, opts_tree) = _cascada_y_arbol(
         conn, base_where, base_bind, f_provincias, f_corporativos, f_clientes)
@@ -1255,7 +1262,7 @@ def ventas_linea_precio_diario():
            " CASE WHEN COALESCE(SUM(Peso),0) > 0"
            "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
            "      ELSE NULL END AS precio_kg"
-           f" FROM ventasgeneral2{ext_where}"
+           f" FROM ventasgeneral2{_from_v2_suffix}{ext_where}"
            f" GROUP BY fecha, provincia, CodigoCliente ORDER BY fecha ASC, suma_peso DESC LIMIT {top}")
 
     sql_precio_dia = (f"SELECT {fe} AS fecha,"
@@ -1264,7 +1271,7 @@ def ventas_linea_precio_diario():
                       " CASE WHEN COALESCE(SUM(Peso),0) > 0"
                       "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
                       "      ELSE NULL END AS precio_kg"
-                      f" FROM ventasgeneral2{ext_where}"
+                      f" FROM ventasgeneral2{_from_v2_suffix}{ext_where}"
                       " GROUP BY fecha ORDER BY fecha ASC")
 
     # WHERE para gráfico por tipo-doc: incluye 07 además de 01 y 03
@@ -1317,7 +1324,7 @@ def ventas_linea_precio_diario():
             " CASE WHEN COALESCE(SUM(Peso),0) > 0"
             "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
             "      ELSE NULL END AS precio_kg"
-            f" FROM ventasgeneral2{ext_where}"
+            f" FROM ventasgeneral2{_from_v2_suffix}{ext_where}"
             f" GROUP BY {fe}, CodigoCliente ORDER BY fecha ASC, cod_cliente"
         )
         sql_tdoc_cli = (
@@ -1426,7 +1433,7 @@ def ventas_linea_precio_diario():
             'suma_cantidad': f"{float(r.get('suma_cantidad') or 0):,.2f}",
             'suma_peso': f"{float(r.get('suma_peso') or 0):,.2f}",
             'suma_valor': f"{float(r.get('suma_valor') or 0):,.2f}",
-            'precio_kg': f"S/ {float(precio):,.4f}" if precio is not None else '—',
+            'precio_kg': f"S/ {float(precio):,.2f}" if precio is not None else '—',
         }
         filas.append(row)
 
@@ -1459,7 +1466,7 @@ def ventas_linea_precio_diario():
         'filas': filas,
         'total_peso': f'{total_peso_periodo:,.2f}',
         'total_valor': f'{total_valor_periodo:,.2f}',
-        'total_precio_kg_periodo': f'S/ {total_precio_kg_periodo:,.4f}' if total_precio_kg_periodo is not None else '—',
+        'total_precio_kg_periodo': f'S/ {total_precio_kg_periodo:,.2f}' if total_precio_kg_periodo is not None else '—',
         'pdf_filename': f'linea_precio_diario_{d1}_{d2}.pdf',
         'chart_data': {
             'fechas': chart_fechas,
@@ -1497,6 +1504,9 @@ def ventas_linea_mix_productos():
 
     mercado = (request.args.get('mercado') or '').strip().upper()
 
+    conn = get_connection()
+    where_linea_sql, where_linea_bind = linea_where_fragment(conn, linea)
+    _from_v2_suffix = index_hint_ventasgeneral2(conn, linea, 'contable')
     sql = ("SELECT CodigoItem AS cod_item,"
            " MAX(COALESCE(NULLIF(TRIM(GlosaDetalle),''),'(sin glosa)')) AS glosa,"
            " COUNT(*) AS lineas,"
@@ -1506,16 +1516,14 @@ def ventas_linea_mix_productos():
            " CASE WHEN COALESCE(SUM(Peso),0) > 0"
            "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
            "      ELSE NULL END AS precio_kg"
-           " FROM ventasgeneral2"
+           f" FROM ventasgeneral2{_from_v2_suffix}"
            " WHERE FechaContable BETWEEN :d1 AND :d2"
-           " AND LOWER(TRIM(LineaComercial)) = LOWER(TRIM(:linea))")
-    bind = {'d1': d1, 'd2': d2, 'linea': linea}
+           + where_linea_sql)
+    bind = {'d1': d1, 'd2': d2, **where_linea_bind}
     if mercado:
         sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzo"
         bind['prefzo'] = mercado + '%'
     sql += " GROUP BY CodigoItem ORDER BY suma_peso DESC"
-
-    conn = get_connection()
     with conn.cursor() as cur:
         cur.execute(_colon_params_to_pymysql(sql), bind)
         raw = cur.fetchall() or []
@@ -1544,7 +1552,7 @@ def ventas_linea_mix_productos():
             'suma_cantidad': f"{float(r.get('suma_cantidad') or 0):,.2f}",
             'suma_peso': f'{sp:,.2f}',
             'suma_valor': f'{sv:,.2f}',
-            'precio_kg': f'{float(pk):,.4f}' if pk is not None else '—',
+            'precio_kg': f'S/ {float(pk):,.2f}' if pk is not None else '—',
             'pct_peso': f'{pct:.2f}',
         })
 
@@ -1559,6 +1567,165 @@ def ventas_linea_mix_productos():
         'chart_data': {'labels': chart_labels, 'pesos': chart_pesos, 'valores': chart_valores},
     })
     return render_template('pages/reporte_linea_mix_productos.html', **ctx)
+
+
+@bp.route('/modules/reports/ventas-linea-precio-resumen-provincia')
+@require_login
+def ventas_linea_precio_resumen_provincia():
+    from services.db import get_connection
+
+    d1 = _parse_date_string(request.args.get('desde') or request.args.get('fecha_desde'))
+    d2 = _parse_date_string(request.args.get('hasta') or request.args.get('fecha_hasta'))
+    if not d1 or not d2 or d1 > d2:
+        return _bad('Parámetros requeridos: desde y hasta (YYYY-MM-DD).')
+
+    linea = (request.args.get('linea') or '').strip()
+    if not linea:
+        return _bad('Parámetro requerido: linea (ej. "Pollo Vivo").')
+
+    tipo_fecha = _tipo_fecha_param()
+    fe = _sql_fecha_dimension(tipo_fecha)
+    fecha_eje_leyenda = _fecha_eje_leyenda(tipo_fecha)
+
+    cod_item = (request.args.get('cod_item') or '').strip()
+    mercado = (request.args.get('mercado') or '').strip().upper()
+    # Filtro opcional de provincia (usado tanto desde URL como por fmt=json al filtrar la tabla)
+    provincia_filtro = (request.args.get('provincia') or '').strip()
+
+    conn = get_connection()
+    where_linea_sql, where_linea_bind = linea_where_fragment(conn, linea)
+    _from_v2_suffix = index_hint_ventasgeneral2(conn, linea, tipo_fecha)
+
+    # Tabla agregada por provincia
+    sql = (f"SELECT"
+           " COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
+           " COUNT(*) AS lineas,"
+           " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
+           " COALESCE(SUM(Peso),0) AS suma_peso,"
+           " COALESCE(SUM(Valor),0) AS suma_valor,"
+           " CASE WHEN COALESCE(SUM(Peso),0) > 0"
+           "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
+           "      ELSE NULL END AS precio_kg"
+           f" FROM ventasgeneral2{_from_v2_suffix}"
+           f" WHERE {fe} BETWEEN :d1 AND :d2"
+           + where_linea_sql)
+    bind: dict = {'d1': d1, 'd2': d2, **where_linea_bind}
+    if cod_item:
+        sql += ' AND CodigoItem = :cod_item'
+        bind['cod_item'] = cod_item
+    if mercado:
+        sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzo"
+        bind['prefzo'] = mercado + '%'
+    if provincia_filtro:
+        sql += " AND COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') = :prov"
+        bind['prov'] = provincia_filtro
+    sql += ' GROUP BY provincia ORDER BY suma_peso DESC'
+
+    # Precio ponderado por día (gráfico — mismos filtros, incluyendo provincia si está)
+    sql_dia = (f"SELECT {fe} AS fecha,"
+               " COALESCE(SUM(Peso),0) AS suma_peso,"
+               " CASE WHEN COALESCE(SUM(Peso),0) > 0"
+               "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
+               "      ELSE NULL END AS precio_kg"
+               f" FROM ventasgeneral2{_from_v2_suffix}"
+               f" WHERE {fe} BETWEEN :d1 AND :d2"
+               + where_linea_sql)
+    if cod_item:
+        sql_dia += ' AND CodigoItem = :cod_item'
+    if mercado:
+        sql_dia += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzo"
+    if provincia_filtro:
+        sql_dia += " AND COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') = :prov"
+    sql_dia += ' GROUP BY fecha ORDER BY fecha ASC'
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql), bind)
+        raw = cur.fetchall() or []
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql_dia), bind)
+        raw_dia = cur.fetchall() or []
+
+    total_lineas = 0
+    total_cantidad = 0.0
+    total_peso = 0.0
+    total_valor = 0.0
+    filas = []
+    chart_labels: list = []
+    chart_precios: list = []
+    chart_pesos: list = []
+    chart_valores: list = []
+
+    for i, r in enumerate(raw, 1):
+        sp = float(r.get('suma_peso') or 0)
+        sv = float(r.get('suma_valor') or 0)
+        pk = r.get('precio_kg')
+        prov = str(r.get('provincia') or '')
+        total_lineas += int(r.get('lineas') or 0)
+        total_cantidad += float(r.get('suma_cantidad') or 0)
+        total_peso += sp
+        total_valor += sv
+        chart_labels.append(prov[:18])
+        chart_precios.append(round(float(pk), 4) if pk is not None else None)
+        chart_pesos.append(round(sp, 2))
+        chart_valores.append(round(sv, 2))
+        filas.append({
+            'rank': i,
+            'provincia': prov,
+            'lineas': f"{int(r.get('lineas') or 0):,}",
+            'suma_cantidad': f"{float(r.get('suma_cantidad') or 0):,.2f}",
+            'suma_peso': f'{sp:,.2f}',
+            'suma_valor': f'S/ {sv:,.2f}',
+            'precio_kg': f'S/ {float(pk):,.2f}' if pk is not None else '—',
+        })
+
+    total_precio_kg = round(total_valor / total_peso, 4) if total_peso > 0 else None
+
+    chart_fechas: list = []
+    chart_precios_dia: list = []
+    for r in raw_dia:
+        fecha = r.get('fecha')
+        chart_fechas.append(fecha.strftime('%Y-%m-%d') if hasattr(fecha, 'strftime') else str(fecha or ''))
+        p = r.get('precio_kg')
+        chart_precios_dia.append(round(float(p), 4) if p is not None else None)
+
+    ctx = _report_shell_context(f'Ventas {linea} · Precio resumen por provincia')
+    ctx.update({
+        'd1': d1, 'd2': d2, 'linea': linea,
+        'tipo_fecha': tipo_fecha,
+        'fecha_eje_leyenda': fecha_eje_leyenda,
+        'cod_item': cod_item or None,
+        'mercado': mercado or None,
+        'filas': filas,
+        'total_lineas': f'{total_lineas:,}',
+        'total_cantidad': f'{total_cantidad:,.2f}',
+        'total_peso': f'{total_peso:,.2f}',
+        'total_valor': f'S/ {total_valor:,.2f}',
+        'total_precio_kg': f'S/ {total_precio_kg:,.2f}' if total_precio_kg is not None else '—',
+        'pdf_filename': f'linea_precio_resumen_provincia_{d1}_{d2}.pdf',
+        'chart_data': {
+            'labels': chart_labels,
+            'precios': chart_precios,
+            'pesos': chart_pesos,
+            'valores': chart_valores,
+            'fechas': chart_fechas,
+            'precios_dia': chart_precios_dia,
+        },
+        'body_class': 'app-page-reporte-wide',
+    })
+
+    if (request.args.get('fmt') or '').strip().lower() == 'json':
+        return jsonify({
+            'chart_data': {
+                'labels': chart_labels,
+                'precios': chart_precios,
+                'pesos': chart_pesos,
+                'valores': chart_valores,
+                'fechas': chart_fechas,
+                'precios_dia': chart_precios_dia,
+            },
+            'total_precio_kg': total_precio_kg,
+        })
+
+    return render_template('pages/reporte_linea_precio_resumen_provincia.html', **ctx)
 
 
 @bp.route('/modules/reports/<slug>')

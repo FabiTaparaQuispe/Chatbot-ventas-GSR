@@ -8,6 +8,7 @@ from services.urlmap import (
     REPORT_SLUG_VENTAS_LINEA_DIARIO_PROVINCIA,
     REPORT_SLUG_VENTAS_LINEA_MIX_PRODUCTOS,
     REPORT_SLUG_VENTAS_LINEA_PRECIO_DIARIO,
+    REPORT_SLUG_VENTAS_LINEA_PRECIO_RESUMEN_PROV,
     REPORT_SLUG_VENTAS_LINEA_RESUMEN_PROVINCIA,
     REPORT_SLUG_VENTAS_MIX_TDOC,
     REPORT_SLUG_VENTAS_SERIE_MENSUAL,
@@ -177,6 +178,25 @@ def ventas_tool_definitions():
                 'cod_item': {'type': 'string', 'description': 'Código de producto, ej. 100 (carne), 103 (brasa)'},
                 'mercado': pref,
                 'top_n': dn,
+            }, 'required': ['fecha_desde', 'fecha_hasta', 'linea_comercial']},
+        }},
+        {'type': 'function', 'function': {
+            'name': 'ventasgeneral_linea_precio_resumen_provincia',
+            'description': (
+                f'Precio resumen por PROVINCIA (sin desglose por cliente ni por día) de una línea comercial. '
+                f'Devuelve una fila por provincia con líneas, cantidad, peso, valor y precio/kg ponderado (SUM(Valor)/SUM(Peso)), '
+                f'ordenado por peso descendente. Úsala cuando pidan "precio resumen por provincia", '
+                f'"precio por provincia" o "precio promedio por provincia". '
+                f'No agrupa por cliente — para eso usar ventasgeneral_linea_precio_diario. '
+                f'Requiere fecha_desde/fecha_hasta y linea_comercial; si faltan, pregúntalos antes de llamar. '
+                f'Filtros opcionales: cod_item (ej. 100=carne, 103=brasa) y mercado (prefijo zona precio). '
+                f'reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_LINEA_PRECIO_RESUMEN_PROV}?…'
+            ),
+            'parameters': {'type': 'object', 'properties': {
+                'fecha_desde': d_opt, 'fecha_hasta': d_opt,
+                'linea_comercial': {'type': 'string', 'description': "Texto de LineaComercial, ej. 'Pollo Vivo'"},
+                'cod_item': {'type': 'string', 'description': 'Código de producto, ej. 100 (carne), 103 (brasa)'},
+                'mercado': pref,
             }, 'required': ['fecha_desde', 'fecha_hasta', 'linea_comercial']},
         }},
         {'type': 'function', 'function': {
