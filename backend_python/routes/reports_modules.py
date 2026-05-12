@@ -1426,7 +1426,7 @@ def ventas_linea_precio_diario():
             'suma_cantidad': f"{float(r.get('suma_cantidad') or 0):,.2f}",
             'suma_peso': f"{float(r.get('suma_peso') or 0):,.2f}",
             'suma_valor': f"{float(r.get('suma_valor') or 0):,.2f}",
-            'precio_kg': f"{float(precio):,.4f}" if precio is not None else '—',
+            'precio_kg': f"S/ {float(precio):,.4f}" if precio is not None else '—',
         }
         filas.append(row)
 
@@ -1459,7 +1459,7 @@ def ventas_linea_precio_diario():
         'filas': filas,
         'total_peso': f'{total_peso_periodo:,.2f}',
         'total_valor': f'{total_valor_periodo:,.2f}',
-        'total_precio_kg_periodo': f'{total_precio_kg_periodo:,.4f}' if total_precio_kg_periodo is not None else '—',
+        'total_precio_kg_periodo': f'S/ {total_precio_kg_periodo:,.4f}' if total_precio_kg_periodo is not None else '—',
         'pdf_filename': f'linea_precio_diario_{d1}_{d2}.pdf',
         'chart_data': {
             'fechas': chart_fechas,
