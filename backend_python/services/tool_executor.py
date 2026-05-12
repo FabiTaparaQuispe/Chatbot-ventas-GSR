@@ -28,6 +28,10 @@ from services.urlmap import (
 MAX_LIMIT = 100
 DEFAULT_LIMIT = 50
 
+DEFAULT_POR_PAGINA = 50
+MIN_POR_PAGINA = 10
+MAX_POR_PAGINA = 100
+
 
 def _parse_date(val, key='fecha', required=True):
     if val is None or val == '':
@@ -62,23 +66,73 @@ def _int_arg(v, default, min_val, max_val):
     return max(min_val, min(max_val, n))
 
 
-def _linea_resumen_top_arg(v):
-    """None = sin LIMIT. Entero >0 acota (máx. 100000)."""
-    if v is None or v == '':
-        return None
-    try:
-        n = int(v)
-    except (ValueError, TypeError):
-        return None
-    if n <= 0:
-        return None
-    return max(1, min(100_000, n))
-
-
 def _clamp_limit(n, default=DEFAULT_LIMIT):
     if n is None:
         return default
     return max(1, min(MAX_LIMIT, int(n)))
+
+
+def _parse_pagina(args, default=1):
+    """Página solicitada por el LLM. 1-indexada, mínimo 1."""
+    v = args.get('pagina') if isinstance(args, dict) else None
+    if v is None or v == '':
+        return default
+    try:
+        n = int(v)
+    except (ValueError, TypeError):
+        return default
+    return max(1, n)
+
+
+def _parse_por_pagina(args, default=DEFAULT_POR_PAGINA,
+                     min_v=MIN_POR_PAGINA, max_v=MAX_POR_PAGINA):
+    """Tamaño de página solicitado por el LLM, acotado a [min_v, max_v]."""
+    v = args.get('por_pagina') if isinstance(args, dict) else None
+    if v is None or v == '':
+        return default
+    try:
+        n = int(v)
+    except (ValueError, TypeError):
+        return default
+    return max(min_v, min(max_v, n))
+
+
+def _pagination_offset(pagina, por_pagina):
+    return max(0, (max(1, int(pagina)) - 1) * max(1, int(por_pagina)))
+
+
+def _pagination_meta(total_rows, pagina, por_pagina):
+    """Construye el bloque 'paginacion' que se devuelve al LLM/frontend."""
+    pp = max(1, int(por_pagina))
+    pg = max(1, int(pagina))
+    total = max(0, int(total_rows or 0))
+    total_paginas = (total + pp - 1) // pp if total > 0 else 0
+    return {
+        'pagina': pg,
+        'por_pagina': pp,
+        'total_filas': total,
+        'total_paginas': total_paginas,
+        'hay_siguiente': pg < total_paginas,
+        'hay_anterior': pg > 1 and total_paginas > 0,
+    }
+
+
+def _paginate_list(rows, pagina, por_pagina):
+    """Slicing en memoria (para tools que post-procesan en Python, ej. pareto)."""
+    pp = max(1, int(por_pagina))
+    pg = max(1, int(pagina))
+    start = (pg - 1) * pp
+    return rows[start:start + pp]
+
+
+def _count_query(conn, sql_count, params):
+    """Ejecuta un COUNT(*) y devuelve un entero seguro."""
+    row = _q1(conn, sql_count, params) or {}
+    val = row.get('total') if 'total' in row else (next(iter(row.values())) if row else 0)
+    try:
+        return int(val or 0)
+    except (ValueError, TypeError):
+        return 0
 
 
 def _dimension(v):
@@ -268,16 +322,11 @@ class ToolExecutor:
         }
 
     def _buscar(self, args):
-        limit_v = args.get('limit')
-        offset_v = args.get('offset')
-        limit = _clamp_limit(int(limit_v) if limit_v is not None and str(limit_v) != '' else None)
-        offset = max(0, int(offset_v) if offset_v is not None and str(offset_v) != '' else 0)
+        pagina = _parse_pagina(args)
+        por_pagina = _parse_por_pagina(args)
+        offset = _pagination_offset(pagina, por_pagina)
 
-        sql = ('SELECT id, FechaContable, CodigoCoorporativo, NombreCoorporativo, CodigoCliente,'
-               ' NombreCliente, CodigoDocumento, TipoDocumento, SerieDocumento, NumeroDocumento,'
-               ' NumeroFactura, CodigoItem, GlosaDetalle, Cantidad, Peso, Valor,'
-               ' ZonaComercial, DescripcionZonaPrecio, RutaComercial, Provincia, LineaComercial'
-               ' FROM ventasgeneral2 WHERE 1=1')
+        where_sql = ' FROM ventasgeneral2 WHERE 1=1'
         params = {}
 
         fd = _parse_date(args.get('fecha_desde'), 'fecha_desde', required=False)
@@ -285,70 +334,85 @@ class ToolExecutor:
         if fd and fh:
             if fd > fh:
                 raise ValueError('fecha_desde no puede ser mayor que fecha_hasta')
-            sql += ' AND FechaContable BETWEEN %(fd)s AND %(fh)s'
+            where_sql += ' AND FechaContable BETWEEN %(fd)s AND %(fh)s'
             params['fd'] = fd
             params['fh'] = fh
         elif fd:
-            sql += ' AND FechaContable >= %(fd)s'
+            where_sql += ' AND FechaContable >= %(fd)s'
             params['fd'] = fd
         elif fh:
-            sql += ' AND FechaContable <= %(fh)s'
+            where_sql += ' AND FechaContable <= %(fh)s'
             params['fh'] = fh
 
         nom = str(args.get('nombre_cliente') or '').strip()
         if nom:
-            sql += ' AND NombreCliente LIKE %(nom)s'
+            where_sql += ' AND NombreCliente LIKE %(nom)s'
             params['nom'] = f'%{nom}%'
         ndoc = str(args.get('numero_doc') or '').strip()
         if ndoc:
-            sql += ' AND NumeroFactura LIKE %(ndoc)s'
+            where_sql += ' AND NumeroFactura LIKE %(ndoc)s'
             params['ndoc'] = f'%{ndoc}%'
         item = str(args.get('cod_item') or '').strip()
         if item:
-            sql += ' AND CodigoItem = %(item)s'
+            where_sql += ' AND CodigoItem = %(item)s'
             params['item'] = item
         tdoc = str(args.get('tdoc') or '').strip()
         if tdoc:
             if len(tdoc) > 4:
                 raise ValueError('tdoc demasiado largo')
-            sql += ' AND CodigoDocumento = %(tdoc)s'
+            where_sql += ' AND CodigoDocumento = %(tdoc)s'
             params['tdoc'] = tdoc
         pref_z = str(args.get('prefijo_descri_zona_precio') or '').strip().upper()
         if pref_z:
-            sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(prefzp)s"
+            where_sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(prefzp)s"
             params['prefzp'] = pref_z + '%'
         prov = str(args.get('provincia') or '').strip()
         if prov:
-            sql += ' AND Provincia LIKE %(prov)s'
+            where_sql += ' AND Provincia LIKE %(prov)s'
             params['prov'] = f'%{prov}%'
         tdoctipo = str(args.get('tipo_documento') or '').strip()
         if tdoctipo:
-            sql += ' AND TipoDocumento LIKE %(tdoctipo)s'
+            where_sql += ' AND TipoDocumento LIKE %(tdoctipo)s'
             params['tdoctipo'] = f'%{tdoctipo}%'
 
-        sql += f' ORDER BY FechaContable DESC, id DESC LIMIT {limit} OFFSET {offset}'
-        rows = _q(self._conn, sql, params)
+        sql_count = 'SELECT COUNT(*) AS total' + where_sql
+        total_rows = _count_query(self._conn, sql_count, params)
+
+        sql_select = (
+            'SELECT id, FechaContable, CodigoCoorporativo, NombreCoorporativo, CodigoCliente,'
+            ' NombreCliente, CodigoDocumento, TipoDocumento, SerieDocumento, NumeroDocumento,'
+            ' NumeroFactura, CodigoItem, GlosaDetalle, Cantidad, Peso, Valor,'
+            ' ZonaComercial, DescripcionZonaPrecio, RutaComercial, Provincia, LineaComercial'
+            + where_sql
+            + f' ORDER BY FechaContable DESC, id DESC LIMIT {por_pagina} OFFSET {offset}'
+        )
+        rows = _q(self._conn, sql_select, params)
 
         tab_args = {k: str(v) for k, v in {
             'fecha_desde': fd, 'fecha_hasta': fh, 'nombre_cliente': nom,
             'numero_doc': ndoc, 'cod_item': item, 'tdoc': tdoc,
             'prefijo_descri_zona_precio': pref_z, 'provincia': prov,
-            'tipo_documento': tdoctipo, 'limit': limit, 'offset': offset,
+            'tipo_documento': tdoctipo,
+            'pagina': pagina, 'por_pagina': por_pagina,
         }.items() if v is not None and str(v) != ''}
 
         return {
             'tabla': 'ventasgeneral',
             'count_devuelto': len(rows),
-            'limit': limit,
-            'offset': offset,
+            'paginacion': _pagination_meta(total_rows, pagina, por_pagina),
             'filas': [dict(r) for r in rows],
             'reporte_url': _report_canonical(REPORT_VENTASGENERAL_BUSCAR_TABLA, tab_args),
-            '_sql_traces': [{'sql': sql, 'params': params}],
+            '_sql_traces': [
+                {'sql': sql_count, 'params': params},
+                {'sql': sql_select, 'params': params},
+            ],
         }
 
     def _pareto_nc(self, args):
         d1, d2 = _parse_date_range(args)
         max_z = _int_arg(args.get('max_zonas'), 100, 1, 200)
+        pagina = _parse_pagina(args)
+        por_pagina = _parse_por_pagina(args)
         sql = ("SELECT COALESCE(NULLIF(TRIM(DescripcionZonaPrecio),''),'(sin zona)') AS zona,"
                " COUNT(*) AS lineas_nc,"
                " COALESCE(SUM(ABS(Valor)),0) AS impacto_abs_valor"
@@ -360,13 +424,13 @@ class ToolExecutor:
         raw = _q(self._conn, sql, params)
         total = sum(float(r.get('impacto_abs_valor') or 0) for r in raw)
         cum = 0.0
-        filas = []
+        filas_all = []
         hasta80 = 0
         for i, r in enumerate(raw):
             imp = float(r.get('impacto_abs_valor') or 0)
             pct = (imp / total * 100) if total else 0.0
             cum += pct
-            filas.append({
+            filas_all.append({
                 'zona': str(r.get('zona') or ''),
                 'lineas_nc': int(r.get('lineas_nc') or 0),
                 'impacto_abs_valor': imp,
@@ -375,8 +439,9 @@ class ToolExecutor:
             })
             if hasta80 == 0 and cum >= 80.0:
                 hasta80 = i + 1
-        if hasta80 == 0 and filas:
-            hasta80 = len(filas)
+        if hasta80 == 0 and filas_all:
+            hasta80 = len(filas_all)
+        filas = _paginate_list(filas_all, pagina, por_pagina)
         q = _qs({'desde': d1, 'hasta': d2, 'max': max_z})
         return {
             'tabla': 'ventasgeneral',
@@ -385,6 +450,7 @@ class ToolExecutor:
             'periodo': {'desde': d1, 'hasta': d2},
             'total_impacto_nc_valor_abs': total,
             'filas_pareto': filas,
+            'paginacion': _pagination_meta(len(filas_all), pagina, por_pagina),
             'zonas_hasta_80pct_aprox': hasta80,
             'reporte_url': report_slug_url(REPORT_SLUG_PARETO_NC_ZONA, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
@@ -396,6 +462,8 @@ class ToolExecutor:
         if not pref:
             raise ValueError('Falta prefijo_descri_zona_precio (ej. LAJOYA)')
         top = _int_arg(args.get('top_n'), 10, 1, 100)
+        pagina = _parse_pagina(args)
+        por_pagina = _parse_por_pagina(args)
         like = pref + '%'
 
         sql_total = ("SELECT COALESCE(SUM(Valor), 0) AS total_valor FROM ventasgeneral2"
@@ -417,13 +485,13 @@ class ToolExecutor:
         raw = _q(self._conn, sql, params)
 
         cum = 0.0
-        filas = []
+        filas_all = []
         hasta80 = 0
         for i, r in enumerate(raw):
             sv = float(r.get('suma_valor') or 0)
             pct = (sv / total_zona * 100) if total_zona else 0.0
             cum += pct
-            filas.append({
+            filas_all.append({
                 'cod_cliente': str(r.get('CodigoCliente') or ''),
                 'nombre_cliente': str(r.get('nombre_cliente') or ''),
                 'suma_valor': sv,
@@ -433,8 +501,9 @@ class ToolExecutor:
             })
             if hasta80 == 0 and cum >= 80.0:
                 hasta80 = i + 1
-        if hasta80 == 0 and filas:
-            hasta80 = len(filas)
+        if hasta80 == 0 and filas_all:
+            hasta80 = len(filas_all)
+        filas = _paginate_list(filas_all, pagina, por_pagina)
 
         q = _qs({'desde': d1, 'hasta': d2, 'prefijo': pref, 'top': top})
         return {
@@ -445,6 +514,7 @@ class ToolExecutor:
             'prefijo_descri_zona_precio': pref,
             'total_valor_zona': total_zona,
             'filas_ranking': filas,
+            'paginacion': _pagination_meta(len(filas_all), pagina, por_pagina),
             'clientes_hasta_80pct_aprox': hasta80,
             'reporte_url': report_slug_url(REPORT_SLUG_PARETO_CLIENTES_ZONA, q),
             '_sql_traces': [
@@ -457,6 +527,8 @@ class ToolExecutor:
         d1, d2 = _parse_date_range(args)
         dim = _dimension(args.get('dimension', 'precio'))
         top = _int_arg(args.get('top_n'), 20, 1, 100)
+        pagina = _parse_pagina(args)
+        por_pagina = _parse_por_pagina(args)
         expr = _col_etiqueta(dim)
         sql = (f"SELECT {expr} AS etiqueta, COUNT(*) AS lineas,"
                " COALESCE(SUM(Valor),0) AS suma_valor,"
@@ -469,10 +541,10 @@ class ToolExecutor:
             'SELECT COALESCE(SUM(Valor),0) AS t FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s',
             params)
         total = float((total_row or {}).get('t') or 0)
-        filas = []
+        filas_all = []
         for r in raw:
             sv = float(r.get('suma_valor') or 0)
-            filas.append({
+            filas_all.append({
                 'etiqueta': str(r.get('etiqueta') or ''),
                 'lineas': int(r.get('lineas') or 0),
                 'suma_valor': sv,
@@ -480,6 +552,7 @@ class ToolExecutor:
                 'suma_peso': float(r.get('suma_peso') or 0),
                 'pct_del_total': round(sv / total * 100, 2) if total else 0.0,
             })
+        filas = _paginate_list(filas_all, pagina, por_pagina)
         q = _qs({'desde': d1, 'hasta': d2, 'dim': dim, 'top': top})
         return {
             'tabla': 'ventasgeneral',
@@ -487,6 +560,7 @@ class ToolExecutor:
             'periodo': {'desde': d1, 'hasta': d2},
             'total_valor_periodo': total,
             'filas': filas,
+            'paginacion': _pagination_meta(len(filas_all), pagina, por_pagina),
             'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_BARRAS_DIMENSION, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
@@ -496,6 +570,8 @@ class ToolExecutor:
         b1, b2 = _parse_date_range(args, 'fecha_desde_b', 'fecha_hasta_b')
         dim = _dimension(args.get('dimension', 'precio'))
         top = _int_arg(args.get('top_n'), 15, 1, 80)
+        pagina = _parse_pagina(args)
+        por_pagina = _parse_por_pagina(args)
         expr = _col_etiqueta(dim)
         sql = (f"SELECT etiqueta, SUM(va) AS valor_a, SUM(vb) AS valor_b FROM ("
                f"  SELECT {expr} AS etiqueta, COALESCE(SUM(Valor),0) AS va, 0 AS vb"
@@ -507,16 +583,17 @@ class ToolExecutor:
                f" ORDER BY GREATEST(ABS(SUM(va)), ABS(SUM(vb))) DESC LIMIT {top}")
         params = {'a1': a1, 'a2': a2, 'b1': b1, 'b2': b2}
         raw = _q(self._conn, sql, params)
-        filas = []
+        filas_all = []
         for r in raw:
             va = float(r.get('valor_a') or 0)
             vb = float(r.get('valor_b') or 0)
-            filas.append({
+            filas_all.append({
                 'etiqueta': str(r.get('etiqueta') or ''),
                 'valor_periodo_a': va,
                 'valor_periodo_b': vb,
                 'delta': round(vb - va, 2),
             })
+        filas = _paginate_list(filas_all, pagina, por_pagina)
         q = _qs({'a_desde': a1, 'a_hasta': a2, 'b_desde': b1, 'b_hasta': b2, 'dim': dim, 'top': top})
         return {
             'tabla': 'ventasgeneral',
@@ -525,6 +602,7 @@ class ToolExecutor:
             'periodo_b': {'desde': b1, 'hasta': b2},
             'dimension': dim,
             'filas': filas,
+            'paginacion': _pagination_meta(len(filas_all), pagina, por_pagina),
             'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_COMPARATIVO, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
@@ -532,6 +610,8 @@ class ToolExecutor:
     def _top_productos(self, args):
         d1, d2 = _parse_date_range(args)
         top = _int_arg(args.get('top_n'), 15, 1, 100)
+        pagina = _parse_pagina(args)
+        por_pagina = _parse_por_pagina(args)
         sql = ("SELECT CodigoItem AS cod_item,"
                " MAX(COALESCE(NULLIF(TRIM(GlosaDetalle),''),'(sin glosa)')) AS glosa,"
                " COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor,"
@@ -540,12 +620,15 @@ class ToolExecutor:
                f" GROUP BY CodigoItem ORDER BY suma_valor DESC LIMIT {top}")
         params = {'d1': d1, 'd2': d2}
         rows = _q(self._conn, sql, params)
+        filas_all = [dict(r) for r in rows]
+        filas = _paginate_list(filas_all, pagina, por_pagina)
         q = _qs({'desde': d1, 'hasta': d2, 'top': top})
         return {
             'tabla': 'ventasgeneral',
             'tipo': 'top_productos',
             'periodo': {'desde': d1, 'hasta': d2},
-            'filas': [dict(r) for r in rows],
+            'filas': filas,
+            'paginacion': _pagination_meta(len(filas_all), pagina, por_pagina),
             'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_TOP_PRODUCTOS, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
@@ -553,6 +636,8 @@ class ToolExecutor:
     def _top_clientes_global(self, args):
         d1, d2 = _parse_date_range(args)
         top = _int_arg(args.get('top_n'), 10, 1, 100)
+        pagina = _parse_pagina(args)
+        por_pagina = _parse_por_pagina(args)
         sql = ("SELECT CodigoCliente AS cod_cliente,"
                " MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
                " COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor"
@@ -565,12 +650,12 @@ class ToolExecutor:
             params)
         total = float((total_row or {}).get('t') or 0)
         cum = 0.0
-        filas = []
+        filas_all = []
         for r in raw:
             sv = float(r.get('suma_valor') or 0)
             pct = sv / total * 100 if total else 0.0
             cum += pct
-            filas.append({
+            filas_all.append({
                 'cod_cliente': str(r.get('cod_cliente') or ''),
                 'nombre_cliente': str(r.get('nombre_cliente') or ''),
                 'lineas': int(r.get('lineas') or 0),
@@ -578,6 +663,7 @@ class ToolExecutor:
                 'pct_del_total': round(pct, 2),
                 'pct_acumulado': round(cum, 2),
             })
+        filas = _paginate_list(filas_all, pagina, por_pagina)
         q = _qs({'desde': d1, 'hasta': d2, 'top': top})
         return {
             'tabla': 'ventasgeneral',
@@ -585,6 +671,7 @@ class ToolExecutor:
             'periodo': {'desde': d1, 'hasta': d2},
             'total_valor': total,
             'filas': filas,
+            'paginacion': _pagination_meta(len(filas_all), pagina, por_pagina),
             'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_TOP_CLIENTES_GLOBAL, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
@@ -592,6 +679,8 @@ class ToolExecutor:
     def _top_clientes_nc(self, args):
         d1, d2 = _parse_date_range(args)
         top = _int_arg(args.get('top_n'), 10, 1, 100)
+        pagina = _parse_pagina(args)
+        por_pagina = _parse_por_pagina(args)
         tdoc_cond = "COALESCE(NULLIF(TRIM(CodigoDocumento),''),'') = '07'"
         sql = (f"SELECT CodigoCliente AS cod_cliente,"
                f" MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
@@ -609,12 +698,12 @@ class ToolExecutor:
         total_valor_nc = float(tot_row.get('v') or 0)
         total_peso_nc = float(tot_row.get('p') or 0)
         cum = 0.0
-        filas = []
+        filas_all = []
         for r in raw:
             ln = int(r.get('lineas') or 0)
             pct = ln / total_lineas * 100 if total_lineas else 0.0
             cum += pct
-            filas.append({
+            filas_all.append({
                 'cod_cliente': str(r.get('cod_cliente') or ''),
                 'nombre_cliente': str(r.get('nombre_cliente') or ''),
                 'lineas': ln,
@@ -623,6 +712,7 @@ class ToolExecutor:
                 'pct_lineas_del_total': round(pct, 2),
                 'pct_lineas_acumulado': round(cum, 2),
             })
+        filas = _paginate_list(filas_all, pagina, por_pagina)
         q = _qs({'desde': d1, 'hasta': d2, 'top': top})
         return {
             'tabla': 'ventasgeneral',
@@ -632,6 +722,7 @@ class ToolExecutor:
             'total_valor_nc': total_valor_nc,
             'total_peso_nc': total_peso_nc,
             'filas': filas,
+            'paginacion': _pagination_meta(len(filas_all), pagina, por_pagina),
             'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_TOP_CLIENTES_NC, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
@@ -669,18 +760,23 @@ class ToolExecutor:
     def _barras_ruta(self, args):
         d1, d2 = _parse_date_range(args)
         top = _int_arg(args.get('top_n'), 15, 1, 100)
+        pagina = _parse_pagina(args)
+        por_pagina = _parse_por_pagina(args)
         expr = _col_etiqueta('ruta')
         sql = (f"SELECT {expr} AS ruta, COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor"
                f" FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
                f" GROUP BY {expr} ORDER BY suma_valor DESC LIMIT {top}")
         params = {'d1': d1, 'd2': d2}
         rows = _q(self._conn, sql, params)
+        filas_all = [dict(r) for r in rows]
+        filas = _paginate_list(filas_all, pagina, por_pagina)
         q = _qs({'desde': d1, 'hasta': d2, 'top': top})
         return {
             'tabla': 'ventasgeneral',
             'tipo': 'barras_ruta',
             'periodo': {'desde': d1, 'hasta': d2},
-            'filas': [dict(r) for r in rows],
+            'filas': filas,
+            'paginacion': _pagination_meta(len(filas_all), pagina, por_pagina),
             'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_BARRAS_RUTA, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
@@ -688,6 +784,8 @@ class ToolExecutor:
     def _barras_corporativo(self, args):
         d1, d2 = _parse_date_range(args)
         top = _int_arg(args.get('top_n'), 15, 1, 100)
+        pagina = _parse_pagina(args)
+        por_pagina = _parse_por_pagina(args)
         expr = _col_etiqueta('corporativo')
         sql = (f"SELECT {expr} AS nombre_coorporativo,"
                f" MAX(COALESCE(NULLIF(TRIM(CodigoCoorporativo),''),'')) AS cod_coorporativo,"
@@ -696,12 +794,15 @@ class ToolExecutor:
                f" GROUP BY {expr} ORDER BY suma_valor DESC LIMIT {top}")
         params = {'d1': d1, 'd2': d2}
         rows = _q(self._conn, sql, params)
+        filas_all = [dict(r) for r in rows]
+        filas = _paginate_list(filas_all, pagina, por_pagina)
         q = _qs({'desde': d1, 'hasta': d2, 'top': top})
         return {
             'tabla': 'ventasgeneral',
             'tipo': 'barras_corporativo',
             'periodo': {'desde': d1, 'hasta': d2},
-            'filas': [dict(r) for r in rows],
+            'filas': filas,
+            'paginacion': _pagination_meta(len(filas_all), pagina, por_pagina),
             'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_BARRAS_CORPORATIVO, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
@@ -729,36 +830,47 @@ class ToolExecutor:
         linea = str(args.get('linea_comercial') or '').strip()
         if not linea:
             raise ValueError("Falta linea_comercial (ej. 'Pollo Vivo')")
-        top = _linea_resumen_top_arg(args.get('top_n'))
+        pagina = _parse_pagina(args)
+        por_pagina = _parse_por_pagina(args)
+        offset = _pagination_offset(pagina, por_pagina)
         cod_item = str(args.get('cod_item') or '').strip()
         mercado = str(args.get('mercado') or '').strip().upper()
         _linea_where, _linea_bind = linea_where_fragment(self._conn, linea, style='pyformat')
         _from_v2 = ' FROM ventasgeneral2' + index_hint_ventasgeneral2(self._conn, linea, 'contable')
-        sql = ("SELECT COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
-               " CodigoCliente AS cod_cliente,"
-               " MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
-               " COUNT(*) AS lineas,"
-               " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
-               " COALESCE(SUM(Peso),0) AS suma_peso,"
-               " COALESCE(SUM(Valor),0) AS suma_valor"
-               + _from_v2
-               + " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
-               + _linea_where)
+
+        where_sql = (_from_v2
+                     + " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+                     + _linea_where)
         params = {'d1': d1, 'd2': d2, **_linea_bind}
         if cod_item:
-            sql += " AND CodigoItem = %(cod_item)s"
+            where_sql += " AND CodigoItem = %(cod_item)s"
             params['cod_item'] = cod_item
         if mercado:
-            sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(prefzo)s"
+            where_sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(prefzo)s"
             params['prefzo'] = mercado + '%'
-        sql += " GROUP BY provincia, CodigoCliente ORDER BY suma_peso DESC"
-        if top is not None:
-            sql += f" LIMIT {top}"
-        rows = _q(self._conn, sql, params)
+
+        group_by = " GROUP BY provincia, CodigoCliente"
+        sql_count = (
+            "SELECT COUNT(*) AS total FROM (SELECT 1"
+            + where_sql + group_by + ") AS sub"
+        )
+        total_rows = _count_query(self._conn, sql_count, params)
+
+        sql_select = (
+            "SELECT COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
+            " CodigoCliente AS cod_cliente,"
+            " MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
+            " COUNT(*) AS lineas,"
+            " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
+            " COALESCE(SUM(Peso),0) AS suma_peso,"
+            " COALESCE(SUM(Valor),0) AS suma_valor"
+            + where_sql + group_by
+            + f" ORDER BY suma_peso DESC LIMIT {por_pagina} OFFSET {offset}"
+        )
+        rows = _q(self._conn, sql_select, params)
         qparams = {'desde': d1, 'hasta': d2, 'linea': linea,
-                   'cod_item': cod_item or None, 'mercado': mercado or None}
-        if top is not None:
-            qparams['top'] = top
+                   'cod_item': cod_item or None, 'mercado': mercado or None,
+                   'pagina': pagina, 'por_pagina': por_pagina}
         q = _qs(qparams)
         return {
             'tabla': 'ventasgeneral',
@@ -766,8 +878,12 @@ class ToolExecutor:
             'linea_comercial': linea,
             'periodo': {'desde': d1, 'hasta': d2},
             'filas': [dict(r) for r in rows],
+            'paginacion': _pagination_meta(total_rows, pagina, por_pagina),
             'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_LINEA_RESUMEN_PROVINCIA, q),
-            '_sql_traces': [{'sql': sql, 'params': params}],
+            '_sql_traces': [
+                {'sql': sql_count, 'params': params},
+                {'sql': sql_select, 'params': params},
+            ],
         }
 
     def _linea_diario_provincia(self, args):
@@ -775,41 +891,60 @@ class ToolExecutor:
         linea = str(args.get('linea_comercial') or '').strip()
         if not linea:
             raise ValueError("Falta linea_comercial (ej. 'Pollo Vivo')")
-        top = _int_arg(args.get('top_n'), 200, 1, 1000)
+        pagina = _parse_pagina(args)
+        por_pagina = _parse_por_pagina(args)
+        offset = _pagination_offset(pagina, por_pagina)
         cod_item = str(args.get('cod_item') or '').strip()
         mercado = str(args.get('mercado') or '').strip().upper()
         _linea_where, _linea_bind = linea_where_fragment(self._conn, linea, style='pyformat')
         _from_v2 = ' FROM ventasgeneral2' + index_hint_ventasgeneral2(self._conn, linea, 'contable')
-        sql = ("SELECT FechaContable AS fecha,"
-               " COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
-               " CodigoCliente AS cod_cliente,"
-               " MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
-               " COUNT(*) AS lineas,"
-               " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
-               " COALESCE(SUM(Peso),0) AS suma_peso,"
-               " COALESCE(SUM(Valor),0) AS suma_valor"
-               + _from_v2
-               + " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
-               + _linea_where)
+
+        where_sql = (_from_v2
+                     + " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+                     + _linea_where)
         params = {'d1': d1, 'd2': d2, **_linea_bind}
         if cod_item:
-            sql += " AND CodigoItem = %(cod_item)s"
+            where_sql += " AND CodigoItem = %(cod_item)s"
             params['cod_item'] = cod_item
         if mercado:
-            sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(prefzo)s"
+            where_sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(prefzo)s"
             params['prefzo'] = mercado + '%'
-        sql += f" GROUP BY fecha, provincia, CodigoCliente ORDER BY fecha ASC, suma_peso DESC LIMIT {top}"
-        rows = _q(self._conn, sql, params)
-        q = _qs({'desde': d1, 'hasta': d2, 'linea': linea, 'top': top,
-                 'cod_item': cod_item or None, 'mercado': mercado or None})
+
+        group_by = " GROUP BY FechaContable, provincia, CodigoCliente"
+        sql_count = (
+            "SELECT COUNT(*) AS total FROM (SELECT 1"
+            + where_sql + group_by + ") AS sub"
+        )
+        total_rows = _count_query(self._conn, sql_count, params)
+
+        sql_select = (
+            "SELECT FechaContable AS fecha,"
+            " COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
+            " CodigoCliente AS cod_cliente,"
+            " MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
+            " COUNT(*) AS lineas,"
+            " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
+            " COALESCE(SUM(Peso),0) AS suma_peso,"
+            " COALESCE(SUM(Valor),0) AS suma_valor"
+            + where_sql + group_by
+            + f" ORDER BY fecha ASC, suma_peso DESC LIMIT {por_pagina} OFFSET {offset}"
+        )
+        rows = _q(self._conn, sql_select, params)
+        q = _qs({'desde': d1, 'hasta': d2, 'linea': linea,
+                 'cod_item': cod_item or None, 'mercado': mercado or None,
+                 'pagina': pagina, 'por_pagina': por_pagina})
         return {
             'tabla': 'ventasgeneral',
             'tipo': 'linea_diario_provincia_cliente',
             'linea_comercial': linea,
             'periodo': {'desde': d1, 'hasta': d2},
             'filas': [dict(r) for r in rows],
+            'paginacion': _pagination_meta(total_rows, pagina, por_pagina),
             'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_LINEA_DIARIO_PROVINCIA, q),
-            '_sql_traces': [{'sql': sql, 'params': params}],
+            '_sql_traces': [
+                {'sql': sql_count, 'params': params},
+                {'sql': sql_select, 'params': params},
+            ],
         }
 
     def _linea_precio_diario(self, args):
@@ -817,43 +952,62 @@ class ToolExecutor:
         linea = str(args.get('linea_comercial') or '').strip()
         if not linea:
             raise ValueError("Falta linea_comercial (ej. 'Pollo Vivo')")
-        top = _int_arg(args.get('top_n'), 200, 1, 1000)
+        pagina = _parse_pagina(args)
+        por_pagina = _parse_por_pagina(args)
+        offset = _pagination_offset(pagina, por_pagina)
         cod_item = str(args.get('cod_item') or '').strip()
         mercado = str(args.get('mercado') or '').strip().upper()
         _linea_where, _linea_bind = linea_where_fragment(self._conn, linea, style='pyformat')
         _from_v2 = ' FROM ventasgeneral2' + index_hint_ventasgeneral2(self._conn, linea, 'contable')
-        sql = ("SELECT FechaContable AS fecha,"
-               " COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
-               " CodigoCliente AS cod_cliente,"
-               " MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
-               " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
-               " COALESCE(SUM(Peso),0) AS suma_peso,"
-               " COALESCE(SUM(Valor),0) AS suma_valor,"
-               " CASE WHEN COALESCE(SUM(Peso),0) > 0"
-               "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
-               "      ELSE NULL END AS precio_kg"
-               + _from_v2
-               + " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
-               + _linea_where)
+
+        where_sql = (_from_v2
+                     + " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+                     + _linea_where)
         params = {'d1': d1, 'd2': d2, **_linea_bind}
         if cod_item:
-            sql += " AND CodigoItem = %(cod_item)s"
+            where_sql += " AND CodigoItem = %(cod_item)s"
             params['cod_item'] = cod_item
         if mercado:
-            sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(prefzo)s"
+            where_sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(prefzo)s"
             params['prefzo'] = mercado + '%'
-        sql += f" GROUP BY fecha, provincia, CodigoCliente ORDER BY fecha ASC, suma_peso DESC LIMIT {top}"
-        rows = _q(self._conn, sql, params)
-        q = _qs({'desde': d1, 'hasta': d2, 'linea': linea, 'top': top,
-                 'cod_item': cod_item or None, 'mercado': mercado or None})
+
+        group_by = " GROUP BY FechaContable, provincia, CodigoCliente"
+        sql_count = (
+            "SELECT COUNT(*) AS total FROM (SELECT 1"
+            + where_sql + group_by + ") AS sub"
+        )
+        total_rows = _count_query(self._conn, sql_count, params)
+
+        sql_select = (
+            "SELECT FechaContable AS fecha,"
+            " COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
+            " CodigoCliente AS cod_cliente,"
+            " MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
+            " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
+            " COALESCE(SUM(Peso),0) AS suma_peso,"
+            " COALESCE(SUM(Valor),0) AS suma_valor,"
+            " CASE WHEN COALESCE(SUM(Peso),0) > 0"
+            "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
+            "      ELSE NULL END AS precio_kg"
+            + where_sql + group_by
+            + f" ORDER BY fecha ASC, suma_peso DESC LIMIT {por_pagina} OFFSET {offset}"
+        )
+        rows = _q(self._conn, sql_select, params)
+        q = _qs({'desde': d1, 'hasta': d2, 'linea': linea,
+                 'cod_item': cod_item or None, 'mercado': mercado or None,
+                 'pagina': pagina, 'por_pagina': por_pagina})
         return {
             'tabla': 'ventasgeneral',
             'tipo': 'linea_precio_diario_provincia_cliente',
             'linea_comercial': linea,
             'periodo': {'desde': d1, 'hasta': d2},
             'filas': [dict(r) for r in rows],
+            'paginacion': _pagination_meta(total_rows, pagina, por_pagina),
             'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_LINEA_PRECIO_DIARIO, q),
-            '_sql_traces': [{'sql': sql, 'params': params}],
+            '_sql_traces': [
+                {'sql': sql_count, 'params': params},
+                {'sql': sql_select, 'params': params},
+            ],
         }
 
     def _linea_precio_resumen_provincia(self, args):

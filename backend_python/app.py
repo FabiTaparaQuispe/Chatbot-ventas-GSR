@@ -25,6 +25,7 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 from routes.auth import bp as auth_bp
 from routes.pages import bp as pages_bp
 from routes.api.chat import bp as chat_bp
+from routes.api.chat_route import bp as chat_route_bp
 from routes.api.chat_threads import bp as chat_threads_bp
 from routes.api.ventas_dt import bp as ventas_dt_bp
 from routes.api.chat_script import bp as chat_script_bp
@@ -35,6 +36,7 @@ from routes.reports_modules import bp as reports_modules_bp
 app.register_blueprint(auth_bp)
 app.register_blueprint(pages_bp)
 app.register_blueprint(chat_bp)
+app.register_blueprint(chat_route_bp)
 app.register_blueprint(chat_threads_bp)
 app.register_blueprint(ventas_dt_bp)
 app.register_blueprint(chat_script_bp)
