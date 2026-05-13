@@ -1,0 +1,113 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+    <h1>Top {{ top }} productos</h1>
+    <p class="page-lead">FechaContable del <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong> · ranking por importe total (S/).</p>
+</div>
+
+<div class="reporte-page">
+    <div class="card-filtros-demo reporte-informe-panel">
+        <div class="reporte-informe-toolbar">
+            <button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button>
+        </div>
+        <div id="reporte-pdf-root">
+            <h2 class="reporte-informe-title">Top {{ top }} productos por importe</h2>
+            <p class="reporte-informe-meta">Importe total período: <strong>S/ {{ total_valor }}</strong></p>
+
+            {% if filas %}
+            <div class="table-wrapper overflow-x-auto productos-dt-skin">
+                <table class="data-table config-table display stripe rct-auto">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Código ítem</th>
+                            <th>Descripción</th>
+                            <th style="text-align:right;">Líneas</th>
+                            <th style="text-align:right;">Cantidad</th>
+                            <th style="text-align:right;">Importe (S/)</th>
+                            <th style="text-align:right;">% del total</th>
+                            <th style="text-align:right;">% acumulado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in filas %}
+                        <tr>
+                            <td>{{ f.rank }}</td>
+                            <td>{{ f.cod_item }}</td>
+                            <td>{{ f.glosa }}</td>
+                            <td style="text-align:right;">{{ f.lineas }}</td>
+                            <td style="text-align:right;">{{ f.suma_cantidad }}</td>
+                            <td style="text-align:right;">{{ f.suma_valor }}</td>
+                            <td style="text-align:right;">{{ f.pct_del_total }}%</td>
+                            <td style="text-align:right;">{{ f.pct_acumulado }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <th colspan="5" style="text-align:right;">Total período</th>
+                            <th style="text-align:right;">{{ total_valor }}</th>
+                            <th></th><th></th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            {% else %}
+            <p style="color:var(--muted);">No se encontraron registros en el período seleccionado.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if filas %}
+    <section class="reporte-chart-section" aria-label="Gráfico productos">
+        <h3 class="reporte-chart-heading">Importe por producto · Pareto</h3>
+        <div class="chart-inner"><canvas id="chartPareto"></canvas></div>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/chart_reporte_datalabels.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/reporte_pdf.js"></script>
+<script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
+<script>
+(function () {
+    var d = {{ chart_data | tojson }};
+    var legCol = typeof reporteChartLegendColor === 'function' ? reporteChartLegendColor() : '#1e293b';
+    var anim = window.reporteChartAnimate || {};
+    function build() {
+        if (!window.Chart) return;
+        var ctx = document.getElementById('chartPareto');
+        if (!ctx || !d.labels) return;
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: d.labels,
+                datasets: [
+                    { label: 'Importe S/', data: d.valores, backgroundColor: 'rgba(16,185,129,0.65)', borderColor: 'rgba(16,185,129,1)', borderWidth: 1, yAxisID: 'y', order: 2 },
+                    { type: 'line', label: '% acumulado', data: d.pct_acum, borderColor: 'rgba(248,113,113,1)', backgroundColor: 'rgba(248,113,113,0.15)', borderWidth: 2, tension: 0.15, yAxisID: 'y1', order: 1, pointRadius: 3 },
+                ],
+            },
+            options: Object.assign({}, anim, {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { labels: { color: legCol, boxWidth: 14 } },
+                    tooltip: { callbacks: { label: function(c) { var v=c.parsed.y; return c.dataset.label+(c.dataset.yAxisID==='y1'?': '+(v!=null?v.toFixed(1):'')+' %':': S/ '+(v!=null?v.toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}):'')); } } },
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8', maxRotation: 35, font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                    y: { type: 'linear', position: 'left', ticks: { color: '#94a3b8', callback: function(v){return 'S/ '+v.toLocaleString('es-PE');} }, grid: { color: 'rgba(148,163,184,0.15)' }, title: { display: true, text: 'Importe S/', color: '#94a3b8', font: { size: 11 } } },
+                    y1: { type: 'linear', position: 'right', min: 0, max: 100, ticks: { color: '#fca5a5', callback: function(v){return v+'%';} }, grid: { drawOnChartArea: false }, title: { display: true, text: '% acumulado', color: '#fca5a5', font: { size: 11 } } },
+                },
+            }),
+        });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
+    else build();
+})();
+</script>
+{% endblock %}

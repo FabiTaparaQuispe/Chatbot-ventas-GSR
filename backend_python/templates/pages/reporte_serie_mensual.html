@@ -1,0 +1,106 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+    <h1>Serie mensual de ventas</h1>
+    <p class="page-lead">FechaContable del <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong> · importe total agrupado por mes.</p>
+</div>
+
+<div class="reporte-page">
+    <div class="card-filtros-demo reporte-informe-panel">
+        <div class="reporte-informe-toolbar">
+            <button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button>
+        </div>
+        <div id="reporte-pdf-root">
+            <h2 class="reporte-informe-title">Importe mensual</h2>
+            <p class="reporte-informe-meta">
+                Total período: <strong>S/ {{ total_valor }}</strong> ·
+                Líneas totales: <strong>{{ total_lineas }}</strong>
+            </p>
+
+            {% if filas %}
+            <div class="table-wrapper overflow-x-auto productos-dt-skin">
+                <table class="data-table config-table display stripe rct-auto">
+                    <thead>
+                        <tr>
+                            <th>Mes</th>
+                            <th style="text-align:right;">Líneas</th>
+                            <th style="text-align:right;">Importe (S/)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in filas %}
+                        <tr>
+                            <td>{{ f.mes }}</td>
+                            <td style="text-align:right;">{{ f.lineas }}</td>
+                            <td style="text-align:right;">{{ f.suma_valor }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <th style="text-align:right;">Total</th>
+                            <th style="text-align:right;">{{ total_lineas }}</th>
+                            <th style="text-align:right;">{{ total_valor }}</th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            {% else %}
+            <p style="color:var(--muted);">No se encontraron registros en el período seleccionado.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if filas %}
+    <section class="reporte-chart-section" aria-label="Gráfico serie mensual">
+        <h3 class="reporte-chart-heading">Importe mensual (S/)</h3>
+        <div class="chart-inner"><canvas id="chartSerie"></canvas></div>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/chart_reporte_datalabels.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/reporte_pdf.js"></script>
+<script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
+<script>
+(function () {
+    var d = {{ chart_data | tojson }};
+    var legCol = typeof reporteChartLegendColor === 'function' ? reporteChartLegendColor() : '#1e293b';
+    var anim = window.reporteChartAnimate || {};
+    function build() {
+        if (!window.Chart) return;
+        var ctx = document.getElementById('chartSerie');
+        if (!ctx || !d.labels) return;
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: d.labels,
+                datasets: [
+                    { label: 'Importe S/', data: d.valores, borderColor: 'rgba(59,130,246,1)', backgroundColor: 'rgba(59,130,246,0.12)', borderWidth: 2, tension: 0.25, fill: true, pointRadius: 4, yAxisID: 'y', order: 1 },
+                    { type: 'bar', label: 'Líneas', data: d.lineas, backgroundColor: 'rgba(16,185,129,0.45)', borderColor: 'rgba(16,185,129,0.8)', borderWidth: 1, yAxisID: 'y2', order: 2 },
+                ],
+            },
+            options: Object.assign({}, anim, {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { labels: { color: legCol, boxWidth: 14 } },
+                    tooltip: { callbacks: { label: function(c) { var v=c.parsed.y; if(c.dataset.yAxisID==='y') return 'Importe: S/ '+(v!=null?v.toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}):''); return 'Líneas: '+(v!=null?v.toLocaleString('es-PE'):''); } } },
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                    y: { type: 'linear', position: 'left', ticks: { color: '#94a3b8', callback: function(v){return 'S/ '+v.toLocaleString('es-PE');} }, grid: { color: 'rgba(148,163,184,0.15)' }, title: { display: true, text: 'Importe S/', color: '#94a3b8', font: { size: 11 } } },
+                    y2: { type: 'linear', position: 'right', ticks: { color: '#6ee7b7' }, grid: { drawOnChartArea: false }, title: { display: true, text: 'Líneas', color: '#6ee7b7', font: { size: 11 } } },
+                },
+            }),
+        });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
+    else build();
+})();
+</script>
+{% endblock %}

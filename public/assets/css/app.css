@@ -1392,7 +1392,8 @@ html[data-theme="dark"] .select2-container--default .select2-results__option.sel
 .table-wrapper {
     overflow-x: auto;
 }
-.productos-dt-skin .table-wrapper {
+.productos-dt-skin .table-wrapper,
+.table-wrapper.productos-dt-skin {
     border-radius: 0.75rem;
     overflow: hidden;
     border: 1px solid var(--border);

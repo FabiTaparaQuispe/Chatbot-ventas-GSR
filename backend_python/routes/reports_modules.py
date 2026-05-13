@@ -21,20 +21,16 @@ from services.urlmap import (
 bp = Blueprint('reports_modules', __name__)
 
 # Slugs alineados con services.urlmap + tool_executor (informes pendientes de portar)
-REPORT_PLACEHOLDER_SLUGS = frozenset(
-    {
-        'pareto-nc-zona',
-        'pareto-clientes-zona',
-        'ventas-barras-dimension',
-        'ventas-comparativo',
-        'ventas-top-productos',
-        'ventas-top-clientes-global',
-        'ventas-mix-tdoc',
-        'ventas-barras-ruta',
-        'ventas-barras-corporativo',
-        'ventas-serie-mensual',
-    }
-)
+REPORT_PLACEHOLDER_SLUGS: frozenset = frozenset()
+
+_TDOC_LABELS: dict[str, str] = {
+    '01': 'Factura', '03': 'Boleta de venta', '07': 'Nota de crédito',
+    '08': 'Nota de débito', '09': 'Guía de remisión', '12': 'Ticket',
+}
+
+
+def _tdoc_label(code: str) -> str:
+    return _TDOC_LABELS.get(str(code).strip(), f'TDoc {code}')
 
 
 def _report_shell_context(page_title: str) -> dict[str, Any]:
@@ -589,11 +585,28 @@ def ventasgeneral_resumen_tabla():
         sql += ' AND TipoDocumento LIKE :tdoctipo'
         bind['tdoctipo'] = f'%{tdoctipo}%'
 
+    # Reuse same WHERE conditions for daily breakdown chart
+    where_suffix = sql[sql.index('WHERE'):]
+    sql_daily = ("SELECT FechaContable AS fecha,"
+                 " COALESCE(SUM(Valor),0) AS suma_valor, COUNT(*) AS lineas"
+                 " FROM ventasgeneral2 " + where_suffix
+                 + " GROUP BY FechaContable ORDER BY FechaContable")
+
     conn = get_connection()
     sql_exec = _colon_params_to_pymysql(sql)
     with conn.cursor() as cur:
         cur.execute(sql_exec, bind)
         row = cur.fetchone() or {}
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql_daily), bind)
+        raw_daily = cur.fetchall() or []
+
+    chart_fechas: list = []
+    chart_diario: list = []
+    for r in raw_daily:
+        fecha = r.get('fecha')
+        chart_fechas.append(fecha.strftime('%Y-%m-%d') if hasattr(fecha, 'strftime') else str(fecha or ''))
+        chart_diario.append(round(float(r.get('suma_valor') or 0), 2))
 
     pdf_filename = f'resumen_ventasgeneral_{d1}_{d2}.pdf'
     ctx = _report_shell_context('Resumen agregados')
@@ -608,6 +621,7 @@ def ventasgeneral_resumen_tabla():
             'r_cant': f"{float(row.get('suma_cantidad') or 0):,.2f}",
             'r_peso': f"{float(row.get('suma_peso') or 0):,.2f}",
             'pdf_filename': pdf_filename,
+            'chart_data': {'fechas': chart_fechas, 'diario': chart_diario},
         }
     )
     return render_template('pages/reporte_resumen_tabla.html', **ctx)
@@ -1596,6 +1610,25 @@ def ventas_linea_precio_resumen_provincia():
     where_linea_sql, where_linea_bind = linea_where_fragment(conn, linea)
     _from_v2_suffix = index_hint_ventasgeneral2(conn, linea, tipo_fecha)
 
+    # Lista de provincias disponibles para el filtro del formulario (sin filtrar por provincia)
+    _bind_base: dict = {'d1': d1, 'd2': d2, **where_linea_bind}
+    if cod_item:
+        _bind_base['cod_item'] = cod_item
+    if mercado:
+        _bind_base['prefzo'] = mercado + '%'
+    _sql_provs = (
+        f"SELECT DISTINCT COALESCE(NULLIF(TRIM(Provincia),''),'') AS prov"
+        f" FROM ventasgeneral2{_from_v2_suffix}"
+        f" WHERE {fe} BETWEEN :d1 AND :d2"
+        + where_linea_sql
+        + (' AND CodigoItem = :cod_item' if cod_item else '')
+        + (" AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzo" if mercado else '')
+        + " AND TRIM(COALESCE(Provincia,'')) <> '' ORDER BY prov"
+    )
+    with conn.cursor() as _cur:
+        _cur.execute(_colon_params_to_pymysql(_sql_provs), _bind_base)
+        provincias_opts = [str(r.get('prov') or '').strip() for r in (_cur.fetchall() or []) if (r.get('prov') or '').strip()]
+
     # Tabla agregada por provincia
     sql = (f"SELECT"
            " COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
@@ -1709,6 +1742,8 @@ def ventas_linea_precio_resumen_provincia():
             'fechas': chart_fechas,
             'precios_dia': chart_precios_dia,
         },
+        'provincias_opts': provincias_opts,
+        'provincia_filtro': provincia_filtro,
         'body_class': 'app-page-reporte-wide',
     })
 
@@ -1726,6 +1761,643 @@ def ventas_linea_precio_resumen_provincia():
         })
 
     return render_template('pages/reporte_linea_precio_resumen_provincia.html', **ctx)
+
+
+@bp.route('/modules/reports/ventas-top-clientes-global')
+@require_login
+def ventas_top_clientes_global():
+    from services.db import get_connection
+
+    d1 = _parse_date_string(request.args.get('desde') or request.args.get('fecha_desde'))
+    d2 = _parse_date_string(request.args.get('hasta') or request.args.get('fecha_hasta'))
+    if not d1 or not d2 or d1 > d2:
+        return _bad('Parámetros requeridos: desde y hasta (YYYY-MM-DD).')
+    try:
+        top = max(1, min(100, int(request.args.get('top') or 10)))
+    except (TypeError, ValueError):
+        top = 10
+
+    sql = ("SELECT CodigoCliente AS cod_cliente,"
+           " MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
+           " COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor"
+           " FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2"
+           f" GROUP BY CodigoCliente ORDER BY suma_valor DESC LIMIT {top}")
+    sql_tot = ("SELECT COALESCE(SUM(Valor),0) AS t"
+               " FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2")
+    bind = {'d1': d1, 'd2': d2}
+
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql), bind)
+        raw = cur.fetchall() or []
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql_tot), bind)
+        tot = cur.fetchone() or {}
+
+    total = float(tot.get('t') or 0)
+    cum = 0.0
+    filas = []
+    chart_labels: list = []
+    chart_valores: list = []
+    chart_pct_acum: list = []
+    for i, r in enumerate(raw, 1):
+        sv = float(r.get('suma_valor') or 0)
+        pct = sv / total * 100 if total else 0.0
+        cum += pct
+        nombre = str(r.get('nombre_cliente') or '')
+        chart_labels.append(nombre[:30])
+        chart_valores.append(round(sv, 2))
+        chart_pct_acum.append(round(cum, 1))
+        filas.append({
+            'rank': i,
+            'cod_cliente': str(r.get('cod_cliente') or ''),
+            'nombre_cliente': nombre,
+            'lineas': int(r.get('lineas') or 0),
+            'suma_valor': f'{sv:,.2f}',
+            'pct_del_total': f'{pct:.1f}',
+            'pct_acumulado': f'{cum:.1f}',
+        })
+
+    ctx = _report_shell_context(f'Top {top} clientes · Global')
+    ctx.update({
+        'd1': d1, 'd2': d2, 'top': top,
+        'filas': filas,
+        'total_valor': f'{total:,.2f}',
+        'pdf_filename': f'top_clientes_global_{d1}_{d2}.pdf',
+        'chart_data': {'labels': chart_labels, 'valores': chart_valores, 'pct_acum': chart_pct_acum},
+    })
+    return render_template('pages/reporte_top_clientes_global.html', **ctx)
+
+
+@bp.route('/modules/reports/ventas-top-productos')
+@require_login
+def ventas_top_productos():
+    from services.db import get_connection
+
+    d1 = _parse_date_string(request.args.get('desde') or request.args.get('fecha_desde'))
+    d2 = _parse_date_string(request.args.get('hasta') or request.args.get('fecha_hasta'))
+    if not d1 or not d2 or d1 > d2:
+        return _bad('Parámetros requeridos: desde y hasta (YYYY-MM-DD).')
+    try:
+        top = max(1, min(100, int(request.args.get('top') or 15)))
+    except (TypeError, ValueError):
+        top = 15
+
+    sql = ("SELECT CodigoItem AS cod_item,"
+           " MAX(COALESCE(NULLIF(TRIM(GlosaDetalle),''),'(sin glosa)')) AS glosa,"
+           " COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor,"
+           " COALESCE(SUM(Cantidad),0) AS suma_cantidad"
+           " FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2"
+           f" GROUP BY CodigoItem ORDER BY suma_valor DESC LIMIT {top}")
+    sql_tot = ("SELECT COALESCE(SUM(Valor),0) AS t"
+               " FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2")
+    bind = {'d1': d1, 'd2': d2}
+
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql), bind)
+        raw = cur.fetchall() or []
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql_tot), bind)
+        tot = cur.fetchone() or {}
+
+    total = float(tot.get('t') or 0)
+    cum = 0.0
+    filas = []
+    chart_labels: list = []
+    chart_valores: list = []
+    chart_pct_acum: list = []
+    for i, r in enumerate(raw, 1):
+        sv = float(r.get('suma_valor') or 0)
+        pct = sv / total * 100 if total else 0.0
+        cum += pct
+        glosa = str(r.get('glosa') or r.get('cod_item') or '')
+        chart_labels.append(glosa[:28])
+        chart_valores.append(round(sv, 2))
+        chart_pct_acum.append(round(cum, 1))
+        filas.append({
+            'rank': i,
+            'cod_item': str(r.get('cod_item') or ''),
+            'glosa': glosa,
+            'lineas': int(r.get('lineas') or 0),
+            'suma_cantidad': f"{float(r.get('suma_cantidad') or 0):,.2f}",
+            'suma_valor': f'{sv:,.2f}',
+            'pct_del_total': f'{pct:.1f}',
+            'pct_acumulado': f'{cum:.1f}',
+        })
+
+    ctx = _report_shell_context(f'Top {top} productos')
+    ctx.update({
+        'd1': d1, 'd2': d2, 'top': top,
+        'filas': filas,
+        'total_valor': f'{total:,.2f}',
+        'pdf_filename': f'top_productos_{d1}_{d2}.pdf',
+        'chart_data': {'labels': chart_labels, 'valores': chart_valores, 'pct_acum': chart_pct_acum},
+    })
+    return render_template('pages/reporte_top_productos.html', **ctx)
+
+
+@bp.route('/modules/reports/ventas-serie-mensual')
+@require_login
+def ventas_serie_mensual():
+    from services.db import get_connection
+
+    d1 = _parse_date_string(request.args.get('desde') or request.args.get('fecha_desde'))
+    d2 = _parse_date_string(request.args.get('hasta') or request.args.get('fecha_hasta'))
+    if not d1 or not d2 or d1 > d2:
+        return _bad('Parámetros requeridos: desde y hasta (YYYY-MM-DD).')
+
+    sql = ("SELECT DATE_FORMAT(FechaContable, '%%Y-%%m') AS mes,"
+           " COALESCE(SUM(Valor),0) AS suma_valor, COUNT(*) AS lineas"
+           " FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2"
+           " GROUP BY DATE_FORMAT(FechaContable, '%%Y-%%m') ORDER BY mes")
+    bind = {'d1': d1, 'd2': d2}
+
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql), bind)
+        raw = cur.fetchall() or []
+
+    filas = []
+    chart_labels: list = []
+    chart_valores: list = []
+    chart_lineas: list = []
+    total_valor = 0.0
+    total_lineas = 0
+    for r in raw:
+        sv = float(r.get('suma_valor') or 0)
+        ln = int(r.get('lineas') or 0)
+        mes = str(r.get('mes') or '')
+        total_valor += sv
+        total_lineas += ln
+        chart_labels.append(mes)
+        chart_valores.append(round(sv, 2))
+        chart_lineas.append(ln)
+        filas.append({'mes': mes, 'lineas': ln, 'suma_valor': f'{sv:,.2f}'})
+
+    ctx = _report_shell_context('Serie mensual de ventas')
+    ctx.update({
+        'd1': d1, 'd2': d2,
+        'filas': filas,
+        'total_valor': f'{total_valor:,.2f}',
+        'total_lineas': total_lineas,
+        'pdf_filename': f'serie_mensual_{d1}_{d2}.pdf',
+        'chart_data': {'labels': chart_labels, 'valores': chart_valores, 'lineas': chart_lineas},
+    })
+    return render_template('pages/reporte_serie_mensual.html', **ctx)
+
+
+@bp.route('/modules/reports/ventas-mix-tdoc')
+@require_login
+def ventas_mix_tdoc():
+    from services.db import get_connection
+
+    d1 = _parse_date_string(request.args.get('desde') or request.args.get('fecha_desde'))
+    d2 = _parse_date_string(request.args.get('hasta') or request.args.get('fecha_hasta'))
+    if not d1 or not d2 or d1 > d2:
+        return _bad('Parámetros requeridos: desde y hasta (YYYY-MM-DD).')
+
+    sql = ("SELECT COALESCE(NULLIF(TRIM(CodigoDocumento),''),'(sin TDoc)') AS tdoc,"
+           " COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor"
+           " FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2"
+           " GROUP BY COALESCE(NULLIF(TRIM(CodigoDocumento),''),'(sin TDoc)')"
+           " ORDER BY suma_valor DESC")
+    bind = {'d1': d1, 'd2': d2}
+
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql), bind)
+        raw = cur.fetchall() or []
+
+    total = sum(float(r.get('suma_valor') or 0) for r in raw)
+    filas = []
+    chart_labels: list = []
+    chart_valores: list = []
+    for r in raw:
+        sv = float(r.get('suma_valor') or 0)
+        tdoc = str(r.get('tdoc') or '')
+        label = _tdoc_label(tdoc)
+        pct = sv / total * 100 if total else 0.0
+        chart_labels.append(label)
+        chart_valores.append(round(sv, 2))
+        filas.append({
+            'tdoc': tdoc,
+            'label': label,
+            'lineas': int(r.get('lineas') or 0),
+            'suma_valor': f'{sv:,.2f}',
+            'pct_del_total': f'{pct:.1f}',
+        })
+
+    ctx = _report_shell_context('Mix por tipo de documento')
+    ctx.update({
+        'd1': d1, 'd2': d2,
+        'filas': filas,
+        'total_valor': f'{total:,.2f}',
+        'pdf_filename': f'mix_tdoc_{d1}_{d2}.pdf',
+        'chart_data': {'labels': chart_labels, 'valores': chart_valores},
+    })
+    return render_template('pages/reporte_mix_tdoc.html', **ctx)
+
+
+@bp.route('/modules/reports/pareto-nc-zona')
+@require_login
+def pareto_nc_zona():
+    from services.db import get_connection
+
+    d1 = _parse_date_string(request.args.get('desde') or request.args.get('fecha_desde'))
+    d2 = _parse_date_string(request.args.get('hasta') or request.args.get('fecha_hasta'))
+    if not d1 or not d2 or d1 > d2:
+        return _bad('Parámetros requeridos: desde y hasta (YYYY-MM-DD).')
+    try:
+        max_z = max(1, min(200, int(request.args.get('max') or 50)))
+    except (TypeError, ValueError):
+        max_z = 50
+
+    sql = ("SELECT COALESCE(NULLIF(TRIM(DescripcionZonaPrecio),''),'(sin zona)') AS zona,"
+           " COUNT(*) AS lineas_nc,"
+           " COALESCE(SUM(ABS(Valor)),0) AS impacto_abs_valor"
+           " FROM ventasgeneral2"
+           " WHERE FechaContable BETWEEN :d1 AND :d2 AND CodigoDocumento = '07'"
+           " GROUP BY COALESCE(NULLIF(TRIM(DescripcionZonaPrecio),''),'(sin zona)')"
+           f" ORDER BY impacto_abs_valor DESC LIMIT {max_z}")
+    bind = {'d1': d1, 'd2': d2}
+
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql), bind)
+        raw = cur.fetchall() or []
+
+    total = sum(float(r.get('impacto_abs_valor') or 0) for r in raw)
+    cum = 0.0
+    filas = []
+    chart_labels: list = []
+    chart_valores: list = []
+    chart_pct_acum: list = []
+    for i, r in enumerate(raw, 1):
+        imp = float(r.get('impacto_abs_valor') or 0)
+        pct = imp / total * 100 if total else 0.0
+        cum += pct
+        zona = str(r.get('zona') or '')
+        chart_labels.append(zona[:25])
+        chart_valores.append(round(imp, 2))
+        chart_pct_acum.append(round(cum, 1))
+        filas.append({
+            'rank': i,
+            'zona': zona,
+            'lineas_nc': int(r.get('lineas_nc') or 0),
+            'impacto_abs_valor': f'{imp:,.2f}',
+            'pct_del_total': f'{pct:.1f}',
+            'pct_acumulado': f'{cum:.1f}',
+        })
+
+    ctx = _report_shell_context('Pareto NC · Zona precio')
+    ctx.update({
+        'd1': d1, 'd2': d2, 'max_z': max_z,
+        'filas': filas,
+        'total_impacto': f'{total:,.2f}',
+        'pdf_filename': f'pareto_nc_zona_{d1}_{d2}.pdf',
+        'chart_data': {'labels': chart_labels, 'valores': chart_valores, 'pct_acum': chart_pct_acum},
+    })
+    return render_template('pages/reporte_pareto_nc_zona.html', **ctx)
+
+
+@bp.route('/modules/reports/pareto-clientes-zona')
+@require_login
+def pareto_clientes_zona():
+    from services.db import get_connection
+
+    d1 = _parse_date_string(request.args.get('desde') or request.args.get('fecha_desde'))
+    d2 = _parse_date_string(request.args.get('hasta') or request.args.get('fecha_hasta'))
+    if not d1 or not d2 or d1 > d2:
+        return _bad('Parámetros requeridos: desde y hasta (YYYY-MM-DD).')
+
+    pref = (request.args.get('prefijo') or request.args.get('prefijo_descri_zona_precio') or '').strip().upper()
+    if not pref:
+        return _bad('Parámetro requerido: prefijo (ej. TACNA).')
+
+    try:
+        top = max(1, min(100, int(request.args.get('top') or 10)))
+    except (TypeError, ValueError):
+        top = 10
+
+    like = pref + '%'
+    sql_tot = ("SELECT COALESCE(SUM(Valor),0) AS t FROM ventasgeneral2"
+               " WHERE FechaContable BETWEEN :d1 AND :d2"
+               " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :pref")
+    sql = ("SELECT CodigoCliente AS cod_cliente,"
+           " MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
+           " COALESCE(SUM(Valor),0) AS suma_valor, COUNT(*) AS lineas_venta"
+           " FROM ventasgeneral2"
+           " WHERE FechaContable BETWEEN :d1 AND :d2"
+           " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :pref"
+           f" GROUP BY CodigoCliente ORDER BY suma_valor DESC LIMIT {top}")
+    bind = {'d1': d1, 'd2': d2, 'pref': like}
+
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql_tot), bind)
+        tot = cur.fetchone() or {}
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql), bind)
+        raw = cur.fetchall() or []
+
+    total_zona = float(tot.get('t') or 0)
+    cum = 0.0
+    filas = []
+    chart_labels: list = []
+    chart_valores: list = []
+    chart_pct_acum: list = []
+    for i, r in enumerate(raw, 1):
+        sv = float(r.get('suma_valor') or 0)
+        pct = sv / total_zona * 100 if total_zona else 0.0
+        cum += pct
+        nombre = str(r.get('nombre_cliente') or '')
+        chart_labels.append(nombre[:28])
+        chart_valores.append(round(sv, 2))
+        chart_pct_acum.append(round(cum, 1))
+        filas.append({
+            'rank': i,
+            'cod_cliente': str(r.get('cod_cliente') or ''),
+            'nombre_cliente': nombre,
+            'lineas_venta': int(r.get('lineas_venta') or 0),
+            'suma_valor': f'{sv:,.2f}',
+            'pct_del_total': f'{pct:.1f}',
+            'pct_acumulado': f'{cum:.1f}',
+        })
+
+    ctx = _report_shell_context(f'Top {top} clientes · Zona {pref}')
+    ctx.update({
+        'd1': d1, 'd2': d2, 'top': top, 'prefijo': pref,
+        'filas': filas,
+        'total_zona': f'{total_zona:,.2f}',
+        'pdf_filename': f'pareto_clientes_zona_{pref}_{d1}_{d2}.pdf',
+        'chart_data': {'labels': chart_labels, 'valores': chart_valores, 'pct_acum': chart_pct_acum},
+    })
+    return render_template('pages/reporte_pareto_clientes_zona.html', **ctx)
+
+
+@bp.route('/modules/reports/ventas-barras-dimension')
+@require_login
+def ventas_barras_dimension():
+    from services.db import get_connection
+
+    d1 = _parse_date_string(request.args.get('desde') or request.args.get('fecha_desde'))
+    d2 = _parse_date_string(request.args.get('hasta') or request.args.get('fecha_hasta'))
+    if not d1 or not d2 or d1 > d2:
+        return _bad('Parámetros requeridos: desde y hasta (YYYY-MM-DD).')
+
+    dim_raw = (request.args.get('dim') or request.args.get('dimension') or 'precio').strip().lower()
+    dim = dim_raw if dim_raw in ('precio', 'comercial') else 'precio'
+
+    try:
+        top = max(1, min(100, int(request.args.get('top') or 20)))
+    except (TypeError, ValueError):
+        top = 20
+
+    if dim == 'precio':
+        expr = "COALESCE(NULLIF(TRIM(DescripcionZonaPrecio),''),'(sin zona precio)')"
+    else:
+        expr = "COALESCE(NULLIF(TRIM(ZonaComercial),''),'(sin zona comercial)')"
+
+    sql = (f"SELECT {expr} AS etiqueta, COUNT(*) AS lineas,"
+           " COALESCE(SUM(Valor),0) AS suma_valor"
+           " FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2"
+           f" GROUP BY {expr} ORDER BY suma_valor DESC LIMIT {top}")
+    sql_tot = ("SELECT COALESCE(SUM(Valor),0) AS t"
+               " FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2")
+    bind = {'d1': d1, 'd2': d2}
+
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql), bind)
+        raw = cur.fetchall() or []
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql_tot), bind)
+        tot = cur.fetchone() or {}
+
+    total = float(tot.get('t') or 0)
+    filas = []
+    chart_labels: list = []
+    chart_valores: list = []
+    for i, r in enumerate(raw, 1):
+        sv = float(r.get('suma_valor') or 0)
+        pct = sv / total * 100 if total else 0.0
+        etq = str(r.get('etiqueta') or '')
+        chart_labels.append(etq[:25])
+        chart_valores.append(round(sv, 2))
+        filas.append({
+            'rank': i,
+            'etiqueta': etq,
+            'lineas': int(r.get('lineas') or 0),
+            'suma_valor': f'{sv:,.2f}',
+            'pct_del_total': f'{pct:.1f}',
+        })
+
+    dim_label = 'Zona de precio' if dim == 'precio' else 'Zona comercial'
+    ctx = _report_shell_context(f'Ventas por {dim_label}')
+    ctx.update({
+        'd1': d1, 'd2': d2, 'top': top, 'dim': dim, 'dim_label': dim_label,
+        'filas': filas,
+        'total_valor': f'{total:,.2f}',
+        'pdf_filename': f'barras_dimension_{dim}_{d1}_{d2}.pdf',
+        'chart_data': {'labels': chart_labels, 'valores': chart_valores},
+    })
+    return render_template('pages/reporte_barras_dimension.html', **ctx)
+
+
+@bp.route('/modules/reports/ventas-comparativo')
+@require_login
+def ventas_comparativo():
+    from services.db import get_connection
+
+    a1 = _parse_date_string(request.args.get('a_desde') or request.args.get('fecha_desde_a'))
+    a2 = _parse_date_string(request.args.get('a_hasta') or request.args.get('fecha_hasta_a'))
+    b1 = _parse_date_string(request.args.get('b_desde') or request.args.get('fecha_desde_b'))
+    b2 = _parse_date_string(request.args.get('b_hasta') or request.args.get('fecha_hasta_b'))
+    if not a1 or not a2 or not b1 or not b2:
+        return _bad('Parámetros requeridos: a_desde, a_hasta, b_desde, b_hasta (YYYY-MM-DD).')
+    if a1 > a2 or b1 > b2:
+        return _bad('Rango de fechas inválido.')
+
+    dim_raw = (request.args.get('dim') or request.args.get('dimension') or 'precio').strip().lower()
+    dim = dim_raw if dim_raw in ('precio', 'comercial') else 'precio'
+    try:
+        top = max(1, min(80, int(request.args.get('top') or 15)))
+    except (TypeError, ValueError):
+        top = 15
+
+    if dim == 'precio':
+        expr = "COALESCE(NULLIF(TRIM(DescripcionZonaPrecio),''),'(sin zona precio)')"
+    else:
+        expr = "COALESCE(NULLIF(TRIM(ZonaComercial),''),'(sin zona comercial)')"
+
+    sql = (f"SELECT etiqueta, SUM(va) AS valor_a, SUM(vb) AS valor_b FROM ("
+           f"  SELECT {expr} AS etiqueta, COALESCE(SUM(Valor),0) AS va, 0 AS vb"
+           f"  FROM ventasgeneral2 WHERE FechaContable BETWEEN :a1 AND :a2 GROUP BY {expr}"
+           f"  UNION ALL"
+           f"  SELECT {expr}, 0, COALESCE(SUM(Valor),0)"
+           f"  FROM ventasgeneral2 WHERE FechaContable BETWEEN :b1 AND :b2 GROUP BY {expr}"
+           f") u GROUP BY etiqueta HAVING ABS(SUM(va)) + ABS(SUM(vb)) > 0"
+           f" ORDER BY GREATEST(ABS(SUM(va)), ABS(SUM(vb))) DESC LIMIT {top}")
+    bind = {'a1': a1, 'a2': a2, 'b1': b1, 'b2': b2}
+
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql), bind)
+        raw = cur.fetchall() or []
+
+    filas = []
+    chart_labels: list = []
+    chart_valores_a: list = []
+    chart_valores_b: list = []
+    for i, r in enumerate(raw, 1):
+        va = float(r.get('valor_a') or 0)
+        vb = float(r.get('valor_b') or 0)
+        delta = vb - va
+        etq = str(r.get('etiqueta') or '')
+        chart_labels.append(etq[:25])
+        chart_valores_a.append(round(va, 2))
+        chart_valores_b.append(round(vb, 2))
+        filas.append({
+            'rank': i,
+            'etiqueta': etq,
+            'valor_a': f'{va:,.2f}',
+            'valor_b': f'{vb:,.2f}',
+            'delta': f'{delta:,.2f}',
+            'delta_pct': f'{delta/va*100:.1f}' if va else '—',
+        })
+
+    dim_label = 'Zona de precio' if dim == 'precio' else 'Zona comercial'
+    ctx = _report_shell_context(f'Comparativo de períodos · {dim_label}')
+    ctx.update({
+        'a1': a1, 'a2': a2, 'b1': b1, 'b2': b2,
+        'top': top, 'dim': dim, 'dim_label': dim_label,
+        'filas': filas,
+        'pdf_filename': f'comparativo_{a1}_{b2}.pdf',
+        'chart_data': {'labels': chart_labels, 'valores_a': chart_valores_a, 'valores_b': chart_valores_b},
+    })
+    return render_template('pages/reporte_comparativo.html', **ctx)
+
+
+@bp.route('/modules/reports/ventas-barras-ruta')
+@require_login
+def ventas_barras_ruta():
+    from services.db import get_connection
+
+    d1 = _parse_date_string(request.args.get('desde') or request.args.get('fecha_desde'))
+    d2 = _parse_date_string(request.args.get('hasta') or request.args.get('fecha_hasta'))
+    if not d1 or not d2 or d1 > d2:
+        return _bad('Parámetros requeridos: desde y hasta (YYYY-MM-DD).')
+    try:
+        top = max(1, min(100, int(request.args.get('top') or 15)))
+    except (TypeError, ValueError):
+        top = 15
+
+    expr = "COALESCE(NULLIF(TRIM(RutaComercial),''),'(sin ruta)')"
+    sql = (f"SELECT {expr} AS ruta, COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor"
+           " FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2"
+           f" GROUP BY {expr} ORDER BY suma_valor DESC LIMIT {top}")
+    sql_tot = ("SELECT COALESCE(SUM(Valor),0) AS t"
+               " FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2")
+    bind = {'d1': d1, 'd2': d2}
+
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql), bind)
+        raw = cur.fetchall() or []
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql_tot), bind)
+        tot = cur.fetchone() or {}
+
+    total = float(tot.get('t') or 0)
+    filas = []
+    chart_labels: list = []
+    chart_valores: list = []
+    for i, r in enumerate(raw, 1):
+        sv = float(r.get('suma_valor') or 0)
+        pct = sv / total * 100 if total else 0.0
+        ruta = str(r.get('ruta') or '')
+        chart_labels.append(ruta[:25])
+        chart_valores.append(round(sv, 2))
+        filas.append({
+            'rank': i,
+            'ruta': ruta,
+            'lineas': int(r.get('lineas') or 0),
+            'suma_valor': f'{sv:,.2f}',
+            'pct_del_total': f'{pct:.1f}',
+        })
+
+    ctx = _report_shell_context(f'Top {top} rutas comerciales')
+    ctx.update({
+        'd1': d1, 'd2': d2, 'top': top,
+        'filas': filas,
+        'total_valor': f'{total:,.2f}',
+        'pdf_filename': f'barras_ruta_{d1}_{d2}.pdf',
+        'chart_data': {'labels': chart_labels, 'valores': chart_valores},
+    })
+    return render_template('pages/reporte_barras_ruta.html', **ctx)
+
+
+@bp.route('/modules/reports/ventas-barras-corporativo')
+@require_login
+def ventas_barras_corporativo():
+    from services.db import get_connection
+
+    d1 = _parse_date_string(request.args.get('desde') or request.args.get('fecha_desde'))
+    d2 = _parse_date_string(request.args.get('hasta') or request.args.get('fecha_hasta'))
+    if not d1 or not d2 or d1 > d2:
+        return _bad('Parámetros requeridos: desde y hasta (YYYY-MM-DD).')
+    try:
+        top = max(1, min(100, int(request.args.get('top') or 15)))
+    except (TypeError, ValueError):
+        top = 15
+
+    expr = "COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'(sin corporativo)')"
+    sql = (f"SELECT {expr} AS nombre_coorporativo,"
+           f" MAX(COALESCE(NULLIF(TRIM(CodigoCoorporativo),''),'')) AS cod_coorporativo,"
+           f" COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor"
+           " FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2"
+           f" GROUP BY {expr} ORDER BY suma_valor DESC LIMIT {top}")
+    sql_tot = ("SELECT COALESCE(SUM(Valor),0) AS t"
+               " FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2")
+    bind = {'d1': d1, 'd2': d2}
+
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql), bind)
+        raw = cur.fetchall() or []
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql_tot), bind)
+        tot = cur.fetchone() or {}
+
+    total = float(tot.get('t') or 0)
+    filas = []
+    chart_labels: list = []
+    chart_valores: list = []
+    for i, r in enumerate(raw, 1):
+        sv = float(r.get('suma_valor') or 0)
+        pct = sv / total * 100 if total else 0.0
+        corp = str(r.get('nombre_coorporativo') or '')
+        chart_labels.append(corp[:25])
+        chart_valores.append(round(sv, 2))
+        filas.append({
+            'rank': i,
+            'cod_coorporativo': str(r.get('cod_coorporativo') or ''),
+            'nombre_coorporativo': corp,
+            'lineas': int(r.get('lineas') or 0),
+            'suma_valor': f'{sv:,.2f}',
+            'pct_del_total': f'{pct:.1f}',
+        })
+
+    ctx = _report_shell_context(f'Top {top} corporativos')
+    ctx.update({
+        'd1': d1, 'd2': d2, 'top': top,
+        'filas': filas,
+        'total_valor': f'{total:,.2f}',
+        'pdf_filename': f'barras_corporativo_{d1}_{d2}.pdf',
+        'chart_data': {'labels': chart_labels, 'valores': chart_valores},
+    })
+    return render_template('pages/reporte_barras_corporativo.html', **ctx)
 
 
 @bp.route('/modules/reports/<slug>')

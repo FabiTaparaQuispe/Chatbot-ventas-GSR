@@ -1,0 +1,99 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+    <h1>Mix por tipo de documento</h1>
+    <p class="page-lead">FechaContable del <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong> · distribución del importe por TDoc.</p>
+</div>
+
+<div class="reporte-page">
+    <div class="card-filtros-demo reporte-informe-panel">
+        <div class="reporte-informe-toolbar">
+            <button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button>
+        </div>
+        <div id="reporte-pdf-root">
+            <h2 class="reporte-informe-title">Distribución por tipo de documento</h2>
+            <p class="reporte-informe-meta">Importe total período: <strong>S/ {{ total_valor }}</strong></p>
+
+            {% if filas %}
+            <div class="table-wrapper overflow-x-auto productos-dt-skin">
+                <table class="data-table config-table display stripe rct-auto">
+                    <thead>
+                        <tr>
+                            <th>TDoc</th>
+                            <th>Descripción</th>
+                            <th style="text-align:right;">Líneas</th>
+                            <th style="text-align:right;">Importe (S/)</th>
+                            <th style="text-align:right;">% del total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in filas %}
+                        <tr>
+                            <td>{{ f.tdoc }}</td>
+                            <td>{{ f.label }}</td>
+                            <td style="text-align:right;">{{ f.lineas }}</td>
+                            <td style="text-align:right;">{{ f.suma_valor }}</td>
+                            <td style="text-align:right;">{{ f.pct_del_total }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <th colspan="3" style="text-align:right;">Total</th>
+                            <th style="text-align:right;">{{ total_valor }}</th>
+                            <th style="text-align:right;">100%</th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            {% else %}
+            <p style="color:var(--muted);">No se encontraron registros en el período seleccionado.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if filas %}
+    <section class="reporte-chart-section" aria-label="Gráfico mix TDoc">
+        <h3 class="reporte-chart-heading">Distribución del importe por tipo de documento</h3>
+        <div class="chart-inner" style="max-width:480px;margin:0 auto;"><canvas id="chartDoughnut"></canvas></div>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/chart_reporte_datalabels.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/reporte_pdf.js"></script>
+<script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
+<script>
+(function () {
+    var d = {{ chart_data | tojson }};
+    var legCol = typeof reporteChartLegendColor === 'function' ? reporteChartLegendColor() : '#1e293b';
+    var anim = window.reporteChartAnimate || {};
+    var PALETTE = ['rgba(59,130,246,0.8)','rgba(16,185,129,0.8)','rgba(248,113,113,0.8)','rgba(251,191,36,0.8)','rgba(168,85,247,0.8)','rgba(251,146,60,0.8)','rgba(20,184,166,0.8)','rgba(239,68,68,0.8)'];
+    function build() {
+        if (!window.Chart) return;
+        var ctx = document.getElementById('chartDoughnut');
+        if (!ctx || !d.labels) return;
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: d.labels,
+                datasets: [{ data: d.valores, backgroundColor: d.labels.map(function(_,i){return PALETTE[i%PALETTE.length];}), borderWidth: 2 }],
+            },
+            options: Object.assign({}, anim, {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'right', labels: { color: legCol, boxWidth: 14, padding: 14 } },
+                    tooltip: { callbacks: { label: function(c) { var v=c.parsed; return ' S/ '+v.toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}); } } },
+                },
+            }),
+        });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
+    else build();
+})();
+</script>
+{% endblock %}

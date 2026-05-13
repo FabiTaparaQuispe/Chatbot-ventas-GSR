@@ -242,6 +242,7 @@ class ToolExecutor:
                 'ventasgeneral_linea_precio_diario': self._linea_precio_diario,
                 'ventasgeneral_linea_precio_resumen_provincia': self._linea_precio_resumen_provincia,
                 'ventasgeneral_linea_mix_productos': self._linea_mix_productos,
+                'ventasgeneral_catalogo': self._catalogo,
             }
             fn = dispatch.get(name)
             if fn is None:
@@ -809,10 +810,10 @@ class ToolExecutor:
 
     def _serie_mensual(self, args):
         d1, d2 = _parse_date_range(args)
-        sql = ("SELECT DATE_FORMAT(FechaContable, '%Y-%m') AS mes,"
+        sql = ("SELECT DATE_FORMAT(FechaContable, '%%Y-%%m') AS mes,"
                " COALESCE(SUM(Valor),0) AS suma_valor, COUNT(*) AS lineas"
                " FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
-               " GROUP BY DATE_FORMAT(FechaContable, '%Y-%m') ORDER BY mes")
+               " GROUP BY DATE_FORMAT(FechaContable, '%%Y-%%m') ORDER BY mes")
         params = {'d1': d1, 'd2': d2}
         rows = _q(self._conn, sql, params)
         q = _qs({'desde': d1, 'hasta': d2})
@@ -1132,9 +1133,9 @@ class ToolExecutor:
     def _proyeccion(self, args):
         d1, d2 = _parse_date_range(args)
         meses = _int_arg(args.get('meses_a_proyectar'), 3, 1, 12)
-        sql = ("SELECT DATE_FORMAT(FechaContable, '%Y-%m') AS mes, SUM(Valor) AS suma_valor"
+        sql = ("SELECT DATE_FORMAT(FechaContable, '%%Y-%%m') AS mes, SUM(Valor) AS suma_valor"
                " FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
-               " GROUP BY DATE_FORMAT(FechaContable, '%Y-%m') ORDER BY mes")
+               " GROUP BY DATE_FORMAT(FechaContable, '%%Y-%%m') ORDER BY mes")
         params = {'d1': d1, 'd2': d2}
         filas = _q(self._conn, sql, params)
         if len(filas) < 2:
@@ -1173,5 +1174,45 @@ class ToolExecutor:
             'intercepto': b,
             'proyecciones': proyecciones,
             'nota': 'Proyección basada en regresión lineal simple. No considera estacionalidad ni factores externos.',
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    _CATALOGO_CAMPOS = {
+        'provincia':       'Provincia',
+        'linea_comercial': 'LineaComercial',
+        'corporativo':     'NombreCoorporativo',
+        'zona_precio':     'DescripcionZonaPrecio',
+        'zona_comercial':  'ZonaComercial',
+        'ruta':            'RutaComercial',
+        'tipo_documento':  'TipoDocumento',
+    }
+
+    def _catalogo(self, args):
+        campo = str(args.get('campo') or '').strip().lower()
+        col = self._CATALOGO_CAMPOS.get(campo)
+        if not col:
+            raise ValueError(f"campo no reconocido: '{campo}'. Opciones: {', '.join(self._CATALOGO_CAMPOS)}")
+
+        d1 = _parse_date(args.get('fecha_desde'), 'fecha_desde', required=False)
+        d2 = _parse_date(args.get('fecha_hasta'), 'fecha_hasta', required=False)
+
+        sql = (f"SELECT DISTINCT TRIM(COALESCE({col},'')) AS valor"
+               f" FROM ventasgeneral2"
+               f" WHERE TRIM(COALESCE({col},'')) != ''")
+        params: dict = {}
+        if d1 and d2:
+            sql += " AND FechaContable BETWEEN %(d1)s AND %(d2)s"
+            params = {'d1': d1, 'd2': d2}
+        sql += " ORDER BY valor"
+
+        rows = _q(self._conn, sql, params)
+        valores = [str(r.get('valor') or '') for r in rows if (r.get('valor') or '').strip()]
+
+        return {
+            'campo': campo,
+            'columna_bd': col,
+            'total': len(valores),
+            'valores': valores,
+            'periodo': {'desde': d1, 'hasta': d2} if d1 and d2 else None,
             '_sql_traces': [{'sql': sql, 'params': params}],
         }

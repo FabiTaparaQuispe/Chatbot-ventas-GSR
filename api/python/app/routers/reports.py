@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from datetime import date, timedelta
 from html import escape as html_escape
 from typing import Any
@@ -589,33 +590,37 @@ def ventasgeneral_resumen_tabla(request: Request) -> Any:
     d2 = resumen_parse_date(request, "fecha_hasta") or resumen_parse_date(request, "hasta")
     if not d1 or not d2 or d1 > d2:
         return _bad("Parámetros: fecha_desde y fecha_hasta (YYYY-MM-DD); alias desde y hasta.")
-    sql = """SELECT COUNT(*) AS filas, COALESCE(SUM(Valor),0) AS suma_valor,
-        COALESCE(SUM(Cantidad),0) AS suma_cantidad, COALESCE(SUM(Peso),0) AS suma_peso
-        FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2"""
+    where = " WHERE FechaContable BETWEEN :d1 AND :d2"
     bind: dict[str, Any] = {"d1": d1, "d2": d2}
     zona = str(request.query_params.get("zona_comercial") or "").strip()
     if zona:
-        sql += " AND ZonaComercial LIKE :zona"
+        where += " AND ZonaComercial LIKE :zona"
         bind["zona"] = f"%{zona}%"
     cod = str(request.query_params.get("cod_cliente") or "").strip()
     if cod:
-        sql += " AND CodigoCliente = :cod"
+        where += " AND CodigoCliente = :cod"
         bind["cod"] = cod
     pref_z = str(request.query_params.get("prefijo_descri_zona_precio") or "").strip().upper()
     if pref_z:
-        sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzp"
+        where += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzp"
         bind["prefzp"] = pref_z + "%"
     prov = str(request.query_params.get("provincia") or "").strip()
     if prov:
-        sql += " AND Provincia LIKE :prov"
+        where += " AND Provincia LIKE :prov"
         bind["prov"] = f"%{prov}%"
     tdoctipo = str(request.query_params.get("tipo_documento") or "").strip()
     if tdoctipo:
-        sql += " AND TipoDocumento LIKE :tdoctipo"
+        where += " AND TipoDocumento LIKE :tdoctipo"
         bind["tdoctipo"] = f"%{tdoctipo}%"
+
+    sql_totales = f"SELECT COUNT(*) AS filas, COALESCE(SUM(Valor),0) AS suma_valor, COALESCE(SUM(Cantidad),0) AS suma_cantidad, COALESCE(SUM(Peso),0) AS suma_peso FROM ventasgeneral2{where}"
+    sql_diario = f"SELECT FechaContable AS fecha, COALESCE(SUM(Valor),0) AS suma_valor FROM ventasgeneral2{where} GROUP BY FechaContable ORDER BY FechaContable"
+
     engine = get_engine()
     with engine.connect() as conn:
-        row = dict(conn.execute(text(sql), bind).mappings().one())
+        row = dict(conn.execute(text(sql_totales), bind).mappings().one())
+        diario = [dict(r._mapping) for r in conn.execute(text(sql_diario), bind).mappings().all()]
+
     pdf_name = f"resumen_ventasgeneral_{d1}_{d2}.pdf"
     r0 = str(row.get("filas") or "")
     r1 = f"{float(row.get('suma_valor') or 0):,.2f}"
@@ -623,23 +628,69 @@ def ventasgeneral_resumen_tabla(request: Request) -> Any:
     r3 = f"{float(row.get('suma_peso') or 0):,.2f}"
     pn_js = json.dumps(pdf_name, ensure_ascii=False)
     ac = html_escape(get_settings().app_company)
+
+    chart_labels = json.dumps([str(r.get("fecha") or "") for r in diario], ensure_ascii=False)
+    chart_valores = json.dumps([float(r.get("suma_valor") or 0) for r in diario], ensure_ascii=False)
+
     body = f"""<!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tabla · Resumen ventasgeneral</title>
+<script>(function(){{try{{var m=document.cookie.match(/(?:^|; )ix2-theme=([^;]*)/);var mode=m?decodeURIComponent(m[1]).toLowerCase().trim():'';if(mode!=='dark'&&mode!=='light')mode=localStorage.getItem('ix2-theme')||'';if(mode!=='dark'&&mode!=='light')mode=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',mode);document.documentElement.style.colorScheme=mode==='dark'?'dark':'light';}}catch(e){{}}}})()</script>
 <link rel="stylesheet" href="/assets/css/app.css">
-<style>body{{margin:0;}}main{{padding:1rem;max-width:980px;margin:0 auto;}} .wrap-dark{{background:var(--surface,#1e293b);border-radius:12px;padding:1rem;border:1px solid var(--border,#334155);}} .wrap-dark .pdf-meta{{color:var(--muted,#a1a1aa);}} #reporte-pdf-root table.data-table tbody td{{padding:0.65rem 0.85rem;}}</style>
-</head><body data-app-company="{ac}" data-pdf-logo="/assets/img/empresa-logo.png"><main><div class="wrap-dark">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<style>
+body{{margin:0;}}
+main{{padding:1rem;max-width:1100px;margin:0 auto;}}
+.wrap-card{{background:var(--surface,#fff);border:1px solid var(--border,#e2e8f0);border-radius:0.75rem;padding:1rem 1.25rem;margin-bottom:1.25rem;}}
+.pdf-meta{{color:var(--muted,#64748b);font-size:0.9rem;margin:0.25rem 0 0;}}
+#reporte-pdf-root table.data-table tbody td{{padding:0.65rem 0.85rem;}}
+.chart-inner{{position:relative;height:min(50vh,380px);}}
+.reporte-toolbar{{display:flex;gap:0.65rem;margin-bottom:1rem;}}
+</style>
+</head><body data-app-company="{ac}" data-pdf-logo="/assets/img/empresa-logo.png">
+<main>
 <div class="reporte-toolbar"><button type="button" class="btn btn-primary" id="btn-pdf-resumen">Descargar PDF</button></div>
 <div id="reporte-pdf-root">
-<h2 class="pdf-h2">Agregados del periodo</h2>
-<p class="pdf-meta">FechaContable entre las fechas indicadas (filtros opcionales aplicados).</p>
-<div class="table-wrapper overflow-x-auto productos-dt-skin">
+<div class="wrap-card">
+<h2 class="pdf-h2">Resumen agregados · ventasgeneral</h2>
+<p class="pdf-meta">FechaContable del <strong>{html_escape(d1)}</strong> al <strong>{html_escape(d2)}</strong>.</p>
+<div class="table-wrapper overflow-x-auto productos-dt-skin" style="margin-top:1rem;">
 <table class="data-table config-table display stripe"><thead><tr><th>N°</th><th>Filas</th><th>Importe total</th><th>Cantidad total</th><th>Peso total</th></tr></thead>
 <tbody><tr><td>1</td><td>{html_escape(r0)}</td><td>{html_escape(r1)}</td><td>{html_escape(r2)}</td><td>{html_escape(r3)}</td></tr></tbody>
-</table></div></div></div></main>
+</table></div>
+</div>
+<div class="wrap-card">
+<h3 style="margin:0 0 0.75rem;">Importe diario (soles)</h3>
+<div class="chart-inner"><canvas id="chart-diario"></canvas></div>
+</div>
+</div></main>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
 <script src="/assets/js/reporte_pdf.js"></script>
-<script>ventasBindPdfDownload('btn-pdf-resumen', 'reporte-pdf-root', {pn_js});</script>
+<script>
+(function(){{
+  var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  var gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  var tickColor = isDark ? '#94a3b8' : '#64748b';
+  var barColor = isDark ? 'rgba(99,179,237,0.75)' : 'rgba(59,130,246,0.7)';
+  var borderColor = isDark ? '#63b3ed' : '#3b82f6';
+  new Chart(document.getElementById('chart-diario'), {{
+    type: 'bar',
+    data: {{
+      labels: {chart_labels},
+      datasets: [{{ label: 'Importe (S/)', data: {chart_valores}, backgroundColor: barColor, borderColor: borderColor, borderWidth: 1, borderRadius: 3 }}]
+    }},
+    options: {{
+      responsive: true, maintainAspectRatio: false,
+      plugins: {{ legend: {{ display: false }}, tooltip: {{ callbacks: {{ label: function(c){{ return ' S/ ' + c.parsed.y.toLocaleString('es-PE',{{minimumFractionDigits:2}}); }} }} }} }},
+      scales: {{
+        x: {{ ticks: {{ color: tickColor, maxRotation: 45, font: {{ size: 11 }} }}, grid: {{ color: gridColor }} }},
+        y: {{ ticks: {{ color: tickColor, callback: function(v){{ return 'S/ '+v.toLocaleString('es-PE'); }} }}, grid: {{ color: gridColor }} }}
+      }}
+    }}
+  }});
+  ventasBindPdfDownload('btn-pdf-resumen', 'reporte-pdf-root', {pn_js});
+}})();
+</script>
 </body></html>"""
     return HTMLResponse(body)
 
@@ -797,3 +848,192 @@ def sale_table(request: Request) -> Any:
 <link rel="stylesheet" href="/assets/css/app.css"></head><body style="padding:1rem;"><h1>sale</h1>
 <p>Total coincidencias: {total}</p><div style="overflow:auto"><table class="data-table"><thead><tr>{th}</tr></thead><tbody>{tb}</tbody></table></div></body></html>"""
     return HTMLResponse(html)
+
+
+def _linea_filtros_meta(desde: str, hasta: str, linea: str, cod_item: str | None, mercado: str | None) -> str:
+    parts = [f"{desde} — {hasta}", f"Línea: {linea}"]
+    if cod_item:
+        parts.append(f"Producto: {cod_item}")
+    if mercado:
+        parts.append(f"Mercado: {mercado}")
+    return " · ".join(parts)
+
+
+@router.get("/ventas-linea-resumen-provincia")
+def ventas_linea_resumen_provincia_report(request: Request) -> Any:
+    desde = parse_date_get_any(request, ["desde", "fecha_desde"])
+    hasta = parse_date_get_any(request, ["hasta", "fecha_hasta"])
+    linea = str(request.query_params.get("linea") or "").strip()
+    if not desde or not hasta or desde > hasta or not linea:
+        return _bad("Parámetros: desde, hasta (YYYY-MM-DD), linea (LineaComercial).")
+    cod_item = str(request.query_params.get("cod_item") or "").strip() or None
+    mercado = str(request.query_params.get("mercado") or "").strip().upper() or None
+    top_raw = int_from_get(request, ["top", "top_n"], 0, 0, 100000)
+    top_val: int | None = top_raw if top_raw > 0 else None
+    engine = get_engine()
+    with engine.connect() as conn:
+        data = vq.ventas_linea_resumen_provincia(conn, desde, hasta, linea, top_val, cod_item=cod_item, prefijo_zona=mercado)
+    rows = []
+    for i, f in enumerate(data["filas"], start=1):
+        rows.append([
+            str(i),
+            str(f.get("provincia") or ""),
+            str(f.get("nombre_cliente") or ""),
+            str(int(f.get("lineas") or 0)),
+            f"{float(f.get('suma_cantidad') or 0):,.2f}",
+            f"{float(f.get('suma_peso') or 0):,.2f}",
+            f"{float(f.get('suma_valor') or 0):,.2f}",
+        ])
+    chart_filas = data["filas"][:25]
+    labels = [_short(str(f.get("nombre_cliente") or "")) for f in chart_filas]
+    valores = [float(f.get("suma_peso") or 0) for f in chart_filas]
+    ctx = {
+        "request": request,
+        "browser_title": f"Resumen · {linea}",
+        "h1": f"Resumen por provincia y cliente — {linea}",
+        "meta": _linea_filtros_meta(desde, hasta, linea, cod_item, mercado),
+        "pdf_h2": f"Resumen {linea}",
+        "pdf_name": f"linea_resumen_{linea}_{desde}_{hasta}.pdf",
+        "table_headers": ["N°", "Provincia", "Cliente", "Líneas", "Cantidad", "Peso (kg)", "Importe"],
+        "table_rows": rows,
+        "chart_payload": {"labels": labels, "valores": valores, "label": "Peso (kg)"},
+    }
+    return _report_template_response(request, "reports/chart_hbar.html", ctx)
+
+
+@router.get("/ventas-linea-diario-provincia")
+def ventas_linea_diario_provincia_report(request: Request) -> Any:
+    desde = parse_date_get_any(request, ["desde", "fecha_desde"])
+    hasta = parse_date_get_any(request, ["hasta", "fecha_hasta"])
+    linea = str(request.query_params.get("linea") or "").strip()
+    if not desde or not hasta or desde > hasta or not linea:
+        return _bad("Parámetros: desde, hasta (YYYY-MM-DD), linea (LineaComercial).")
+    cod_item = str(request.query_params.get("cod_item") or "").strip() or None
+    mercado = str(request.query_params.get("mercado") or "").strip().upper() or None
+    top = int_from_get(request, ["top", "top_n"], 200, 1, 1000)
+    engine = get_engine()
+    with engine.connect() as conn:
+        data = vq.ventas_linea_diario_provincia(conn, desde, hasta, linea, top, cod_item=cod_item, prefijo_zona=mercado)
+    rows = []
+    for i, f in enumerate(data["filas"], start=1):
+        rows.append([
+            str(i),
+            str(f.get("fecha") or ""),
+            str(f.get("provincia") or ""),
+            str(f.get("nombre_cliente") or ""),
+            str(int(f.get("lineas") or 0)),
+            f"{float(f.get('suma_cantidad') or 0):,.2f}",
+            f"{float(f.get('suma_peso') or 0):,.2f}",
+            f"{float(f.get('suma_valor') or 0):,.2f}",
+        ])
+    fecha_peso: dict[str, float] = defaultdict(float)
+    for f in data["filas"]:
+        fecha_peso[str(f.get("fecha") or "")] += float(f.get("suma_peso") or 0)
+    fechas_sorted = sorted(fecha_peso.keys())
+    ctx = {
+        "request": request,
+        "browser_title": f"Diario · {linea}",
+        "h1": f"Ventas diarias — {linea}",
+        "meta": _linea_filtros_meta(desde, hasta, linea, cod_item, mercado),
+        "pdf_h2": f"Ventas diarias {linea}",
+        "pdf_name": f"linea_diario_{linea}_{desde}_{hasta}.pdf",
+        "table_headers": ["N°", "Fecha", "Provincia", "Cliente", "Líneas", "Cantidad", "Peso (kg)", "Importe"],
+        "table_rows": rows,
+        "chart_payload": {"labels": fechas_sorted, "valores": [round(fecha_peso[d], 2) for d in fechas_sorted], "label": "Peso (kg)"},
+    }
+    return _report_template_response(request, "reports/chart_line.html", ctx)
+
+
+@router.get("/ventas-linea-precio-diario")
+def ventas_linea_precio_diario_report(request: Request) -> Any:
+    desde = parse_date_get_any(request, ["desde", "fecha_desde"])
+    hasta = parse_date_get_any(request, ["hasta", "fecha_hasta"])
+    linea = str(request.query_params.get("linea") or "").strip()
+    if not desde or not hasta or desde > hasta or not linea:
+        return _bad("Parámetros: desde, hasta (YYYY-MM-DD), linea (LineaComercial).")
+    cod_item = str(request.query_params.get("cod_item") or "").strip() or None
+    mercado = str(request.query_params.get("mercado") or "").strip().upper() or None
+    top = int_from_get(request, ["top", "top_n"], 200, 1, 1000)
+    engine = get_engine()
+    with engine.connect() as conn:
+        data = vq.ventas_linea_precio_diario(conn, desde, hasta, linea, top, cod_item=cod_item, prefijo_zona=mercado)
+    rows = []
+    for i, f in enumerate(data["filas"], start=1):
+        pkg = f.get("precio_kg")
+        rows.append([
+            str(i),
+            str(f.get("fecha") or ""),
+            str(f.get("provincia") or ""),
+            str(f.get("nombre_cliente") or ""),
+            f"{float(f.get('suma_cantidad') or 0):,.2f}",
+            f"{float(f.get('suma_peso') or 0):,.2f}",
+            f"{float(f.get('suma_valor') or 0):,.2f}",
+            f"{float(pkg):,.4f}" if pkg is not None else "—",
+        ])
+    fecha_valor: dict[str, float] = defaultdict(float)
+    fecha_peso2: dict[str, float] = defaultdict(float)
+    for f in data["filas"]:
+        k = str(f.get("fecha") or "")
+        fecha_valor[k] += float(f.get("suma_valor") or 0)
+        fecha_peso2[k] += float(f.get("suma_peso") or 0)
+    fechas_sorted = sorted(fecha_valor.keys())
+    precio_dia = [
+        round(fecha_valor[d] / fecha_peso2[d], 4) if fecha_peso2[d] > 0 else 0.0
+        for d in fechas_sorted
+    ]
+    ctx = {
+        "request": request,
+        "browser_title": f"Precio/kg · {linea}",
+        "h1": f"Precio por kg diario — {linea}",
+        "meta": _linea_filtros_meta(desde, hasta, linea, cod_item, mercado),
+        "pdf_h2": f"Precio/kg {linea}",
+        "pdf_name": f"linea_precio_{linea}_{desde}_{hasta}.pdf",
+        "table_headers": ["N°", "Fecha", "Provincia", "Cliente", "Cantidad", "Peso (kg)", "Importe", "Precio/kg"],
+        "table_rows": rows,
+        "chart_payload": {"labels": fechas_sorted, "valores": precio_dia, "label": "Precio/kg"},
+    }
+    return _report_template_response(request, "reports/chart_line.html", ctx)
+
+
+@router.get("/ventas-linea-mix-productos")
+def ventas_linea_mix_productos_report(request: Request) -> Any:
+    desde = parse_date_get_any(request, ["desde", "fecha_desde"])
+    hasta = parse_date_get_any(request, ["hasta", "fecha_hasta"])
+    linea = str(request.query_params.get("linea") or "").strip()
+    if not desde or not hasta or desde > hasta or not linea:
+        return _bad("Parámetros: desde, hasta (YYYY-MM-DD), linea (LineaComercial).")
+    mercado = str(request.query_params.get("mercado") or "").strip().upper() or None
+    engine = get_engine()
+    with engine.connect() as conn:
+        data = vq.ventas_linea_mix_productos(conn, desde, hasta, linea, prefijo_zona=mercado)
+    rows = []
+    for i, f in enumerate(data["filas"], start=1):
+        pkg = f.get("precio_kg")
+        rows.append([
+            str(i),
+            str(f.get("cod_item") or ""),
+            str(f.get("glosa") or ""),
+            str(int(f.get("lineas") or 0)),
+            f"{float(f.get('suma_cantidad') or 0):,.2f}",
+            f"{float(f.get('suma_peso') or 0):,.2f}",
+            f"{float(f.get('suma_valor') or 0):,.2f}",
+            f"{float(pkg):,.4f}" if pkg is not None else "—",
+            f"{float(f.get('pct_peso') or 0):,.2f}%",
+        ])
+    labels = [_short(str(f.get("glosa") or f.get("cod_item") or "")) for f in data["filas"]]
+    vals = [float(f.get("pct_peso") or 0) for f in data["filas"]]
+    meta_parts = [f"{desde} — {hasta}", f"Línea: {linea}"]
+    if mercado:
+        meta_parts.append(f"Mercado: {mercado}")
+    ctx = {
+        "request": request,
+        "browser_title": f"Mix productos · {linea}",
+        "h1": f"Mix de productos — {linea}",
+        "meta": " · ".join(meta_parts),
+        "pdf_h2": f"Mix productos {linea}",
+        "pdf_name": f"linea_mix_{linea}_{desde}_{hasta}.pdf",
+        "table_headers": ["N°", "Código", "Producto", "Líneas", "Cantidad", "Peso (kg)", "Importe", "Precio/kg", "% Peso"],
+        "table_rows": rows,
+        "chart_payload": {"labels": labels, "valores": vals},
+    }
+    return _report_template_response(request, "reports/chart_doughnut.html", ctx)

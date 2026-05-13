@@ -222,4 +222,23 @@ def ventas_tool_definitions():
                 'mercado': pref,
             }, 'required': ['fecha_desde', 'fecha_hasta', 'linea_comercial']},
         }},
+        {'type': 'function', 'function': {
+            'name': 'ventasgeneral_catalogo',
+            'description': (
+                'Devuelve los valores distintos (catálogo/maestro) de un campo de ventasgeneral2. '
+                'Usar para preguntas como "¿qué provincias hay?", "¿qué líneas comerciales existen?", '
+                '"¿qué corporativos están registrados?", "¿qué zonas de precio hay?", '
+                '"¿qué rutas comerciales existen?", "¿qué tipos de documento hay?". '
+                'Las fechas son opcionales; si se dan, solo muestra valores presentes en ese período.'
+            ),
+            'parameters': {'type': 'object', 'properties': {
+                'campo': {
+                    'type': 'string',
+                    'enum': ['provincia', 'linea_comercial', 'corporativo', 'zona_precio', 'zona_comercial', 'ruta', 'tipo_documento'],
+                    'description': 'Campo del que se quieren los valores distintos',
+                },
+                'fecha_desde': d_opt,
+                'fecha_hasta': d_opt,
+            }, 'required': ['campo']},
+        }},
     ]

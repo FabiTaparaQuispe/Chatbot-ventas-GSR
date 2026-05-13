@@ -54,7 +54,7 @@ def extract_reporte_php_url_from_reply(reply: str) -> str:
         flags=re.I,
     )
     pat = re.compile(
-        r"(https?://[^\s<]+|(?:ventas_(?:barras_dimension|comparativo|top_productos|top_clientes_global|top_clientes_nc|mix_tdoc|barras_ruta|barras_corporativo|serie_mensual)|pareto_(?:nc_zona|clientes_zona)(?:_tabla)?|ventasgeneral_(?:buscar|resumen)(?:_tabla)?)\.php\?[^\s<>\"']+)",
+        r"(https?://[^\s<]+|(?:ventas_(?:barras_dimension|comparativo|top_productos|top_clientes_global|top_clientes_nc|mix_tdoc|barras_ruta|barras_corporativo|serie_mensual)|pareto_(?:nc_zona|clientes_zona)(?:_tabla)?|ventasgeneral_(?:buscar|resumen)(?:_tabla)?)\.php\?[^\s<>\"']+|ventas-linea-(?:resumen-provincia|diario-provincia|precio-diario|mix-productos)\?[^\s<>\"']+)",
         flags=re.I,
     )
     m = pat.search(reply)

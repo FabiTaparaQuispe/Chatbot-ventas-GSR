@@ -42,6 +42,17 @@
                             <option value="proceso" {% if (tipo_fecha|default('contable')) == 'proceso' %}selected{% endif %}>Día de proceso (fechaProceso)</option>
                         </select>
                     </div>
+                    {% if provincias_opts %}
+                    <div class="filter-field filter-field--provincia">
+                        <label for="fProv">Provincia</label>
+                        <select id="fProv" name="provincia">
+                            <option value="">— Todas —</option>
+                            {% for p in provincias_opts %}
+                            <option value="{{ p }}" {% if provincia_filtro == p %}selected{% endif %}>{{ p }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
                 </div>
 
                 <div class="reporte-filter-bar">
@@ -164,6 +175,10 @@
             minimumInputLength: 0
         }));
         $('#fLinea').on('change', function () { $(this).closest('form')[0].submit(); });
+        if ($('#fProv').length) {
+            $('#fProv').select2($.extend({}, S2_BASE, { placeholder: '— Todas —' }));
+            $('#fProv').on('change', function () { $(this).closest('form')[0].submit(); });
+        }
     });
 })();
 /* Panel colapsable */

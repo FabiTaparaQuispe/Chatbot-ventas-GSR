@@ -1,0 +1,105 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+    <h1>Comparativo de períodos · {{ dim_label }}</h1>
+    <p class="page-lead">
+        Período A: <strong>{{ a1 }}</strong> — <strong>{{ a2 }}</strong> ·
+        Período B: <strong>{{ b1 }}</strong> — <strong>{{ b2 }}</strong> ·
+        Top {{ top }} · dimensión: <strong>{{ dim_label }}</strong>.
+    </p>
+</div>
+
+<div class="reporte-page">
+    <div class="card-filtros-demo reporte-informe-panel">
+        <div class="reporte-informe-toolbar">
+            <button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button>
+        </div>
+        <div id="reporte-pdf-root">
+            <h2 class="reporte-informe-title">Comparativo A vs B por {{ dim_label }}</h2>
+
+            {% if filas %}
+            <div class="table-wrapper overflow-x-auto productos-dt-skin">
+                <table class="data-table config-table display stripe rct-auto">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>{{ dim_label }}</th>
+                            <th style="text-align:right;">Período A (S/)</th>
+                            <th style="text-align:right;">Período B (S/)</th>
+                            <th style="text-align:right;">Diferencia (S/)</th>
+                            <th style="text-align:right;">Var. %</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in filas %}
+                        <tr>
+                            <td>{{ f.rank }}</td>
+                            <td>{{ f.etiqueta }}</td>
+                            <td style="text-align:right;">{{ f.valor_a }}</td>
+                            <td style="text-align:right;">{{ f.valor_b }}</td>
+                            <td style="text-align:right;">{{ f.delta }}</td>
+                            <td style="text-align:right;">{{ f.delta_pct }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p style="color:var(--muted);">No se encontraron registros para los períodos seleccionados.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if filas %}
+    <section class="reporte-chart-section" aria-label="Gráfico comparativo">
+        <h3 class="reporte-chart-heading">Comparativo A vs B por {{ dim_label }}</h3>
+        <div class="chart-inner"><canvas id="chartComp"></canvas></div>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/chart_reporte_datalabels.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/reporte_pdf.js"></script>
+<script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
+<script>
+(function () {
+    var d = {{ chart_data | tojson }};
+    var a1 = {{ a1|tojson }}, a2 = {{ a2|tojson }}, b1 = {{ b1|tojson }}, b2 = {{ b2|tojson }};
+    var legCol = typeof reporteChartLegendColor === 'function' ? reporteChartLegendColor() : '#1e293b';
+    var anim = window.reporteChartAnimate || {};
+    function build() {
+        if (!window.Chart) return;
+        var ctx = document.getElementById('chartComp');
+        if (!ctx || !d.labels) return;
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: d.labels,
+                datasets: [
+                    { label: 'Período A ('+a1+' – '+a2+')', data: d.valores_a, backgroundColor: 'rgba(59,130,246,0.65)', borderColor: 'rgba(59,130,246,1)', borderWidth: 1 },
+                    { label: 'Período B ('+b1+' – '+b2+')', data: d.valores_b, backgroundColor: 'rgba(16,185,129,0.65)', borderColor: 'rgba(16,185,129,1)', borderWidth: 1 },
+                ],
+            },
+            options: Object.assign({}, anim, {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { labels: { color: legCol, boxWidth: 14 } },
+                    tooltip: { callbacks: { label: function(c) { var v=c.parsed.y; return c.dataset.label+': S/ '+(v!=null?v.toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}):''); } } },
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8', maxRotation: 35, font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                    y: { ticks: { color: '#94a3b8', callback: function(v){return 'S/ '+v.toLocaleString('es-PE');} }, grid: { color: 'rgba(148,163,184,0.15)' }, title: { display: true, text: 'Importe S/', color: '#94a3b8', font: { size: 11 } } },
+                },
+            }),
+        });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
+    else build();
+})();
+</script>
+{% endblock %}

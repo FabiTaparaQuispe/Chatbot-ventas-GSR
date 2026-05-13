@@ -12,7 +12,8 @@
       "PowerShell($resp = Invoke-WebRequest -Uri \"http://127.0.0.1:5000/api/ventasgeneral_dt.php?draw=1&start=0&length=5\" -UseBasicParsing; Write-Host \"Status: $\\($resp.StatusCode\\)\"; Write-Host $resp.Content)",
       "PowerShell($resp = Invoke-WebRequest -Uri \"http://127.0.0.1:5000/modules/chat_assistant_script.php?u=testuser\" -UseBasicParsing; Write-Host \"Status: $\\($resp.StatusCode\\)\"; Write-Host \"Content-Type: $\\($resp.Headers.'Content-Type'\\)\"; Write-Host $resp.Content.Substring\\(0, 200\\))",
       "Bash(Get-ChildItem -Path \"c:\\\\xampp\\\\htdocs\\\\chatbotVentasGeneral\\\\Chatbot-ventas-GSR\" -Directory)",
-      "Bash(Select-Object Name)"
+      "Bash(Select-Object Name)",
+      "Bash(python -c \"import py_compile; py_compile.compile\\('routes/reports_modules.py', doraise=True\\); print\\('OK'\\)\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\redim\\.claude\\projects\\c--xampp-htdocs-chatbotVentasGeneral-Chatbot-ventas-GSR\\memory"

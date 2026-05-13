@@ -5,40 +5,93 @@
     <p class="page-lead">FechaContable del <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong>{% if filtros_texto %}. {{ filtros_texto }}{% endif %}.</p>
 </div>
 
-<div class="card-filtros-demo reporte-informe-panel">
-    <div class="reporte-informe-toolbar">
-        <button type="button" class="btn btn-primary" id="btn-pdf-resumen">Descargar PDF</button>
-    </div>
-    <div id="reporte-pdf-root">
-        <h2 class="reporte-informe-title">Agregados del periodo</h2>
-        <p class="reporte-informe-meta">Totales sobre líneas de detalle con los filtros aplicados (si los hay).</p>
-        <div class="table-wrapper overflow-x-auto productos-dt-skin">
-            <table class="data-table config-table display stripe">
-                <thead>
-                    <tr>
-                        <th>N°</th>
-                        <th>Filas</th>
-                        <th>Importe total</th>
-                        <th>Cantidad total</th>
-                        <th>Peso total</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>1</td>
-                        <td>{{ r_filas }}</td>
-                        <td>{{ r_valor }}</td>
-                        <td>{{ r_cant }}</td>
-                        <td>{{ r_peso }}</td>
-                    </tr>
-                </tbody>
-            </table>
+<div class="reporte-page">
+    <div class="card-filtros-demo reporte-informe-panel">
+        <div class="reporte-informe-toolbar">
+            <button type="button" class="btn btn-primary" id="btn-pdf-resumen">Descargar PDF</button>
+        </div>
+        <div id="reporte-pdf-root">
+            <h2 class="reporte-informe-title">Agregados del periodo</h2>
+            <p class="reporte-informe-meta">Totales sobre líneas de detalle con los filtros aplicados (si los hay).</p>
+            <div class="table-wrapper overflow-x-auto productos-dt-skin">
+                <table class="data-table config-table display stripe">
+                    <thead>
+                        <tr>
+                            <th>N°</th>
+                            <th>Filas</th>
+                            <th>Importe total (S/)</th>
+                            <th>Cantidad total</th>
+                            <th>Peso total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>1</td>
+                            <td>{{ r_filas }}</td>
+                            <td>{{ r_valor }}</td>
+                            <td>{{ r_cant }}</td>
+                            <td>{{ r_peso }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
+
+    {% if chart_data and chart_data.fechas %}
+    <section class="reporte-chart-section" aria-label="Gráfico importe diario">
+        <h3 class="reporte-chart-heading">Importe diario (S/)</h3>
+        <div class="chart-inner"><canvas id="chartDiario"></canvas></div>
+    </section>
+    {% endif %}
 </div>
 {% endblock %}
+
 {% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/chart_reporte_datalabels.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
 <script src="/assets/js/reporte_pdf.js"></script>
 <script>ventasBindPdfDownload('btn-pdf-resumen', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
+{% if chart_data and chart_data.fechas %}
+<script>
+(function () {
+    var d = {{ chart_data | tojson }};
+    var legCol = typeof reporteChartLegendColor === 'function' ? reporteChartLegendColor() : '#1e293b';
+    var anim = window.reporteChartAnimate || {};
+    function build() {
+        if (!window.Chart) return;
+        var ctx = document.getElementById('chartDiario');
+        if (!ctx || !d.fechas) return;
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: d.fechas,
+                datasets: [{
+                    label: 'Importe S/',
+                    data: d.diario,
+                    backgroundColor: 'rgba(59,130,246,0.60)',
+                    borderColor: 'rgba(59,130,246,1)',
+                    borderWidth: 1,
+                }],
+            },
+            options: Object.assign({}, anim, {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { labels: { color: legCol, boxWidth: 14 } },
+                    tooltip: { callbacks: { label: function(c) { var v=c.parsed.y; return 'S/ '+(v!=null?v.toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}):''); } } },
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 10 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                    y: { ticks: { color: '#94a3b8', callback: function(v){return 'S/ '+v.toLocaleString('es-PE');} }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                },
+            }),
+        });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
+    else build();
+})();
+</script>
+{% endif %}
 {% endblock %}

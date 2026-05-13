@@ -2,7 +2,8 @@
 
 Carga el prompt en `backend_python/prompts/router_system_prompt.md`, lo rellena con
 el schema fijo y las tools dinámicas (`ventas_tool_definitions`), llama al LLM
-configurado (Groq por defecto, Gemini si LLM_PROVIDER=gemini) pidiendo JSON
+configurado vía `resolve_llm_provider()` (Groq si hay ambas claves y no se fija
+`LLM_PROVIDER`; Gemini con `LLM_PROVIDER=gemini` o solo `GEMINI_API_KEY`), pidiendo JSON
 estricto, y devuelve una decisión validada.
 
 Uso:
@@ -23,6 +24,7 @@ from urllib.request import Request, urlopen
 
 from openai import OpenAI
 
+from services.llm_provider import resolve_llm_provider
 from services.tools_definitions import ventas_tool_definitions
 
 ROUTER_PROMPT_PATH = Path(__file__).resolve().parent.parent / 'prompts' / 'router_system_prompt.md'
@@ -201,14 +203,14 @@ def route_user_query(user_msg: str,
                     api_key: str | None = None) -> dict[str, Any]:
     """Devuelve la decisión del router como dict ya validado.
 
-    `provider` ∈ {'groq', 'gemini'}. Si None, usa env LLM_PROVIDER (default 'groq').
+    `provider` ∈ {'groq', 'gemini'}. Si None, usa services.llm_provider.resolve_llm_provider().
     `model` y `api_key` se toman de env si no se pasan.
     """
     if not isinstance(user_msg, str) or not user_msg.strip():
         raise RouterError('user_msg vacío.')
     history = history or []
 
-    provider = (provider or os.getenv('LLM_PROVIDER', 'groq') or 'groq').strip().lower()
+    provider = (provider or resolve_llm_provider()).strip().lower()
     system_prompt = load_router_prompt()
 
     if provider == 'gemini':

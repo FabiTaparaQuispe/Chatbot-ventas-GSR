@@ -17,6 +17,7 @@ class GroqClient:
         self._client = OpenAI(
             api_key=api_key,
             base_url='https://api.groq.com/openai/v1',
+            timeout=45.0,
         )
 
     def chat_with_tools(self, messages: list, tools: list, run_tool) -> dict:

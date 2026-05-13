@@ -4,6 +4,7 @@ from flask import Blueprint, request, jsonify
 from services.db import get_connection, db_label
 from services.groq_client import GroqClient
 from services.gemini_client import GeminiClient
+from services.llm_provider import resolve_llm_provider
 from services.tool_executor import ToolExecutor
 from services.tools_definitions import ventas_tool_definitions
 from services.chat_reply_enricher import enrich_reply
@@ -29,6 +30,7 @@ Si NO llamaste ninguna herramienta y no es por datos faltantes obvios, JAMÁS ge
 Si el JSON devuelve un "error" por parámetro faltante o fecha inválida, preguntá al usuario por el dato correcto; no uses el mensaje de período vacío.
 Si el JSON devuelve consulta válida pero filas vacías (sin "error" de parámetros), escribe únicamente: "No tengo datos suficientes para responder esa consulta en el período indicado."
 Si la pregunta no tiene ninguna herramienta disponible que la responda (tema ajeno a ventas, preguntas generales, etc.), responde únicamente: "No tengo información para responder esa pregunta; solo manejo datos de ventas."
+Preguntas sobre qué valores existen en la BD ("¿qué provincias hay?", "¿qué líneas hay?", "¿qué corporativos están registrados?", "¿qué zonas de precio existen?") SÍ son respondibles usando ventasgeneral_catalogo.
 Nunca uses ejemplos ficticios ni rellenes con valores hipotéticos.
 
 Para preguntas de "compraron más", "clientes compradores", "ventas", "facturado", "valor vendido" o similar, usa ventasgeneral_top_clientes_globales o ventasgeneral_top_productos/ventasgeneral_resumen según convenga.
@@ -68,6 +70,7 @@ Mapeo herramientas:
 - mix productos / carne vs brasa → ventasgeneral_linea_mix_productos
 - líneas sueltas → ventasgeneral_buscar
 - totales → ventasgeneral_resumen
+- catálogo/maestro de valores → ventasgeneral_catalogo (campo: provincia, linea_comercial, corporativo, zona_precio, zona_comercial, ruta, tipo_documento). Usar para preguntas como "¿qué provincias hay?", "¿qué líneas comerciales existen?", "¿qué corporativos están registrados?", "¿qué zonas de precio hay?", "¿qué tipos de documento hay?". Las fechas son opcionales.
 
 URL RELATIVA OBLIGATORIA: escribe ÚNICAMENTE la ruta que empieza por /modules/ (ej: /modules/ventasgeneral/resumen-tabla?fecha_desde=2026-01-01&fecha_hasta=2026-03-31). JAMÁS uses https://, http://, example.com, localhost ni ningún dominio — el enlace quedaría roto. JAMÁS agregues fragmentos #grafico ni #nada.
 Un solo reporte_url por respuesta, en UNA línea sin backticks, sin partir la URL. Resumen/buscar: /modules/ventasgeneral/resumen-tabla o …/buscar-tabla. Otros: /modules/reports/<slug>?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&…
@@ -143,10 +146,10 @@ def _parse_retry_after_seconds(msg: str) -> int | None:
 
 def _get_llm_client():
     """
-    Crea el cliente LLM según LLM_PROVIDER (.env).
-    Soporta: groq (default), gemini.
+    Crea el cliente LLM según LLM_PROVIDER (.env) o detección por claves API.
+    Soporta: groq, gemini.
     """
-    provider = (os.getenv('LLM_PROVIDER', 'groq') or 'groq').strip().lower()
+    provider = resolve_llm_provider()
 
     if provider == 'gemini':
         api_key = os.getenv('GEMINI_API_KEY', '')
@@ -183,7 +186,7 @@ def _is_rate_limit_error(msg: str) -> bool:
 
 @bp.route("/api/health_llm", methods=["GET"])
 def health_llm():
-    provider = (os.getenv("LLM_PROVIDER", "groq") or "groq").strip().lower()
+    provider = resolve_llm_provider()
 
     info = {
         "ok": True,
