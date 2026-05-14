@@ -11,7 +11,9 @@ from services.historial_data import (
     build_stats,
     clasificar_pregunta,
     fetch_historial_rows,
+    fetch_historial_usernames,
     historial_preview,
+    is_historial_filter_validation_error,
 )
 from services.roles import normalize_user_role
 from services.urlmap import API_CHAT, chat_assistant_config_dict
@@ -170,7 +172,21 @@ def index():
 
     if page == "historial_preguntas":
         conn = get_connection()
-        rows, db_err = fetch_historial_rows(conn)
+        f_desde = request.args.get("fecha_desde", "").strip()
+        f_hasta = request.args.get("fecha_hasta", "").strip()
+        f_user = request.args.get("usuario", "").strip()
+        filtros_activos = bool(f_desde or f_hasta or f_user)
+        usernames, _ = fetch_historial_usernames(conn)
+        rows, db_err = fetch_historial_rows(
+            conn,
+            fecha_desde=f_desde or None,
+            fecha_hasta=f_hasta or None,
+            username=f_user or None,
+        )
+        historial_filter_msg = ""
+        if db_err and is_historial_filter_validation_error(db_err):
+            historial_filter_msg = db_err
+            db_err = ""
         stats = build_stats(rows) if rows and not db_err else {}
         total_p = len(rows)
         total_u = len({str(r.get("usuario") or "") for r in rows if str(r.get("usuario") or "")})
@@ -198,6 +214,12 @@ def index():
                 "colores": colores,
                 "clasificar": clasificar_pregunta,
                 "preview": historial_preview,
+                "historial_usernames": usernames,
+                "filtro_fecha_desde": f_desde,
+                "filtro_fecha_hasta": f_hasta,
+                "filtro_usuario": f_user,
+                "filtros_activos": filtros_activos,
+                "historial_filter_msg": historial_filter_msg,
             }
         )
     elif page == "usuarios":

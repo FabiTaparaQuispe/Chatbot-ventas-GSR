@@ -176,6 +176,7 @@ def _get_llm_client():
 
 
 def _is_rate_limit_error(msg: str) -> bool:
+    """Errores transitorios del proveedor LLM (cuota, saturación, 503)."""
     m = msg.lower()
     return any(k in m for k in (
         'límite de consultas',
@@ -188,8 +189,13 @@ def _is_rate_limit_error(msg: str) -> bool:
         'límite diario',
         'limite diario',
         '429',
+        '503',
         'resource exhausted',
         'quota exceeded',
+        'intentá de nuevo',
+        'intenta de nuevo',
+        'service unavailable',
+        'no disponible temporalmente',
     ))
 
 

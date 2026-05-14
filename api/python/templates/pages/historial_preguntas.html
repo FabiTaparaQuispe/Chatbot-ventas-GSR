@@ -85,6 +85,45 @@
     border-radius: .5rem; font-size: .875rem;
 }
 .hp-empty { padding: 1.5rem; color: var(--muted, #6b7280); font-size: .9rem; }
+.hp-filters {
+    margin: 0 1.5rem 1.25rem;
+    padding: 1rem 1.1rem;
+    background: var(--card-bg, #f8fafc);
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: .75rem;
+}
+[data-theme="dark"] .hp-filters { background: var(--card-bg, #1e293b); border-color: var(--border, #334155); }
+.hp-filters-title { font-size: .8rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--muted, #6b7280); margin: 0 0 .75rem; }
+.hp-filters-fields { display: flex; flex-wrap: wrap; gap: 1rem 1.25rem; align-items: flex-end; }
+.hp-filters-field label { display: block; font-size: .72rem; font-weight: 600; color: var(--muted, #64748b); margin-bottom: .35rem; }
+.hp-filters-field input[type="date"],
+.hp-filters-field select {
+    min-width: 11rem;
+    padding: .45rem .6rem;
+    font-size: .85rem;
+    border: 1px solid var(--border, #cbd5e1);
+    border-radius: .5rem;
+    background: var(--input-bg, #fff);
+    color: inherit;
+}
+[data-theme="dark"] .hp-filters-field input[type="date"],
+[data-theme="dark"] .hp-filters-field select {
+    background: var(--input-bg, #0f172a);
+    border-color: var(--border, #475569);
+}
+.hp-filters-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: .25rem; }
+.hp-filters-actions .hp-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: .5rem 1rem; font-size: .82rem; font-weight: 600;
+    border-radius: .5rem; border: none; cursor: pointer; text-decoration: none;
+}
+.hp-filters-actions .hp-btn-primary { background: var(--accent, #2563eb); color: #fff; }
+.hp-filters-actions .hp-btn-primary:hover { filter: brightness(1.05); }
+.hp-filters-actions .hp-btn-ghost {
+    background: transparent; color: var(--muted, #64748b);
+    border: 1px solid var(--border, #cbd5e1);
+}
+.hp-filters-actions .hp-btn-ghost:hover { background: var(--hover-bg, rgba(0,0,0,.04)); }
 </style>
 <div class="hp-wrap">
     <div class="hp-head">
@@ -132,9 +171,42 @@
     </div>
     {% endif %}
     <div class="hp-table-section">
-        <h2>Detalle de preguntas <span style="font-weight:400;color:var(--muted,#6b7280);font-size:.85em;">(últimas {{ historial_rows|length }})</span></h2>
+        <form class="hp-filters" method="get" action="/index.php" aria-label="Filtros del historial">
+            <input type="hidden" name="page" value="historial_preguntas">
+            <div class="hp-filters-title">Filtros</div>
+            <div class="hp-filters-fields">
+                <div class="hp-filters-field">
+                    <label for="hp-f-desde">Fecha desde</label>
+                    <input type="date" id="hp-f-desde" name="fecha_desde" value="{{ filtro_fecha_desde|e }}" autocomplete="off">
+                </div>
+                <div class="hp-filters-field">
+                    <label for="hp-f-hasta">Fecha hasta</label>
+                    <input type="date" id="hp-f-hasta" name="fecha_hasta" value="{{ filtro_fecha_hasta|e }}" autocomplete="off">
+                </div>
+                <div class="hp-filters-field">
+                    <label for="hp-f-user">Usuario</label>
+                    <select id="hp-f-user" name="usuario">
+                        <option value="" {% if not filtro_usuario %}selected{% endif %}>Todos los usuarios</option>
+                        {% if filtro_usuario and filtro_usuario not in historial_usernames %}
+                        <option value="{{ filtro_usuario|e }}" selected>{{ filtro_usuario|e }}</option>
+                        {% endif %}
+                        {% for u in historial_usernames %}
+                        <option value="{{ u|e }}" {% if filtro_usuario == u %}selected{% endif %}>{{ u|e }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="hp-filters-actions">
+                <button type="submit" class="hp-btn hp-btn-primary">Aplicar filtros</button>
+                <a href="/index.php?page=historial_preguntas" class="hp-btn hp-btn-ghost">Limpiar</a>
+            </div>
+        </form>
+        {% if historial_filter_msg %}
+        <div class="hp-alert" role="alert" style="margin:0 1.5rem 1rem;">{{ historial_filter_msg|e }}</div>
+        {% endif %}
+        <h2>Detalle de preguntas <span style="font-weight:400;color:var(--muted,#6b7280);font-size:.85em;">({{ historial_rows|length }} resultado{% if historial_rows|length != 1 %}s{% endif %}{% if filtros_activos %}, filtros activos{% endif %})</span></h2>
         {% if historial_rows|length == 0 %}
-            <p class="hp-empty">Aún no hay preguntas guardadas.</p>
+            <p class="hp-empty">{% if filtros_activos %}No hay preguntas que coincidan con los filtros seleccionados.{% else %}Aún no hay preguntas guardadas.{% endif %}</p>
         {% else %}
         <div class="hp-table-wrap">
             <table class="hp-table">

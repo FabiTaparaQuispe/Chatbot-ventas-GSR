@@ -11,7 +11,14 @@ from starlette.templating import Jinja2Templates
 from app.auth_core import normalize_user_role, roles_home_ventas, roles_ventas_general
 from app.db import get_engine
 from app.deps import ensure_csrf, session_user, templates
-from app.historial_logic import build_stats, clasificar_pregunta, fetch_historial_rows, historial_preview
+from app.historial_logic import (
+    build_stats,
+    clasificar_pregunta,
+    fetch_historial_rows,
+    fetch_historial_usernames,
+    historial_preview,
+    is_historial_filter_validation_error,
+)
 from app.settings import get_settings
 from app.web_admin import process_gestion_post, process_usuarios_post
 
@@ -163,9 +170,23 @@ def index_get(request: Request) -> Any:
         ctx["nom_corto"] = _nom_corto(u["username"])
     elif page == "historial_preguntas":
         tpl = "pages/historial_preguntas.html"
+        f_desde = str(request.query_params.get("fecha_desde") or "").strip()
+        f_hasta = str(request.query_params.get("fecha_hasta") or "").strip()
+        f_user = str(request.query_params.get("usuario") or "").strip()
+        filtros_activos = bool(f_desde or f_hasta or f_user)
         engine = get_engine()
         with engine.connect() as conn:
-            rows, db_err = fetch_historial_rows(conn)
+            usernames, _ = fetch_historial_usernames(conn)
+            rows, db_err = fetch_historial_rows(
+                conn,
+                fecha_desde=f_desde or None,
+                fecha_hasta=f_hasta or None,
+                username=f_user or None,
+            )
+        historial_filter_msg = ""
+        if db_err and is_historial_filter_validation_error(db_err):
+            historial_filter_msg = db_err
+            db_err = ""
         stats = build_stats(rows) if rows and not db_err else {}
         total_p = len(rows)
         total_u = len({str(r.get("usuario") or "") for r in rows if str(r.get("usuario") or "")})
@@ -191,6 +212,12 @@ def index_get(request: Request) -> Any:
                 "colores": colores,
                 "clasificar": clasificar_pregunta,
                 "preview": historial_preview,
+                "historial_usernames": usernames,
+                "filtro_fecha_desde": f_desde,
+                "filtro_fecha_hasta": f_hasta,
+                "filtro_usuario": f_user,
+                "filtros_activos": filtros_activos,
+                "historial_filter_msg": historial_filter_msg,
             }
         )
     elif page == "usuarios":

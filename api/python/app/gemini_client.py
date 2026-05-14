@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -77,6 +78,21 @@ def _messages_to_gemini_contents(messages: list[dict[str, Any]]) -> tuple[str | 
             continue
         contents.append({"role": "user" if role == "user" else "model", "parts": [{"text": txt}]})
     return system_text, contents
+
+
+def _extract_gemini_retry_hint(raw: str) -> str | None:
+    if not raw:
+        return None
+    m = re.search(r"retry in\s+([\d.]+)\s*s", raw, flags=re.I)
+    if m:
+        return f"{float(m.group(1)):.1f}s"
+    m2 = re.search(r"Please retry in\s+([\d.]+)\s*s", raw, flags=re.I)
+    if m2:
+        return f"{float(m2.group(1)):.1f}s"
+    m3 = re.search(r'"seconds"\s*:\s*"?([\d.]+)"?', raw, flags=re.I)
+    if m3:
+        return f"{float(m3.group(1)):.1f}s"
+    return None
 
 
 class GeminiClient:
@@ -174,6 +190,18 @@ class GeminiClient:
         except HTTPError as e:
             raw = e.read().decode("utf-8", "replace")
             if e.code in (429, 503):
+                hint = _extract_gemini_retry_hint(raw)
+                if e.code == 503:
+                    base = (
+                        "Gemini API no disponible temporalmente (503). Suele ser saturación del servicio de Google; "
+                        "reintentá en 1–5 minutos. Si persiste, probá otro modelo (GEMINI_MODEL en .env) o "
+                        "cambiá a Groq: LLM_PROVIDER=groq y GROQ_API_KEY."
+                    )
+                    if hint:
+                        raise RuntimeError(f"{base} Indicación: esperar ~{hint}.") from e
+                    raise RuntimeError(base) from e
+                if hint:
+                    raise RuntimeError(f"Intentá de nuevo en {hint}.") from e
                 raise RuntimeError("Intentá de nuevo en unos segundos.") from e
             if e.code in (401, 403):
                 raise RuntimeError("Gemini rechazó la API key. Verificá GEMINI_API_KEY.") from e

@@ -199,8 +199,16 @@ class GeminiClient:
             # Mapear errores comunes a mensajes claros
             if e.code in (429, 503):
                 hint = self._extract_retry_hint(raw)
+                if e.code == 503:
+                    base = (
+                        "Gemini API no disponible temporalmente (503). Suele ser saturación del servicio de Google; "
+                        "reintentá en 1–5 minutos. Si persiste, probá otro modelo (GEMINI_MODEL en .env) o "
+                        "cambiá a Groq: LLM_PROVIDER=groq y GROQ_API_KEY."
+                    )
+                    if hint:
+                        raise RuntimeError(f"{base} Indicación: esperar ~{hint}.") from e
+                    raise RuntimeError(base) from e
                 if hint:
-                    
                     raise RuntimeError(f"Intentá de nuevo en {hint}.") from e
                 raise RuntimeError("Intentá de nuevo en unos segundos.") from e
             if e.code in (401, 403):
