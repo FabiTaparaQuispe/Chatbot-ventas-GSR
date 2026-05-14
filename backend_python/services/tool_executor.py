@@ -243,6 +243,12 @@ class ToolExecutor:
                 'ventasgeneral_linea_precio_resumen_provincia': self._linea_precio_resumen_provincia,
                 'ventasgeneral_linea_mix_productos': self._linea_mix_productos,
                 'ventasgeneral_catalogo': self._catalogo,
+                'chat_usuario_estadisticas': self._chat_usuario_estadisticas,
+                'chat_top_usuarios': self._chat_top_usuarios,
+                'chat_actividad_por_dia': self._chat_actividad_por_dia,
+                'chat_listar_preguntas': self._chat_listar_preguntas,
+                'chat_buscar_pregunta': self._chat_buscar_pregunta,
+                'chat_resumen_threads': self._chat_resumen_threads,
             }
             fn = dispatch.get(name)
             if fn is None:
@@ -1214,5 +1220,312 @@ class ToolExecutor:
             'total': len(valores),
             'valores': valores,
             'periodo': {'desde': d1, 'hasta': d2} if d1 and d2 else None,
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    # ──────────────────────────────────────────────────────────────────
+    # META-CONSULTAS: estadísticas sobre el propio historial del chatbot
+    # Tablas: app_chat_messages (m), app_chat_threads (t), app_users (u)
+    # m.role ∈ ('user', 'assistant'). Solo cuentan como "preguntas" m.role='user'.
+    # ──────────────────────────────────────────────────────────────────
+
+    def _chat_periodo_where(self, args, required=True):
+        """Construye fragmento WHERE para filtrar m.created_at por rango (inclusivo full-day).
+
+        - Si required=True, exige fecha_desde y fecha_hasta.
+        - Devuelve (lista_de_clausulas, params, d1, d2).
+        """
+        d1 = _parse_date(args.get('fecha_desde'), 'fecha_desde', required=required)
+        d2 = _parse_date(args.get('fecha_hasta'), 'fecha_hasta', required=required)
+        if d1 and d2 and d1 > d2:
+            raise ValueError('fecha_desde no puede ser mayor que fecha_hasta')
+        where = []
+        params = {}
+        if d1:
+            where.append('m.created_at >= %(d1)s')
+            params['d1'] = d1
+        if d2:
+            where.append('m.created_at < DATE_ADD(%(d2)s, INTERVAL 1 DAY)')
+            params['d2'] = d2
+        return where, params, d1, d2
+
+    def _chat_usuario_estadisticas(self, args):
+        where, params, d1, d2 = self._chat_periodo_where(args, required=True)
+        username = str(args.get('username') or '').strip()
+
+        sql = (
+            'SELECT COUNT(*) AS total_preguntas,'
+            ' COUNT(DISTINCT t.id) AS total_chats,'
+            ' MIN(m.created_at) AS primera_pregunta_at,'
+            ' MAX(m.created_at) AS ultima_pregunta_at'
+            ' FROM app_chat_messages m'
+            ' INNER JOIN app_chat_threads t ON t.id = m.thread_id'
+            " WHERE m.role = 'user'"
+        )
+        for w in where:
+            sql += ' AND ' + w
+        if username:
+            sql += ' AND t.username = %(username)s'
+            params['username'] = username
+
+        row = _q1(self._conn, sql, params) or {}
+        agregados = {
+            'total_preguntas': int(row.get('total_preguntas') or 0),
+            'total_chats': int(row.get('total_chats') or 0),
+            'primera_pregunta_at': str(row.get('primera_pregunta_at')) if row.get('primera_pregunta_at') else None,
+            'ultima_pregunta_at': str(row.get('ultima_pregunta_at')) if row.get('ultima_pregunta_at') else None,
+        }
+        return {
+            'tabla': 'app_chat_messages',
+            'tipo': 'chat_usuario_estadisticas',
+            'periodo': {'desde': d1, 'hasta': d2},
+            'filtro': {'username': username or '(todos)'},
+            'agregados': agregados,
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _chat_top_usuarios(self, args):
+        where, params, d1, d2 = self._chat_periodo_where(args, required=True)
+        top = _int_arg(args.get('top_n'), 10, 1, 100)
+        pagina = _parse_pagina(args)
+        por_pagina = _parse_por_pagina(args)
+
+        base_where = " m.role = 'user'"
+        for w in where:
+            base_where += ' AND ' + w
+
+        sql = (
+            'SELECT t.username,'
+            " COALESCE(MAX(u.display_name),'') AS display_name,"
+            " COALESCE(MAX(u.role),'') AS user_role,"
+            ' COUNT(*) AS total_preguntas,'
+            ' COUNT(DISTINCT t.id) AS total_chats,'
+            ' MIN(m.created_at) AS primera_pregunta_at,'
+            ' MAX(m.created_at) AS ultima_pregunta_at'
+            ' FROM app_chat_messages m'
+            ' INNER JOIN app_chat_threads t ON t.id = m.thread_id'
+            ' LEFT JOIN app_users u ON u.username = t.username'
+            ' WHERE ' + base_where +
+            ' GROUP BY t.username'
+            f' ORDER BY total_preguntas DESC, t.username ASC LIMIT {top}'
+        )
+        raw = _q(self._conn, sql, params)
+        filas_all = [{
+            'username': str(r.get('username') or ''),
+            'display_name': str(r.get('display_name') or ''),
+            'user_role': str(r.get('user_role') or ''),
+            'total_preguntas': int(r.get('total_preguntas') or 0),
+            'total_chats': int(r.get('total_chats') or 0),
+            'primera_pregunta_at': str(r.get('primera_pregunta_at')) if r.get('primera_pregunta_at') else None,
+            'ultima_pregunta_at': str(r.get('ultima_pregunta_at')) if r.get('ultima_pregunta_at') else None,
+        } for r in raw]
+        filas = _paginate_list(filas_all, pagina, por_pagina)
+        return {
+            'tabla': 'app_chat_messages',
+            'tipo': 'chat_top_usuarios',
+            'periodo': {'desde': d1, 'hasta': d2},
+            'top_n': top,
+            'filas_ranking': filas,
+            'paginacion': _pagination_meta(len(filas_all), pagina, por_pagina),
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _chat_actividad_por_dia(self, args):
+        where, params, d1, d2 = self._chat_periodo_where(args, required=True)
+        username = str(args.get('username') or '').strip()
+
+        sql = (
+            'SELECT DATE(m.created_at) AS dia,'
+            ' COUNT(*) AS total_preguntas,'
+            ' COUNT(DISTINCT t.username) AS usuarios_activos,'
+            ' COUNT(DISTINCT t.id) AS chats_activos'
+            ' FROM app_chat_messages m'
+            ' INNER JOIN app_chat_threads t ON t.id = m.thread_id'
+            " WHERE m.role = 'user'"
+        )
+        for w in where:
+            sql += ' AND ' + w
+        if username:
+            sql += ' AND t.username = %(username)s'
+            params['username'] = username
+        sql += ' GROUP BY DATE(m.created_at) ORDER BY dia ASC'
+
+        rows = _q(self._conn, sql, params)
+        filas = [{
+            'dia': str(r.get('dia') or ''),
+            'total_preguntas': int(r.get('total_preguntas') or 0),
+            'usuarios_activos': int(r.get('usuarios_activos') or 0),
+            'chats_activos': int(r.get('chats_activos') or 0),
+        } for r in rows]
+        return {
+            'tabla': 'app_chat_messages',
+            'tipo': 'chat_actividad_por_dia',
+            'periodo': {'desde': d1, 'hasta': d2},
+            'filtro': {'username': username or '(todos)'},
+            'filas': filas,
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _chat_listar_preguntas(self, args):
+        where, params, d1, d2 = self._chat_periodo_where(args, required=True)
+        username = str(args.get('username') or '').strip()
+        pagina = _parse_pagina(args)
+        por_pagina = _parse_por_pagina(args)
+        offset = _pagination_offset(pagina, por_pagina)
+
+        base_where = " m.role = 'user'"
+        for w in where:
+            base_where += ' AND ' + w
+        if username:
+            base_where += ' AND t.username = %(username)s'
+            params['username'] = username
+
+        sql_count = (
+            'SELECT COUNT(*) AS total'
+            ' FROM app_chat_messages m'
+            ' INNER JOIN app_chat_threads t ON t.id = m.thread_id'
+            ' WHERE ' + base_where
+        )
+        total = _count_query(self._conn, sql_count, params)
+
+        sql = (
+            'SELECT m.id AS message_id,'
+            ' t.username,'
+            ' t.title AS thread_title,'
+            ' t.id AS thread_id,'
+            ' m.content,'
+            ' m.created_at'
+            ' FROM app_chat_messages m'
+            ' INNER JOIN app_chat_threads t ON t.id = m.thread_id'
+            ' WHERE ' + base_where +
+            f' ORDER BY m.created_at DESC, m.id DESC LIMIT {int(por_pagina)} OFFSET {int(offset)}'
+        )
+        rows = _q(self._conn, sql, params)
+        filas = [{
+            'message_id': int(r.get('message_id') or 0),
+            'thread_id': int(r.get('thread_id') or 0),
+            'username': str(r.get('username') or ''),
+            'thread_title': str(r.get('thread_title') or ''),
+            'content': str(r.get('content') or ''),
+            'created_at': str(r.get('created_at')) if r.get('created_at') else '',
+        } for r in rows]
+        return {
+            'tabla': 'app_chat_messages',
+            'tipo': 'chat_listar_preguntas',
+            'periodo': {'desde': d1, 'hasta': d2},
+            'filtro': {'username': username or '(todos)'},
+            'filas': filas,
+            'paginacion': _pagination_meta(total, pagina, por_pagina),
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _chat_buscar_pregunta(self, args):
+        texto = str(args.get('texto') or '').strip()
+        if not texto:
+            raise ValueError("Falta 'texto' a buscar dentro de las preguntas")
+        if len(texto) < 2:
+            raise ValueError("El parámetro 'texto' debe tener al menos 2 caracteres")
+
+        where, params, d1, d2 = self._chat_periodo_where(args, required=False)
+        username = str(args.get('username') or '').strip()
+        pagina = _parse_pagina(args)
+        por_pagina = _parse_por_pagina(args)
+        offset = _pagination_offset(pagina, por_pagina)
+
+        base_where = " m.role = 'user' AND m.content LIKE %(texto_like)s"
+        params['texto_like'] = f'%{texto}%'
+        for w in where:
+            base_where += ' AND ' + w
+        if username:
+            base_where += ' AND t.username = %(username)s'
+            params['username'] = username
+
+        sql_count = (
+            'SELECT COUNT(*) AS total'
+            ' FROM app_chat_messages m'
+            ' INNER JOIN app_chat_threads t ON t.id = m.thread_id'
+            ' WHERE ' + base_where
+        )
+        total = _count_query(self._conn, sql_count, params)
+
+        sql = (
+            'SELECT m.id AS message_id,'
+            ' t.username,'
+            ' t.title AS thread_title,'
+            ' t.id AS thread_id,'
+            ' m.content,'
+            ' m.created_at'
+            ' FROM app_chat_messages m'
+            ' INNER JOIN app_chat_threads t ON t.id = m.thread_id'
+            ' WHERE ' + base_where +
+            f' ORDER BY m.created_at DESC, m.id DESC LIMIT {int(por_pagina)} OFFSET {int(offset)}'
+        )
+        rows = _q(self._conn, sql, params)
+        filas = [{
+            'message_id': int(r.get('message_id') or 0),
+            'thread_id': int(r.get('thread_id') or 0),
+            'username': str(r.get('username') or ''),
+            'thread_title': str(r.get('thread_title') or ''),
+            'content': str(r.get('content') or ''),
+            'created_at': str(r.get('created_at')) if r.get('created_at') else '',
+        } for r in rows]
+        return {
+            'tabla': 'app_chat_messages',
+            'tipo': 'chat_buscar_pregunta',
+            'texto_buscado': texto,
+            'periodo': {'desde': d1, 'hasta': d2} if (d1 or d2) else None,
+            'filtro': {'username': username or '(todos)'},
+            'filas': filas,
+            'paginacion': _pagination_meta(total, pagina, por_pagina),
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _chat_resumen_threads(self, args):
+        where, params, d1, d2 = self._chat_periodo_where(args, required=True)
+        username = str(args.get('username') or '').strip()
+
+        # Para "actividad del período" filtramos por mensajes (no por created_at del thread)
+        base_where = ' 1=1'
+        for w in where:
+            base_where += ' AND ' + w
+        if username:
+            base_where += ' AND t.username = %(username)s'
+            params['username'] = username
+
+        sql = (
+            'SELECT t.username,'
+            " COALESCE(MAX(u.display_name),'') AS display_name,"
+            " COALESCE(MAX(u.role),'') AS user_role,"
+            ' COUNT(DISTINCT t.id) AS total_chats,'
+            ' COUNT(m.id) AS total_mensajes,'
+            " SUM(CASE WHEN m.role = 'user' THEN 1 ELSE 0 END) AS total_preguntas,"
+            " SUM(CASE WHEN m.role = 'assistant' THEN 1 ELSE 0 END) AS total_respuestas,"
+            ' MIN(m.created_at) AS primer_mensaje_at,'
+            ' MAX(m.created_at) AS ultimo_mensaje_at'
+            ' FROM app_chat_threads t'
+            ' INNER JOIN app_chat_messages m ON m.thread_id = t.id'
+            ' LEFT JOIN app_users u ON u.username = t.username'
+            ' WHERE ' + base_where +
+            ' GROUP BY t.username'
+            ' ORDER BY total_preguntas DESC, t.username ASC'
+        )
+        rows = _q(self._conn, sql, params)
+        filas = [{
+            'username': str(r.get('username') or ''),
+            'display_name': str(r.get('display_name') or ''),
+            'user_role': str(r.get('user_role') or ''),
+            'total_chats': int(r.get('total_chats') or 0),
+            'total_mensajes': int(r.get('total_mensajes') or 0),
+            'total_preguntas': int(r.get('total_preguntas') or 0),
+            'total_respuestas': int(r.get('total_respuestas') or 0),
+            'primer_mensaje_at': str(r.get('primer_mensaje_at')) if r.get('primer_mensaje_at') else None,
+            'ultimo_mensaje_at': str(r.get('ultimo_mensaje_at')) if r.get('ultimo_mensaje_at') else None,
+        } for r in rows]
+        return {
+            'tabla': 'app_chat_threads',
+            'tipo': 'chat_resumen_threads',
+            'periodo': {'desde': d1, 'hasta': d2},
+            'filtro': {'username': username or '(todos)'},
+            'filas': filas,
             '_sql_traces': [{'sql': sql, 'params': params}],
         }

@@ -242,3 +242,120 @@ def ventas_tool_definitions():
             }, 'required': ['campo']},
         }},
     ]
+
+
+def chat_history_tool_definitions():
+    """Meta-consultas sobre el propio historial de chats (app_chat_messages / app_chat_threads / app_users).
+
+    Permiten a la IA responder preguntas como:
+      - "¿cuántas preguntas hizo admin esta semana?"
+      - "¿qué usuario consultó más en mayo?"
+      - "mostrame las últimas preguntas de gerente"
+      - "¿alguien preguntó por Pollo Vivo?"
+    """
+    d_opt = {'type': 'string', 'description': 'YYYY-MM-DD'}
+    user_opt = {
+        'type': 'string',
+        'description': (
+            'Username exacto del usuario del chatbot (ej. admin, gerente, usuario2). '
+            'Omitir para agregar todos los usuarios.'
+        ),
+    }
+    texto = {
+        'type': 'string',
+        'description': 'Texto/fragmento a buscar dentro del contenido de las preguntas (case-insensitive).',
+    }
+    top_n = {
+        'anyOf': [{'type': 'integer'}, {'type': 'string'}],
+        'description': 'Entero positivo (1-100). Default 10.',
+    }
+    pagina = {
+        'anyOf': [{'type': 'integer'}, {'type': 'string'}],
+        'description': 'Página solicitada (entero ≥1). Default 1.',
+    }
+    por_pagina = {
+        'anyOf': [{'type': 'integer'}, {'type': 'string'}],
+        'description': 'Tamaño de página (entero 10-100). Default 50.',
+    }
+
+    return [
+        {'type': 'function', 'function': {
+            'name': 'chat_usuario_estadisticas',
+            'description': (
+                'Estadísticas de uso del CHATBOT (no de ventas) por un usuario o por todos. '
+                'Devuelve total de preguntas hechas, total de chats (threads) distintos, '
+                'primera y última pregunta del período. Si se omite username agrega TODOS los usuarios. '
+                'Úsala cuando el usuario pregunte por su propio uso del bot o por el de otros, ej. '
+                '"¿cuántas preguntas hizo admin esta semana?", "¿cuántas consultas hubo en mayo?", '
+                '"¿cuánto se usó el chatbot del 1 al 10 de mayo?".'
+            ),
+            'parameters': {'type': 'object', 'properties': {
+                'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'username': user_opt,
+            }, 'required': ['fecha_desde', 'fecha_hasta']},
+        }},
+        {'type': 'function', 'function': {
+            'name': 'chat_top_usuarios',
+            'description': (
+                'Ranking de usuarios del CHATBOT por cantidad de preguntas hechas en el período. '
+                'Devuelve username, display_name, rol del usuario, total_preguntas y total_chats. '
+                'top_n acota el ranking (default 10); pagina/por_pagina lo navegan. '
+                'Úsala para "¿qué usuarios consultaron más esta semana?", "top usuarios del chatbot", '
+                '"¿quién pregunta más al bot?".'
+            ),
+            'parameters': {'type': 'object', 'properties': {
+                'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'top_n': top_n,
+                'pagina': pagina, 'por_pagina': por_pagina,
+            }, 'required': ['fecha_desde', 'fecha_hasta']},
+        }},
+        {'type': 'function', 'function': {
+            'name': 'chat_actividad_por_dia',
+            'description': (
+                'Serie diaria de uso del CHATBOT: una fila por día con total de preguntas y usuarios activos. '
+                'Si se da username filtra solo a ese usuario. '
+                'Úsala para "¿cómo evolucionó el uso del chatbot esta semana?", '
+                '"actividad diaria del chatbot", "¿qué días se usó más el bot?".'
+            ),
+            'parameters': {'type': 'object', 'properties': {
+                'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'username': user_opt,
+            }, 'required': ['fecha_desde', 'fecha_hasta']},
+        }},
+        {'type': 'function', 'function': {
+            'name': 'chat_listar_preguntas',
+            'description': (
+                'Lista las preguntas del CHATBOT (mensajes con role=user) del período, paginadas. '
+                'Devuelve message_id, username, thread_title, content, created_at. '
+                'Útil para auditar o revisar qué se preguntó. '
+                'Úsala para "mostrame las últimas preguntas de gerente", "qué preguntó admin ayer", '
+                '"lista las consultas del 1 al 10 de mayo".'
+            ),
+            'parameters': {'type': 'object', 'properties': {
+                'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'username': user_opt,
+                'pagina': pagina, 'por_pagina': por_pagina,
+            }, 'required': ['fecha_desde', 'fecha_hasta']},
+        }},
+        {'type': 'function', 'function': {
+            'name': 'chat_buscar_pregunta',
+            'description': (
+                'Busca preguntas del CHATBOT (role=user) cuyo content contenga un texto/fragmento. '
+                'Filtros opcionales por fecha y/o username. Paginado. '
+                'Úsala para "¿alguien preguntó por Pollo Vivo?", "buscá consultas sobre TACNA", '
+                '"qué preguntas hicieron sobre notas de crédito".'
+            ),
+            'parameters': {'type': 'object', 'properties': {
+                'texto': texto, 'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'username': user_opt,
+                'pagina': pagina, 'por_pagina': por_pagina,
+            }, 'required': ['texto']},
+        }},
+        {'type': 'function', 'function': {
+            'name': 'chat_resumen_threads',
+            'description': (
+                'Resumen de CHATS (threads) por usuario en el período: total de chats abiertos, '
+                'total de mensajes (user + assistant), último mensaje. '
+                'Úsala para "¿cuántos chats abrió cada usuario este mes?", '
+                '"resumen de conversaciones por usuario".'
+            ),
+            'parameters': {'type': 'object', 'properties': {
+                'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'username': user_opt,
+            }, 'required': ['fecha_desde', 'fecha_hasta']},
+        }},
+    ]

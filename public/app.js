@@ -119,7 +119,7 @@ form.addEventListener("submit", async (e) => {
       const isRateLimit = res.status === 429 || err.includes('rate limit') || err.includes('rate_limit') || err.includes('too many requests') || err.includes('tokens per day') || err.includes('tpd') || err.includes('límite') || err.includes('limite');
       const friendly = isRateLimit
         ? (serverMsg && serverMsg.toLowerCase().startsWith('límite') ? serverMsg : 'Se alcanzó el límite de consultas. Intentá nuevamente en unos minutos.')
-        : 'Hubo un inconveniente. Por favor intentá de nuevo.';
+        : (serverMsg && serverMsg.length > 0 && serverMsg.length < 900 ? serverMsg : 'Hubo un inconveniente. Por favor intentá de nuevo.');
       appendBubble("assistant", friendly, true);
       history.pop();
       return;

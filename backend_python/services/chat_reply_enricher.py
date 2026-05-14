@@ -162,6 +162,10 @@ def _summary_with_url(summary: str, reply: str, payload: dict) -> str:
 
 
 def _format_payload(payload: dict) -> str:
+    # Meta-consultas del chatbot (app_chat_*): no usar la rama de "resumen ventas" por agregados.
+    if str(payload.get('tipo') or '').startswith('chat_'):
+        return ''
+
     if 'agregados' in payload and isinstance(payload['agregados'], dict) and 'filas' not in payload:
         a = payload['agregados']
         p = payload.get('periodo') or {}

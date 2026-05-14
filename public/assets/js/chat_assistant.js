@@ -1674,6 +1674,8 @@
                 ? 'Tu sesión parece haber cambiado o el servidor respondió algo inesperado. Recarga la página e intentá de nuevo.'
                 : isRateLimit
                 ? (serverMsg && (serverMsg.toLowerCase().startsWith('límite') || serverMsg.toLowerCase().startsWith('intentá')) ? serverMsg : 'Se alcanzó el límite de consultas. Intentá de nuevo en unos minutos.')
+                : (serverMsg && serverMsg.length > 0 && serverMsg.length < 900 && !errMsg.includes('no-json'))
+                ? serverMsg
                 : 'Hubo un inconveniente. Por favor intentá de nuevo.';
             append('assistant', friendly);
             history.pop();

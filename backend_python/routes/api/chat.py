@@ -6,7 +6,7 @@ from services.groq_client import GroqClient
 from services.gemini_client import GeminiClient
 from services.llm_provider import resolve_llm_provider
 from services.tool_executor import ToolExecutor
-from services.tools_definitions import ventas_tool_definitions
+from services.tools_definitions import ventas_tool_definitions, chat_history_tool_definitions
 from services.chat_reply_enricher import enrich_reply
 
 bp = Blueprint('api_chat', __name__)
@@ -29,7 +29,7 @@ Si NO llamaste ninguna herramienta porque faltan parámetros obligatorios (fecha
 Si NO llamaste ninguna herramienta y no es por datos faltantes obvios, JAMÁS generes listas numeradas de clientes, productos ni cifras. Responde únicamente: "No tengo datos suficientes para responder esa consulta; por favor repite la pregunta."
 Si el JSON devuelve un "error" por parámetro faltante o fecha inválida, preguntá al usuario por el dato correcto; no uses el mensaje de período vacío.
 Si el JSON devuelve consulta válida pero filas vacías (sin "error" de parámetros), escribe únicamente: "No tengo datos suficientes para responder esa consulta en el período indicado."
-Si la pregunta no tiene ninguna herramienta disponible que la responda (tema ajeno a ventas, preguntas generales, etc.), responde únicamente: "No tengo información para responder esa pregunta; solo manejo datos de ventas."
+Si la pregunta no tiene ninguna herramienta disponible que la responda (tema ajeno a ventas y ajeno al historial del chatbot, preguntas generales, etc.), responde únicamente: "No tengo información para responder esa pregunta; solo manejo datos de ventas y estadísticas del uso del asistente (herramientas chat_*)."
 Preguntas sobre qué valores existen en la BD ("¿qué provincias hay?", "¿qué líneas hay?", "¿qué corporativos están registrados?", "¿qué zonas de precio existen?") SÍ son respondibles usando ventasgeneral_catalogo.
 Nunca uses ejemplos ficticios ni rellenes con valores hipotéticos.
 
@@ -71,6 +71,15 @@ Mapeo herramientas:
 - líneas sueltas → ventasgeneral_buscar
 - totales → ventasgeneral_resumen
 - catálogo/maestro de valores → ventasgeneral_catalogo (campo: provincia, linea_comercial, corporativo, zona_precio, zona_comercial, ruta, tipo_documento). Usar para preguntas como "¿qué provincias hay?", "¿qué líneas comerciales existen?", "¿qué corporativos están registrados?", "¿qué zonas de precio hay?", "¿qué tipos de documento hay?". Las fechas son opcionales.
+
+META-CONSULTAS SOBRE EL PROPIO CHATBOT (auditoría de uso): cuando el usuario pregunte por el uso del CHAT/BOT — NO por ventas — usa SIEMPRE las herramientas chat_*. Reconocé estas señales: "preguntas que se hicieron", "consultas del chatbot", "cuánto se usó el bot", "qué usuario preguntó más", "qué preguntó admin/gerente", "actividad del chat", "auditoría de chats", "logs de preguntas".
+- estadísticas de un usuario o globales → chat_usuario_estadisticas (omití username para global). Ej: "¿cuántas preguntas hizo admin esta semana?".
+- ranking de usuarios → chat_top_usuarios. Ej: "¿qué usuario consultó más en mayo?".
+- evolución diaria de uso → chat_actividad_por_dia. Ej: "actividad del bot esta semana".
+- lista de preguntas literales → chat_listar_preguntas. Ej: "mostrame las últimas 10 preguntas de gerente".
+- búsqueda por texto en preguntas → chat_buscar_pregunta. Ej: "¿alguien preguntó por Pollo Vivo?".
+- resumen de threads/chats por usuario → chat_resumen_threads.
+Reglas comunes: fechas YYYY-MM-DD obligatorias salvo en chat_buscar_pregunta (donde son opcionales). Si faltan, pedilas. "Esta semana", "este mes", "hoy" → convertí a YYYY-MM-DD usando la fecha que conocés y confirmá si hace falta. Estas tools NO devuelven reporte_url; respondé en texto plano con los conteos/listas, sin URLs inventadas.
 
 URL RELATIVA OBLIGATORIA: escribe ÚNICAMENTE la ruta que empieza por /modules/ (ej: /modules/ventasgeneral/resumen-tabla?fecha_desde=2026-01-01&fecha_hasta=2026-03-31). JAMÁS uses https://, http://, example.com, localhost ni ningún dominio — el enlace quedaría roto. JAMÁS agregues fragmentos #grafico ni #nada.
 Un solo reporte_url por respuesta, en UNA línea sin backticks, sin partir la URL. Resumen/buscar: /modules/ventasgeneral/resumen-tabla o …/buscar-tabla. Otros: /modules/reports/<slug>?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&…
@@ -283,7 +292,7 @@ def chat():
     try:
         conn = get_connection()
         executor = ToolExecutor(conn)
-        tools = ventas_tool_definitions()
+        tools = ventas_tool_definitions() + chat_history_tool_definitions()
 
         result = llm_client.chat_with_tools(
             messages, tools,
