@@ -75,6 +75,8 @@
     a.ventas-chat-menu-item.ventas-chat-menu-link { text-decoration: none; box-sizing: border-box; }
 </style>
 
+<button type="button" id="ventasChatPipBackdrop" class="ventas-chat-pip-backdrop" hidden aria-hidden="true" tabindex="-1" title="Cerrar vista ventana"></button>
+
 <div class="chatbot-page" id="ventasChatPanel">
     <header class="chatbot-topbar">
         <a href="/?page=ventas" class="chatbot-back" aria-label="Volver a Ventas general" title="Volver">
@@ -82,6 +84,9 @@
         </a>
         <span class="chatbot-topbar-title">Asistente de ventas</span>
         <div class="chatbot-topbar-actions">
+            <button type="button" id="ventasChatPipToggle" class="chatbot-icon-btn" title="Vista compacta (ventana flotante en esta página)" aria-label="Vista compacta flotante" aria-pressed="false">
+                <i class="fas fa-compress" aria-hidden="true"></i>
+            </button>
             <button type="button" id="ventasChatThreadsBtn" class="chatbot-icon-btn" title="Conversaciones recientes" aria-label="Conversaciones recientes">💬</button>
             <button type="button" id="ventasChatClear" class="chatbot-icon-btn" title="Limpiar conversación" aria-label="Limpiar conversación">⌫</button>
             <details class="ventas-chat-head-menu" id="ventasChatHeadMenu">

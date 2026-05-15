@@ -179,13 +179,7 @@ def ventas_tool_definitions():
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_linea_precio_diario',
-            'description': (
-                f'Precio por día (precio/kg = Valor/Peso) de una línea por fecha, provincia, cliente y '
-                f'cantidades: incluye líneas, cantidad, peso, valor. Orden en el reporte web: días en orden cronológico y '
-                f'dentro de cada día por peso de mayor a menor. Paginado con pagina/por_pagina. '
-                f'Filtros opcionales: cod_item, mercado. '
-                f'reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_LINEA_PRECIO_DIARIO}?…'
-            ),
+            'description': f'Precio/kg diario (Valor/Peso) de una línea por fecha, provincia y cliente. reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_LINEA_PRECIO_DIARIO}?…',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt,
                 'linea_comercial': {'type': 'string', 'description': "Texto de LineaComercial, ej. 'Pollo Vivo'"},
@@ -196,16 +190,7 @@ def ventas_tool_definitions():
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_linea_precio_resumen_provincia',
-            'description': (
-                f'Precio resumen por PROVINCIA (sin desglose por cliente ni por día) de una línea comercial. '
-                f'Devuelve una fila por provincia con líneas, cantidad, peso, valor y precio/kg ponderado (SUM(Valor)/SUM(Peso)), '
-                f'ordenado por peso descendente. Úsala cuando pidan "precio resumen por provincia", '
-                f'"precio por provincia" o "precio promedio por provincia". '
-                f'No agrupa por cliente — para eso usar ventasgeneral_linea_precio_diario. '
-                f'Requiere fecha_desde/fecha_hasta y linea_comercial; si faltan, pregúntalos antes de llamar. '
-                f'Filtros opcionales: cod_item (ej. 100=carne, 103=brasa) y mercado (prefijo zona precio). '
-                f'reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_LINEA_PRECIO_RESUMEN_PROV}?…'
-            ),
+            'description': f'Precio promedio (Valor/Peso) por provincia de una línea comercial, sin desglose por cliente ni día. reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_LINEA_PRECIO_RESUMEN_PROV}?…',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt,
                 'linea_comercial': {'type': 'string', 'description': "Texto de LineaComercial, ej. 'Pollo Vivo'"},
@@ -281,27 +266,14 @@ def chat_history_tool_definitions():
     return [
         {'type': 'function', 'function': {
             'name': 'chat_usuario_estadisticas',
-            'description': (
-                'Estadísticas de uso del CHATBOT (no de ventas) por un usuario o por todos. '
-                'Devuelve total de preguntas hechas, total de chats (threads) distintos, '
-                'primera y última pregunta del período. Si se omite username agrega TODOS los usuarios. '
-                'Úsala cuando el usuario pregunte por su propio uso del bot o por el de otros, ej. '
-                '"¿cuántas preguntas hizo admin esta semana?", "¿cuántas consultas hubo en mayo?", '
-                '"¿cuánto se usó el chatbot del 1 al 10 de mayo?".'
-            ),
+            'description': 'Estadísticas de uso del chatbot por usuario o todos: total preguntas, chats, primera/última pregunta del período.',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'username': user_opt,
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
             'name': 'chat_top_usuarios',
-            'description': (
-                'Ranking de usuarios del CHATBOT por cantidad de preguntas hechas en el período. '
-                'Devuelve username, display_name, rol del usuario, total_preguntas y total_chats. '
-                'top_n acota el ranking (default 10); pagina/por_pagina lo navegan. '
-                'Úsala para "¿qué usuarios consultaron más esta semana?", "top usuarios del chatbot", '
-                '"¿quién pregunta más al bot?".'
-            ),
+            'description': 'Ranking de usuarios del chatbot por total de preguntas en el período.',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'top_n': top_n,
                 'pagina': pagina, 'por_pagina': por_pagina,
@@ -309,25 +281,14 @@ def chat_history_tool_definitions():
         }},
         {'type': 'function', 'function': {
             'name': 'chat_actividad_por_dia',
-            'description': (
-                'Serie diaria de uso del CHATBOT: una fila por día con total de preguntas y usuarios activos. '
-                'Si se da username filtra solo a ese usuario. '
-                'Úsala para "¿cómo evolucionó el uso del chatbot esta semana?", '
-                '"actividad diaria del chatbot", "¿qué días se usó más el bot?".'
-            ),
+            'description': 'Serie diaria de uso del chatbot: preguntas y usuarios activos por día. Filtra por username si se da.',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'username': user_opt,
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
             'name': 'chat_listar_preguntas',
-            'description': (
-                'Lista las preguntas del CHATBOT (mensajes con role=user) del período, paginadas. '
-                'Devuelve message_id, username, thread_title, content, created_at. '
-                'Útil para auditar o revisar qué se preguntó. '
-                'Úsala para "mostrame las últimas preguntas de gerente", "qué preguntó admin ayer", '
-                '"lista las consultas del 1 al 10 de mayo".'
-            ),
+            'description': 'Lista las preguntas del chatbot del período paginadas (message_id, username, content, created_at).',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'username': user_opt,
                 'pagina': pagina, 'por_pagina': por_pagina,
@@ -335,12 +296,7 @@ def chat_history_tool_definitions():
         }},
         {'type': 'function', 'function': {
             'name': 'chat_buscar_pregunta',
-            'description': (
-                'Busca preguntas del CHATBOT (role=user) cuyo content contenga un texto/fragmento. '
-                'Filtros opcionales por fecha y/o username. Paginado. '
-                'Úsala para "¿alguien preguntó por Pollo Vivo?", "buscá consultas sobre TACNA", '
-                '"qué preguntas hicieron sobre notas de crédito".'
-            ),
+            'description': 'Busca preguntas del chatbot que contengan un texto. Filtros opcionales: fecha, username.',
             'parameters': {'type': 'object', 'properties': {
                 'texto': texto, 'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'username': user_opt,
                 'pagina': pagina, 'por_pagina': por_pagina,
@@ -348,14 +304,21 @@ def chat_history_tool_definitions():
         }},
         {'type': 'function', 'function': {
             'name': 'chat_resumen_threads',
-            'description': (
-                'Resumen de CHATS (threads) por usuario en el período: total de chats abiertos, '
-                'total de mensajes (user + assistant), último mensaje. '
-                'Úsala para "¿cuántos chats abrió cada usuario este mes?", '
-                '"resumen de conversaciones por usuario".'
-            ),
+            'description': 'Resumen de chats (threads) abiertos por usuario en el período: total chats, mensajes, último mensaje.',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'username': user_opt,
             }, 'required': ['fecha_desde', 'fecha_hasta']},
+        }},
+        {'type': 'function', 'function': {
+            'name': 'filtrar_previo',
+            'description': 'Filtra/ordena/extrae subgrupo del resultado PREVIO sin ir a la BD. Usar cuando el usuario diga "de esa lista", "de ese resultado", "el top N de esos".',
+            'parameters': {'type': 'object', 'properties': {
+                'campo': {'type': 'string', 'description': 'Nombre exacto del campo a filtrar u ordenar (ej. Valor, Cliente, Producto, Cantidad, Peso)'},
+                'valor_filtro': {'type': 'string', 'description': 'Valor a comparar (solo si se filtra por igualdad/contenido)'},
+                'comparador': {'type': 'string', 'enum': ['igual', 'contiene', 'mayor', 'menor'], 'description': 'Operador de comparación (default: igual)'},
+                'ordenar_por': {'type': 'string', 'description': 'Campo por el cual ordenar el resultado'},
+                'orden': {'type': 'string', 'enum': ['desc', 'asc'], 'description': 'Dirección del orden (default: desc = mayor primero)'},
+                'top_n': {'anyOf': [{'type': 'integer'}, {'type': 'string'}], 'description': 'Limitar a los N primeros resultados'},
+            }, 'required': []},
         }},
     ]

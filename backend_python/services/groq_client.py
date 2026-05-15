@@ -20,7 +20,102 @@ class GroqClient:
             timeout=45.0,
         )
 
-    def chat_with_tools(self, messages: list, tools: list, run_tool) -> dict:
+    def chat_with_tools_stream(self, messages: list, tools: list, run_tool, on_event,
+                               try_fast_format=None) -> tuple:
+        """
+        Igual que chat_with_tools pero llama on_event({'type':...}) para status/tokens.
+        Retorna (reply_text, working_messages).
+        """
+        working = list(messages)
+        has_tool_results = False
+
+        for iteration in range(1, MAX_ITERATIONS + 1):
+            available_tools = tools if iteration == 1 else []
+
+            if has_tool_results:
+                # Iteración final: streamear la respuesta
+                on_event({'type': 'status', 'text': 'Generando respuesta...'})
+                full_text = ''
+                try:
+                    stream = self._client.chat.completions.create(
+                        model=self.model,
+                        messages=working,
+                        temperature=0.2,
+                        stream=True,
+                    )
+                    for chunk in stream:
+                        choice = chunk.choices[0] if chunk.choices else None
+                        if not choice:
+                            continue
+                        delta = choice.delta
+                        if delta and delta.content:
+                            full_text += delta.content
+                            on_event({'type': 'token', 'text': delta.content})
+                        if choice.finish_reason:
+                            break
+                except Exception:
+                    # Fallback sin streaming
+                    response = self._request_completion(working, [])
+                    choice = response.choices[0] if response.choices else None
+                    full_text = str(choice.message.content or '') if choice else ''
+                    on_event({'type': 'reply', 'text': full_text})
+                working.append({'role': 'assistant', 'content': full_text})
+                return full_text, working
+
+            # Llamada no-streaming para detectar tool calls
+            response = self._request_completion(working, available_tools)
+            choice = response.choices[0] if response.choices else None
+            if choice is None:
+                return 'Respuesta vacía del modelo.', working
+
+            msg = choice.message
+            tool_calls = msg.tool_calls or []
+
+            assistant_payload = {'role': 'assistant', 'content': msg.content}
+            if tool_calls:
+                assistant_payload['tool_calls'] = [
+                    {'id': tc.id, 'type': tc.type,
+                     'function': {'name': tc.function.name, 'arguments': tc.function.arguments}}
+                    for tc in tool_calls
+                ]
+            working.append(assistant_payload)
+
+            if not tool_calls:
+                full_text = str(msg.content or '')
+                on_event({'type': 'reply', 'text': full_text})
+                return full_text, working
+
+            has_tool_results = True
+            last_fn_name = None
+            last_tool_json = None
+            for tc in tool_calls:
+                fn_name = tc.function.name
+                label = 'Consultando historial...' if fn_name.startswith('chat_') else (
+                    'Filtrando resultado anterior...' if fn_name == 'filtrar_previo' else
+                    'Consultando base de datos...'
+                )
+                on_event({'type': 'status', 'text': label})
+                try:
+                    args = json.loads(tc.function.arguments)
+                except Exception:
+                    args = {}
+                tool_json = self._clamp_tool_json(run_tool(fn_name, args))
+                working.append({'role': 'tool', 'tool_call_id': tc.id, 'content': tool_json})
+                last_fn_name = fn_name
+                last_tool_json = tool_json
+
+            # Formateo rápido en Python: evita el 2do call al LLM
+            if try_fast_format and len(tool_calls) == 1 and last_fn_name and last_tool_json:
+                fast_reply = try_fast_format(last_fn_name, last_tool_json)
+                if fast_reply:
+                    working.append({'role': 'assistant', 'content': fast_reply})
+                    on_event({'type': 'reply', 'text': fast_reply})
+                    return fast_reply, working
+
+        return 'Se alcanzó el límite de iteraciones.', working
+
+    def chat_with_tools(self, messages: list, tools: list, run_tool,
+                        try_fast_format=None) -> dict:
         working = list(messages)
         for iteration in range(1, MAX_ITERATIONS + 1):
             response = self._request_completion(working, tools if iteration == 1 else [])
@@ -46,6 +141,8 @@ class GroqClient:
             if not tool_calls:
                 return {'reply': str(msg.content or ''), 'messages': working}
 
+            last_fn_name = None
+            last_tool_json = None
             for tc in tool_calls:
                 try:
                     args = json.loads(tc.function.arguments)
@@ -59,6 +156,15 @@ class GroqClient:
                     'tool_call_id': tc.id,
                     'content': tool_json,
                 })
+                last_fn_name = tc.function.name
+                last_tool_json = tool_json
+
+            # Formateo rápido en Python: evita el 2do call al LLM
+            if try_fast_format and len(tool_calls) == 1 and last_fn_name and last_tool_json:
+                fast_reply = try_fast_format(last_fn_name, last_tool_json)
+                if fast_reply:
+                    working.append({'role': 'assistant', 'content': fast_reply})
+                    return {'reply': fast_reply, 'messages': working}
 
         return {'reply': 'Se alcanzó el límite de iteraciones con herramientas.', 'messages': working}
 

@@ -19,4 +19,5 @@ def chat_config(request: Request) -> dict[str, Any]:
         "modulesBase": "/modules/",
         "userKey": key,
         "threadsApi": "/api/chat_threads.php",
+        "chatbotPage": "/index.php?page=chatbot",
     }

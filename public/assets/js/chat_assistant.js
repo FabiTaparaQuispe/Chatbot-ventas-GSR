@@ -17,6 +17,7 @@
     const LS_FAVS = NS + 'favs_v1';
     const LS_PREFS_CONTEXT = NS + 'prefs_context_v1';
     const LS_HIDE_TIPS = NS + 'hide_consejos_v1';
+    const LS_PIP = NS + 'chatbot_pip_v1';
     const MAX_LOCAL_MESSAGES = 120;
     const MAX_THREADS = 40;
     const isFull = typeof window !== 'undefined' && window.VENTAS_CHAT_FULL === true;
@@ -40,11 +41,36 @@
     const closeThreadsBtn = document.getElementById('ventasChatCloseThreads');
     const micBtn = document.getElementById('ventasChatMic');
     const recentsBtn = document.getElementById('ventasChatRecentsBtn');
+    const pipBackdrop = document.getElementById('ventasChatPipBackdrop');
+    const pipToggle = document.getElementById('ventasChatPipToggle');
+
     let faqTemplatesCache = [];
     const history = [];
     let threads = [];
     let activeThreadId = '';
     let threadsQuery = '';
+    let lastResult = null;  // último resultado de herramienta (encadenamiento secuencial)
+
+    const CHATBOT_PAGE_BASE = (_cfg.chatbotPage != null && String(_cfg.chatbotPage).trim() !== '')
+        ? String(_cfg.chatbotPage).trim()
+        : '/?page=chatbot';
+
+    function buildChatbotFullUrl() {
+        let base = CHATBOT_PAGE_BASE;
+        let tid = '';
+        try {
+            tid = (activeThreadId || '').trim() || (localStorage.getItem(LS_ACTIVE_THREAD) || '').trim();
+        } catch (e1) { /* ignore */ }
+        if (!tid) return base;
+        const sep = base.indexOf('?') >= 0 ? '&' : '?';
+        return base + sep + 'thread=' + encodeURIComponent(tid);
+    }
+    function syncOpenFullHref() {
+        if (isFull) return;
+        const el = document.getElementById('ventasChatOpenFull');
+        if (!el) return;
+        el.setAttribute('href', buildChatbotFullUrl());
+    }
 
     // Favoritos ("Mis preguntas frecuentes")
     function loadFavs() {
@@ -185,6 +211,7 @@
         try {
             localStorage.setItem(LS_ACTIVE_THREAD, activeThreadId);
         } catch (e) { /* ignore */ }
+        syncOpenFullHref();
     }
 
     function migrateLegacyHistoryIfAny() {
@@ -245,6 +272,7 @@
         const body = { messages: history };
         const u = loadUserContextForApi();
         if (u !== '') body.user_context = u;
+        if (lastResult !== null) body.prev_result = lastResult;
         return body;
     }
     function loadPrefsContextRaw() {
@@ -450,6 +478,7 @@
     function clearUiChat() {
         assistantStreamGen += 1;
         history.length = 0;
+        lastResult = null;
         if (log) log.innerHTML = '';
         if (errEl) errEl.hidden = true;
         syncFullPageHero();
@@ -567,6 +596,37 @@
         hero.hidden = log.children && log.children.length > 0;
     }
 
+    function setChatbotPipMode(active, persist) {
+        if (!isFull || !panel) return;
+        const on = !!active;
+        document.body.classList.toggle('chatbot-pip-active', on);
+        panel.classList.toggle('chatbot-page--pip', on);
+        if (pipBackdrop) {
+            if (on) {
+                pipBackdrop.hidden = false;
+                pipBackdrop.setAttribute('aria-hidden', 'false');
+            } else {
+                pipBackdrop.hidden = true;
+                pipBackdrop.setAttribute('aria-hidden', 'true');
+            }
+        }
+        if (pipToggle) {
+            pipToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+            pipToggle.title = on ? 'Volver a vista página completa' : 'Vista compacta (ventana flotante en esta página)';
+            pipToggle.setAttribute('aria-label', on ? 'Volver a vista página completa' : 'Vista compacta flotante');
+            const ic = pipToggle.querySelector('i');
+            if (ic) {
+                ic.className = on ? 'fas fa-expand' : 'fas fa-compress';
+            }
+        }
+        if (persist) {
+            try { localStorage.setItem(LS_PIP, on ? '1' : '0'); } catch (e) { /* ignore */ }
+        }
+        if (on && log) {
+            try { log.scrollTop = log.scrollHeight; } catch (e1) { /* ignore */ }
+        }
+    }
+
     function pad2(n) {
         return String(n).padStart(2, '0');
     }
@@ -673,6 +733,16 @@
             .replace(/"/g, '&quot;');
     }
 
+    /** Limpia comillas y markdown típico del modelo en celdas de tabla. */
+    function _sanitizeCellDisplay(s) {
+        let t = String(s || '').trim();
+        t = t.replace(/^[\s"'“”‘’]+|[\s"'“”‘’]+$/g, '');
+        t = t.replace(/\*\*([^*]+)\*\*/g, '$1');
+        t = t.replace(/\*([^*]+)\*/g, '$1');
+        t = t.replace(/`([^`]+)`/g, '$1');
+        return t.replace(/\s+/g, ' ').trim();
+    }
+
     function hasGenericClienteLabels(text) {
         return /^\d+\.\s*Cliente\s+\d+/mi.test(String(text));
     }
@@ -682,7 +752,9 @@
     }
 
     function normalizeTextForLinkify(s) {
-        return String(s).replace(/[\u200b-\u200d\ufeff\u00a0]/g, '');
+        return String(s)
+            .replace(/[\u200b-\u200d\ufeff\u00a0]/g, '')
+            .replace(/\/modulos\//gi, '/modules/');
     }
 
     function collapseDateLineBreaks(text) {
@@ -771,6 +843,11 @@
         return path;
     }
 
+    function _useVerReporteLabelForHref(resolved) {
+        const u = String(resolved || '');
+        return /^\/modules\/(reports|ventasgeneral)\b/i.test(u);
+    }
+
     /** Montos mostrados como soles (S/), no dólares ($), en la vista del chat. */
     function formatImportesSoles(text) {
         let s = String(text || '');
@@ -784,8 +861,18 @@
         t = unwrapBackticksAroundPhpUrls(t);
         t = collapseDateLineBreaks(t);
         t = collapseMultilineQueryUrls(t);
+        /** reporte_url: … → enlace "ver reporte" (href resuelto; sin mostrar URL larga). */
+        const reportHrefs = [];
+        t = t.replace(/\breporte_url\s*:\s*([^\s<]+)/gi, function (full, rawU) {
+            const url = stripTrailingUrlJunk(rawU);
+            const ok = /^\/modules\//i.test(url) || /^ventas-[^\s]+\?/i.test(url) || /\.php\?/i.test(url);
+            if (!ok) return full;
+            const ix = reportHrefs.length;
+            reportHrefs.push(url);
+            return '@@@CHAT_REPORT_' + ix + '@@@';
+        });
         t = formatImportesSoles(t);
-        const re = /(https?:\/\/[^\s<]+|\/modules\/[^\s<]+\?[^\s<]+|sql_texto\.php\?[^\s<]+|(?:pareto_nc_zona|pareto_clientes_zona)(?:_tabla)?\.php\?[^\s<]+|ventasgeneral_top_clientes_nc\.php\?[^\s<]+|ventasgeneral_top_clientes_zona_precio\.php\?[^\s<]+|ventas_(?:barras_dimension|comparativo|top_productos|top_clientes_global|top_clientes_nc|mix_tdoc|barras_ruta|barras_corporativo|serie_mensual)\.php\?[^\s<]+|ventasgeneral_(?:buscar|resumen)(?:_tabla)?\.php\?[^\s<]+)/gi;
+        const re = /(https?:\/\/[^\s<]+|\/modules\/(?:reports|ventasgeneral)\/[^\s<]+|\/modules\/[^\s<]+\?[^\s<]+|sql_texto\.php\?[^\s<]+|(?:pareto_nc_zona|pareto_clientes_zona)(?:_tabla)?\.php\?[^\s<]+|ventasgeneral_top_clientes_nc\.php\?[^\s<]+|ventasgeneral_top_clientes_zona_precio\.php\?[^\s<]+|ventas_(?:barras_dimension|comparativo|top_productos|top_clientes_global|top_clientes_nc|mix_tdoc|barras_ruta|barras_corporativo|serie_mensual)\.php\?[^\s<]+|ventasgeneral_(?:buscar|resumen)(?:_tabla)?\.php\?[^\s<]+)/gi;
         const out = [];
         let last = 0;
         let m;
@@ -795,12 +882,93 @@
             const raw = stripTrailingUrlJunk(m[0]);
             const hrefResolved = resolveAssistantHref(raw);
             const href = escapeHtml(hrefResolved);
-            const label = escapeHtml(raw);
-            out.push('<a class="ventas-chat-link" href="' + href + '" target="_blank" rel="noopener noreferrer">' + label + '</a>');
+            const shortRep = _useVerReporteLabelForHref(hrefResolved);
+            const label = shortRep ? escapeHtml('ver reporte') : escapeHtml(raw);
+            out.push('<a class="ventas-chat-link' + (shortRep ? ' ventas-chat-report-link' : '') + '" href="' + href + '" target="_blank" rel="noopener noreferrer">' + label + '</a>');
             last = m.index + m[0].length;
         }
         out.push(escapeHtml(t.slice(last)));
-        return out.join('');
+        let result = out.join('');
+        for (let ix = 0; ix < reportHrefs.length; ix++) {
+            const ph = '@@@CHAT_REPORT_' + ix + '@@@';
+            const raw = reportHrefs[ix];
+            const hrefResolved = resolveAssistantHref(raw);
+            const href = escapeHtml(hrefResolved);
+            const link = '<a class="ventas-chat-link ventas-chat-report-link" href="' + href + '" target="_blank" rel="noopener noreferrer">ver reporte</a>';
+            result = result.split(ph).join(link);
+        }
+        return result;
+    }
+
+    /** Convierte 2+ líneas con viñeta (- * •) en tabla HTML (ej. provincia : detalle). */
+    function _bulletLinesToTable(lines) {
+        const rows = [];
+        lines.forEach(function (line) {
+            const m = String(line).trim().match(/^[-*•]\s+(.+)$/);
+            if (!m) return;
+            const inner = m[1].trim();
+            const colonIdx = inner.indexOf(':');
+            var k, v;
+            if (colonIdx > 0 && colonIdx < inner.length - 1) {
+                k = inner.slice(0, colonIdx).replace(/\*\*/g, '').trim();
+                v = inner.slice(colonIdx + 1).trim();
+            } else {
+                k = '—';
+                v = inner;
+            }
+            rows.push({ k: _sanitizeCellDisplay(k), v: _sanitizeCellDisplay(v) });
+        });
+        if (rows.length < 2) return null;
+        var h = '<div class="ventas-chat-inline-table-wrap"><table class="ventas-chat-simple-table"><thead><tr><th>Concepto</th><th>Detalle</th></tr></thead><tbody>';
+        rows.forEach(function (r) {
+            h += '<tr><td>' + escapeHtml(r.k) + '</td><td>' + escapeHtml(r.v) + '</td></tr>';
+        });
+        h += '</tbody></table></div>';
+        return h;
+    }
+
+    function _splitSegmentForBullets(seg) {
+        const lines = String(seg).split(/\r?\n/);
+        const chunks = [];
+        var buf = [];
+        function flushBuf() {
+            if (buf.length) {
+                chunks.push({ type: 'text', text: buf.join('\n') });
+                buf = [];
+            }
+        }
+        var i = 0;
+        while (i < lines.length) {
+            if (/^\s*[-*•]\s+/.test(lines[i])) {
+                var j = i;
+                while (j < lines.length && /^\s*[-*•]\s+/.test(lines[j])) j++;
+                if (j - i >= 2) {
+                    flushBuf();
+                    var tbl = _bulletLinesToTable(lines.slice(i, j));
+                    if (tbl) chunks.push({ type: 'html', html: tbl });
+                    else {
+                        for (var k = i; k < j; k++) buf.push(lines[k]);
+                    }
+                    i = j;
+                } else {
+                    buf.push(lines[i]);
+                    i++;
+                }
+            } else {
+                buf.push(lines[i]);
+                i++;
+            }
+        }
+        flushBuf();
+        return chunks;
+    }
+
+    function _segmentWithBulletsAndLinkify(seg) {
+        const parts = _splitSegmentForBullets(seg);
+        return parts.map(function (p) {
+            if (p.type === 'html') return p.html;
+            return '<span class="chat-text-seg">' + linkifyAssistant(p.text) + '</span>';
+        }).join('');
     }
 
     function splitAssistantAnswerAndSql(fullText) {
@@ -840,7 +1008,7 @@
     function _ctCap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
 
     function _ctColHeader(v) {
-        var s = String(v || '').trim();
+        var s = _sanitizeCellDisplay(String(v || '').trim());
         if (/^S\/\s/.test(s)) return 'Importe';
         var mPer = s.match(/^(periodo\s+[A-Z])\s+S\//i);
         if (mPer) return _ctCap(mPer[1]);
@@ -856,11 +1024,11 @@
 
     function _ctParseItem(raw) {
         var ci = raw.indexOf(': ');
-        if (ci < 0) return { name: raw, extra: '', vals: [raw] };
-        var name = raw.slice(0, ci).trim();
-        var vals = raw.slice(ci + 2).trim().split(', ');
+        if (ci < 0) return { name: _sanitizeCellDisplay(raw), extra: '', vals: [_sanitizeCellDisplay(raw)] };
+        var name = _sanitizeCellDisplay(raw.slice(0, ci).trim());
+        var vals = raw.slice(ci + 2).trim().split(', ').map(function (v) { return _sanitizeCellDisplay(v); });
         var nm = name.match(/^(.*?)\s*\(([^)]+)\)$/);
-        if (nm) return { name: nm[1].trim(), extra: nm[2].trim(), vals: vals };
+        if (nm) return { name: _sanitizeCellDisplay(nm[1].trim()), extra: _sanitizeCellDisplay(nm[2].trim()), vals: vals };
         return { name: name, extra: '', vals: vals };
     }
 
@@ -1042,40 +1210,135 @@
         });
     }
 
-    function _chatTextToHtml(text) {
+    function _mdIsTableSeparatorLine(line) {
+        const t = String(line || '').trim();
+        if (!t || !/\|/.test(t)) return false;
+        return /^[|\s:\-]+$/.test(t) && /-/.test(t);
+    }
+
+    function _mdLooksTableRow(line) {
+        const t = String(line || '').trim();
+        return t.length > 0 && /\|/.test(t) && !_mdIsTableSeparatorLine(t);
+    }
+
+    function _mdSplitPipeRow(line) {
+        let cells = String(line).trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(function (c) {
+            return _sanitizeCellDisplay(c);
+        });
+        while (cells.length && cells[0] === '') cells.shift();
+        while (cells.length && cells[cells.length - 1] === '') cells.pop();
+        return cells;
+    }
+
+    function _mdBuildGfmTableHtml(slice) {
+        if (!slice || slice.length < 3) return '';
+        const headerCells = _mdSplitPipeRow(slice[0]);
+        if (!headerCells.length) return '';
+        const bodyRows = [];
+        for (let r = 2; r < slice.length; r++) {
+            const cells = _mdSplitPipeRow(slice[r]);
+            if (!cells.length) continue;
+            bodyRows.push(cells);
+        }
+        if (!bodyRows.length) return '';
+        let thead = '<thead><tr>';
+        headerCells.forEach(function (h) {
+            thead += '<th>' + escapeHtml(h) + '</th>';
+        });
+        thead += '</tr></thead>';
+        let tbody = '<tbody>';
+        bodyRows.forEach(function (row) {
+            tbody += '<tr>';
+            for (let c = 0; c < headerCells.length; c++) {
+                tbody += '<td>' + escapeHtml(row[c] != null ? row[c] : '') + '</td>';
+            }
+            tbody += '</tr>';
+        });
+        tbody += '</tbody>';
+        return '<div class="ventas-chat-inline-table-wrap ventas-chat-mdtable-wrap"><table class="ventas-chat-simple-table">' + thead + tbody + '</table></div>';
+    }
+
+    function _splitByMarkdownTables(text) {
+        const lines = String(text || '').split(/\r?\n/);
+        const parts = [];
+        const buf = [];
+        function flush() {
+            if (buf.length) {
+                parts.push({ type: 'text', text: buf.join('\n') });
+                buf.length = 0;
+            }
+        }
+        let i = 0;
+        while (i < lines.length) {
+            if (i + 1 < lines.length && _mdLooksTableRow(lines[i]) && _mdIsTableSeparatorLine(lines[i + 1])) {
+                flush();
+                let end = i + 2;
+                while (end < lines.length && _mdLooksTableRow(lines[end])) end++;
+                const html = _mdBuildGfmTableHtml(lines.slice(i, end));
+                if (html) {
+                    parts.push({ type: 'html', html: html });
+                    i = end;
+                    if (i < lines.length && String(lines[i]).trim() === '') i++;
+                    continue;
+                }
+            }
+            buf.push(lines[i]);
+            i++;
+        }
+        flush();
+        return parts;
+    }
+
+    function _chatTextToHtmlInner(text) {
         var blocks = _ctParseBlocks(text);
-        if (!blocks.length) return linkifyAssistant(text);
+        if (!blocks.length) return _segmentWithBulletsAndLinkify(text);
         var lines = text.split('\n');
         var lineBlock = new Array(lines.length).fill(-1);
-        blocks.forEach(function(b, bi) { for (var i = b.start; i <= b.end; i++) lineBlock[i] = bi; });
-        var parts = [], i = 0;
-        while (i < lines.length) {
-            var bi = lineBlock[i];
+        blocks.forEach(function(b, bi) { for (var ii = b.start; ii <= b.end; ii++) lineBlock[ii] = bi; });
+        var parts = [], ii = 0;
+        while (ii < lines.length) {
+            var bi = lineBlock[ii];
             if (bi >= 0) {
                 parts.push(_ctBuildWidget(blocks[bi].items));
-                i = blocks[bi].end + 1;
+                ii = blocks[bi].end + 1;
             } else {
-                var j = i;
+                var j = ii;
                 while (j < lines.length && lineBlock[j] < 0) j++;
-                var seg = lines.slice(i, j).join('\n');
-                if (seg.trim()) parts.push('<span class="chat-text-seg">' + linkifyAssistant(seg) + '</span>');
-                i = j;
+                var seg = lines.slice(ii, j).join('\n');
+                if (seg.trim()) parts.push(_segmentWithBulletsAndLinkify(seg));
+                ii = j;
             }
         }
         return parts.join('');
+    }
+
+    function _chatTextToHtml(text) {
+        const chunks = _splitByMarkdownTables(String(text || ''));
+        if (!chunks.length) return _chatTextToHtmlInner(String(text || ''));
+        return chunks.map(function (part) {
+            if (part.type === 'html') return part.html;
+            const seg = String(part.text || '');
+            if (!seg.trim()) return '';
+            return _chatTextToHtmlInner(seg);
+        }).join('');
     }
     // ───────────────────────────────────────────────────────────────────────────
 
     function renderAssistantHtml(fullText) {
         const parts = splitAssistantAnswerAndSql(fullText);
-        if (!parts.tail) return linkifyAssistant(parts.head);
+        if (!parts.tail) return _chatTextToHtml(parts.head);
         return (
-            linkifyAssistant(parts.head) +
+            _chatTextToHtml(parts.head) +
             '\n\n' +
-            '<div class="ventas-chat-sql-block">' +
-            linkifyAssistant(parts.tail) +
-            '</div>'
+            '<details class="ventas-chat-sql-fold"><summary class="ventas-chat-sql-fold-summary">Detalle técnico (SQL)</summary>' +
+            '<pre class="ventas-chat-sql-pre">' + escapeHtml(parts.tail) + '</pre></details>'
         );
+    }
+
+    function _assistantBodyHasWideTable(html) {
+        return String(html || '').indexOf('ventas-chat-table-widget') >= 0
+            || String(html || '').indexOf('ventas-chat-simple-table') >= 0
+            || String(html || '').indexOf('ventas-chat-mdtable-wrap') >= 0;
     }
 
     let assistantStreamGen = 0;
@@ -1104,6 +1367,7 @@
                 // La respuesta (head) ya terminó de “escribirse”.
                 // El anexo SQL (tail) aparece de golpe sin animación.
                 bodyEl.innerHTML = renderAssistantHtml(full);
+                if (outerDiv && _assistantBodyHasWideTable(bodyEl.innerHTML)) outerDiv.classList.add('has-table');
                 if (outerDiv) outerDiv.classList.remove('ventas-chat-msg--streaming');
                 if (log) log.scrollTop = log.scrollHeight;
             }
@@ -1120,6 +1384,7 @@
         const last = history.length ? history[history.length - 1] : null;
         if (body && last && last.role === 'assistant' && typeof last.content === 'string') {
             body.innerHTML = renderAssistantHtml(last.content);
+            if (_assistantBodyHasWideTable(body.innerHTML)) el.classList.add('has-table');
         }
         el.classList.remove('ventas-chat-msg--streaming');
         log.scrollTop = log.scrollHeight;
@@ -1147,6 +1412,7 @@
                 streamAssistantIntoBody(body, text, gen, div);
             } else {
                 body.innerHTML = renderAssistantHtml(text);
+                if (_assistantBodyHasWideTable(body.innerHTML)) div.classList.add('has-table');
             }
         } else {
             body.textContent = text;
@@ -1356,6 +1622,7 @@
         autosizeInput();
         applyShortcutsVisibility();
         if (input) input.focus();
+        syncOpenFullHref();
     }
 
     function closePanel() {
@@ -1374,6 +1641,12 @@
 
     if (fab) {
         fab.addEventListener('click', openPanel);
+    }
+    const openFullEl = document.getElementById('ventasChatOpenFull');
+    if (openFullEl && !isFull) {
+        syncOpenFullHref();
+        openFullEl.addEventListener('pointerdown', syncOpenFullHref);
+        openFullEl.addEventListener('focus', syncOpenFullHref);
     }
     if (closeBtn) {
         closeBtn.addEventListener('click', closePanel);
@@ -1486,6 +1759,11 @@
                 dlg.close();
                 return;
             }
+            if (isFull && document.body.classList.contains('chatbot-pip-active')) {
+                e.preventDefault();
+                setChatbotPipMode(false, true);
+                return;
+            }
             const hm = document.getElementById('ventasChatHeadMenu');
             if (hm && hm.hasAttribute('open')) {
                 e.preventDefault();
@@ -1508,6 +1786,19 @@
     applyShortcutsVisibility();
     if (isFull) {
         syncFullPageHero();
+        if (pipToggle && panel) {
+            try {
+                if (localStorage.getItem(LS_PIP) === '1') setChatbotPipMode(true, false);
+            } catch (e) { /* ignore */ }
+            pipToggle.addEventListener('click', function () {
+                setChatbotPipMode(!document.body.classList.contains('chatbot-pip-active'), true);
+            });
+            if (pipBackdrop) {
+                pipBackdrop.addEventListener('click', function () {
+                    setChatbotPipMode(false, true);
+                });
+            }
+        }
     }
     renderVentasFaqSelect();
     // Dictado por voz (si está disponible)
@@ -1598,6 +1889,180 @@
         autosizeInput();
     }
 
+    // ── Indicador de escritura (●●●) ──────────────────────────────────────────
+    let _typingBubble = null;
+
+    function showTypingIndicator(statusText) {
+        if (!log) return;
+        if (!_typingBubble) {
+            const div = document.createElement('div');
+            div.className = 'ventas-chat-msg assistant';
+            div.setAttribute('data-typing', '1');
+            const label = document.createElement('div');
+            label.className = 'ventas-chat-label';
+            label.textContent = 'Asistente';
+            const body = document.createElement('div');
+            body.className = 'ventas-chat-msg-body ventas-chat-typing';
+            body.innerHTML = '<span class="ventas-dot"></span><span class="ventas-dot"></span><span class="ventas-dot"></span>';
+            div.appendChild(label);
+            div.appendChild(body);
+            log.appendChild(div);
+            _typingBubble = div;
+        }
+        const body = _typingBubble.querySelector('.ventas-chat-msg-body');
+        if (body && statusText) {
+            body.innerHTML = '<span class="ventas-dot"></span><span class="ventas-dot"></span><span class="ventas-dot"></span>'
+                + '<span style="margin-left:6px;font-size:.85em;opacity:.7">' + statusText + '</span>';
+        }
+        log.scrollTop = log.scrollHeight;
+    }
+
+    function removeTypingIndicator() {
+        if (_typingBubble && _typingBubble.parentNode) {
+            _typingBubble.parentNode.removeChild(_typingBubble);
+        }
+        _typingBubble = null;
+    }
+
+    // ── Bubble de streaming en tiempo real ────────────────────────────────────
+    let _streamBubble = null;
+    let _streamBody = null;
+    let _streamRaw = '';
+
+    function createStreamBubble() {
+        removeTypingIndicator();
+        if (!log) return;
+        const div = document.createElement('div');
+        div.className = 'ventas-chat-msg assistant ventas-chat-msg--streaming';
+        const label = document.createElement('div');
+        label.className = 'ventas-chat-label';
+        label.textContent = 'Asistente';
+        const body = document.createElement('div');
+        body.className = 'ventas-chat-msg-body';
+        div.appendChild(label);
+        div.appendChild(body);
+        log.appendChild(div);
+        _streamBubble = div;
+        _streamBody = body;
+        _streamRaw = '';
+    }
+
+    function appendStreamToken(token) {
+        if (!_streamBody) createStreamBubble();
+        _streamRaw += token;
+        _streamBody.textContent = _streamRaw;
+        if (log) log.scrollTop = log.scrollHeight;
+    }
+
+    function finalizeStreamBubble(fullReply) {
+        if (_streamBubble) {
+            if (_streamBody) {
+                _streamBody.innerHTML = renderAssistantHtml(fullReply);
+                if (_assistantBodyHasWideTable(_streamBody.innerHTML)) _streamBubble.classList.add('has-table');
+            }
+            _streamBubble.classList.remove('ventas-chat-msg--streaming');
+            if (log) log.scrollTop = log.scrollHeight;
+        }
+        _streamBubble = null;
+        _streamBody = null;
+        _streamRaw = '';
+    }
+
+    function clearStreamBubble() {
+        if (_streamBubble && _streamBubble.parentNode) {
+            _streamBubble.parentNode.removeChild(_streamBubble);
+        }
+        _streamBubble = null;
+        _streamBody = null;
+        _streamRaw = '';
+    }
+
+    // ── API calls ─────────────────────────────────────────────────────────────
+    const CHAT_STREAM_API = CHAT_API + '/stream';
+
+    async function callChatApiStream() {
+        const res = await fetch(CHAT_STREAM_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(buildChatRequestBody()),
+            credentials: 'same-origin',
+        });
+        if (!res.ok) {
+            const raw = await res.text().catch(() => '');
+            const data = safeJsonParse(raw) || {};
+            const msg = (data && data.error) ? String(data.error) : ('HTTP ' + res.status);
+            const err = new Error(msg);
+            err.status = res.status;
+            throw err;
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let finalReply = '';
+        let finalLastResult = null;
+        let hasTokens = false;
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                let event;
+                try { event = JSON.parse(line.slice(6)); } catch { continue; }
+                if (event.type === 'status') {
+                    if (!hasTokens) showTypingIndicator(event.text);
+                } else if (event.type === 'token') {
+                    hasTokens = true;
+                    appendStreamToken(event.text);
+                } else if (event.type === 'reply') {
+                    finalReply = event.text;
+                } else if (event.type === 'done') {
+                    if (event.reply) finalReply = event.reply;
+                    finalLastResult = event.last_result || null;
+                } else if (event.type === 'error') {
+                    const err = new Error(event.text || 'Error del servidor');
+                    err.status = 500;
+                    throw err;
+                }
+            }
+        }
+
+        // Si llegaron tokens pero no un reply enriquecido, usar el texto acumulado
+        if (!finalReply && _streamRaw) finalReply = _streamRaw;
+        return { reply: finalReply, lastResult: finalLastResult, usedStream: hasTokens };
+    }
+
+    async function callChatApiOnce() {
+        const res = await fetch(CHAT_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(buildChatRequestBody()),
+            credentials: 'same-origin',
+        });
+        const ct = (res.headers && res.headers.get) ? (res.headers.get('content-type') || '') : '';
+        const raw = await res.text().catch(() => '');
+        let data = {};
+        if (ct.toLowerCase().includes('application/json')) {
+            data = safeJsonParse(raw) || {};
+        } else {
+            data = { ok: false, error: 'Respuesta no-JSON (posible sesión/redirect)' };
+        }
+        if (!res.ok || data.ok === false) {
+            const msg = (data && data.error) ? String(data.error) : ('HTTP ' + res.status);
+            const err = new Error(msg);
+            err.status = res.status;
+            err.nonJson = !ct.toLowerCase().includes('application/json');
+            err.raw = raw;
+            throw err;
+        }
+        lastResult = (data.last_result !== undefined && data.last_result !== null) ? data.last_result : null;
+        return String(data.reply || '');
+    }
+
     let sendInFlight = false;
     async function sendMessage() {
         if (!input || !send) return;
@@ -1614,59 +2079,59 @@
         saveHistory();
         send.disabled = true;
         sendInFlight = true;
-
-        async function callChatApiOnce() {
-            const res = await fetch(CHAT_API, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(buildChatRequestBody()),
-                credentials: 'same-origin',
-            });
-            const ct = (res.headers && res.headers.get) ? (res.headers.get('content-type') || '') : '';
-            const raw = await res.text().catch(() => '');
-            let data = {};
-            if (ct.toLowerCase().includes('application/json')) {
-                data = safeJsonParse(raw) || {};
-            } else {
-                // Si el servidor devolvió HTML (login/error), lo registramos para debug rápido.
-                data = { ok: false, error: 'Respuesta no-JSON (posible sesión/redirect)' };
-            }
-            if (!res.ok || data.ok === false) {
-                const msg = (data && data.error) ? String(data.error) : ('HTTP ' + res.status);
-                const err = new Error(msg);
-                err.status = res.status;
-                err.nonJson = !ct.toLowerCase().includes('application/json');
-                err.raw = raw;
-                throw err;
-            }
-            return String(data.reply || '');
-        }
+        showTypingIndicator('');
 
         try {
             let reply = '';
+            let usedStream = false;
+
+            // Intentar streaming primero; fallback al endpoint clásico
             try {
-                reply = await callChatApiOnce();
+                const result = await callChatApiStream();
+                reply = result.reply;
+                usedStream = result.usedStream;
+                lastResult = result.lastResult;
             } catch (e1) {
-                // Reintento único: a veces el primer request falla por redirect/cold-start.
-                // NO reintentar 429 (rate-limit/TPD): solo genera otro 429 y duplica llamadas.
-                const isRetryable = (e1 && (e1.nonJson || e1.status === 500 || e1.status === 502 || e1.status === 503));
+                clearStreamBubble();
+                removeTypingIndicator();
+                const isRetryable = (e1 && (e1.status === 500 || e1.status === 502 || e1.status === 503));
                 if (!isRetryable) throw e1;
-                await new Promise(r => setTimeout(r, 650)); 
-                reply = await callChatApiOnce();
+                // Fallback al endpoint clásico
+                showTypingIndicator('');
+                try {
+                    reply = await callChatApiOnce();
+                } catch (e2) {
+                    if (e2 && (e2.status === 500 || e2.status === 502 || e2.status === 503)) {
+                        await new Promise(r => setTimeout(r, 650));
+                        reply = await callChatApiOnce();
+                    } else {
+                        throw e2;
+                    }
+                }
             }
 
-            // Solo guardar en history si no es una respuesta hallucinated (Cliente 1/2/3…).
-            // Guardar solo el texto (sin el bloque SQL de debug) para no desperdiciar tokens
-            // ni confundir al LLM en la siguiente consulta.
+            removeTypingIndicator();
+
             if (!hasGenericClienteLabels(reply)) {
                 const cleanContent = splitAssistantAnswerAndSql(reply).head || reply;
                 history.push({ role: 'assistant', content: cleanContent });
             }
             saveHistory();
+
             if (!trimHistory()) {
-                append('assistant', reply, { streamAssistant: true });
+                if (usedStream) {
+                    // Los tokens ya se mostraron en tiempo real; ahora renderizar markdown completo
+                    finalizeStreamBubble(reply);
+                } else {
+                    removeTypingIndicator();
+                    append('assistant', reply, { streamAssistant: true });
+                }
+            } else {
+                clearStreamBubble();
             }
         } catch (e) {
+            removeTypingIndicator();
+            clearStreamBubble();
             const errMsg = String(e.message || e).toLowerCase();
             const serverMsg = String(e.message || '');
             const isRateLimit = (e && e.status === 429) || errMsg.includes('rate limit') || errMsg.includes('rate_limit') || errMsg.includes('too many requests') || errMsg.includes('tokens per day') || errMsg.includes('tpd') || errMsg.includes('límite') || errMsg.includes('limite') || errMsg.includes('intentá de nuevo');

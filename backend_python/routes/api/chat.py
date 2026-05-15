@@ -1,6 +1,10 @@
+import json
+import logging
 import os
+import queue
 import re
-from flask import Blueprint, request, jsonify
+import threading
+from flask import Blueprint, request, jsonify, Response, stream_with_context
 from services.db import get_connection, db_label
 from services.groq_client import GroqClient
 from services.gemini_client import GeminiClient
@@ -8,85 +12,25 @@ from services.llm_provider import resolve_llm_provider
 from services.tool_executor import ToolExecutor
 from services.tools_definitions import ventas_tool_definitions, chat_history_tool_definitions
 from services.chat_reply_enricher import enrich_reply
+from services.fast_format import try_fast_format
 
 bp = Blueprint('api_chat', __name__)
+_log = logging.getLogger(__name__)
 
-SYSTEM_TEMPLATE = """Asistente ventasgeneral2 (MySQL {db_label}). Solo tabla ventasgeneral2; no uses sale. Fechas YYYY-MM-DD; "marzo 2026" → 2026-03-01..2026-03-31.
+SYSTEM_TEMPLATE = """Asistente ventasgeneral2 (MySQL {db_label}). Solo tabla ventasgeneral2. Fechas YYYY-MM-DD; "marzo 2026"→2026-03-01..2026-03-31.
 
-COMPORTAMIENTO PROACTIVO (prioridad alta): antes de llamar una herramienta, verificá que el hilo tenga todos los datos que esa función exige. Si falta algo que solo el usuario puede dar, NO llames la herramienta en ese turno: respondé solo con preguntas breves y concretas en español pidiendo lo que falta (fechas desde/hasta o mes+año, línea comercial, prefijo de zona, etc.). Prohibido rellenar con fechas inventadas, "mes actual" o valores por defecto no dichos por el usuario. Cuando el usuario responda en un mensaje siguiente, combiná esa respuesta con la consulta anterior y entonces llamá la herramienta con parámetros completos.
+PARÁMETROS OBLIGATORIOS: si faltan fecha_desde/hasta, línea comercial o prefijo de zona que el usuario no dio explícitamente, pregúntaselos antes de llamar la herramienta; nunca inventes valores por defecto. Sin campo ciudad: usa prefijo_descri_zona_precio (AQP, TACNA, MOQUEGUA, LAJOYA…). Si dice "por zona" sin especificar cuál, usa ventasgeneral_top_clientes_globales. TDoc NC=07. Filtros extra en buscar/resumen: provincia y tipo_documento.
 
-FECHAS OBLIGATORIAS: si el usuario no da rango claro (dos fechas YYYY-MM-DD o mes+año explícito), pregúntale primero por fecha_desde y fecha_hasta (o por el mes y año) antes de llamar herramientas que las requieran; no asumas un mes por defecto salvo que el usuario lo confirme explícitamente.
+INTEGRIDAD: PROHIBIDO inventar. Con herramienta: datos deben coincidir exactamente con el JSON (no "Cliente 1", no redondear). Sin herramienta por parámetros faltantes: solo pregunta, jamás listes cifras. Sin herramienta y no es por datos faltantes: "No tengo datos suficientes para responder esa consulta; por favor repite la pregunta." JSON con error: pide el dato correcto. Filas vacías sin error: "No tengo datos suficientes para responder esa consulta en el período indicado." Tema ajeno a ventas/chatbot: "No tengo información para responder esa pregunta; solo manejo datos de ventas y estadísticas del uso del asistente (herramientas chat_*)." Catálogo de valores existentes: usa ventasgeneral_catalogo.
 
-ZONA OBLIGATORIA: ventasgeneral_top_clientes_zona_precio requiere un prefijo_descri_zona_precio REAL (AQP, TACNA, MOQUEGUA, LAJOYA, etc.). Si el usuario dice "por zona", "por provincia" o "por región" sin especificar cuál, NO inventes el prefijo — usá ventasgeneral_top_clientes_globales (ranking global) y avisa que muestra el top sin filtrar por zona. Para ver el top dentro de una zona específica pide que indique el prefijo.
+COMPARATIVO: una sola llamada a ventasgeneral_comparativo_periodos con los 4 parámetros de período. Nunca llames barras_dimension dos veces.
 
-Ciudad/mercado: sin campo ciudad; usa prefijo_descri_zona_precio (AQP, MOQUEGUA, TACNA, LAJOYA, etc.) sobre DescripcionZonaPrecio. TDoc NC = 07.
+LÍNEA COMERCIAL: LineaComercial es texto. Valores: "Pollo Vivo"|"Pollo Beneficiado"|"Pollo trozado Seco"|"Embutidos"|"Menudencia"|"Semielaborados"|"Pavos"|"Precocidos"|"Huevos SF"|"Pollo Congelado San Fer."|"Cerdos"|"Promociones embutidos"|"Venta de insumos"|"Envases". Línea 601="Pollo Vivo"; cod_item 100=carne, 103=brasa. Mercados Pollo Vivo: AQPMERCADO,TACNA,ILO,MOQUEGUA,MOLLENDO,CAMANA,LAJOYA,PEDREGAL. Herramientas de línea: resumen prov/cliente→linea_resumen_provincia; diario→linea_diario_provincia; precio/día→linea_precio_diario; precio prom prov→linea_precio_resumen_provincia; mix carne/brasa→linea_mix_productos. Si falta línea, pregúntala.
 
-NUEVOS FILTROS DISPONIBLES en ventasgeneral_buscar y ventasgeneral_resumen: provincia (filtra por Provincia, ej. "AREQUIPA", "TACNA") y tipo_documento (filtra por TipoDocumento, ej. "Boleta de Venta", "Factura"). Úsalos cuando el usuario pida filtrar o consultar por provincia o tipo de documento.
+AUDITORÍA CHATBOT: señales "preguntas del chatbot","cuánto se usó","qué preguntó X","actividad del chat" → herramientas chat_*: estadísticas→chat_usuario_estadisticas; ranking→chat_top_usuarios; diario→chat_actividad_por_dia; lista→chat_listar_preguntas; búsqueda→chat_buscar_pregunta; threads→chat_resumen_threads. Fechas obligatorias salvo chat_buscar_pregunta. Sin reporte_url en herramientas chat.
 
-INTEGRIDAD ESTRICTA: PROHIBIDO inventar, estimar o completar datos.
-Si llamaste una herramienta, los nombres y cifras que escribas en el texto DEBEN coincidir exactamente con los valores del campo "filas", "filas_ranking" o "filas_pareto" del JSON devuelto — sin redondear, sin sustituir por "Cliente 1/2/3", "Cliente A/B", "Empresa X" ni por ningún valor ficticio.
-Si NO llamaste ninguna herramienta porque faltan parámetros obligatorios (fechas, línea, zona, etc.), respondé solo con preguntas para obtenerlos; JAMÁS listas de clientes ni cifras.
-Si NO llamaste ninguna herramienta y no es por datos faltantes obvios, JAMÁS generes listas numeradas de clientes, productos ni cifras. Responde únicamente: "No tengo datos suficientes para responder esa consulta; por favor repite la pregunta."
-Si el JSON devuelve un "error" por parámetro faltante o fecha inválida, preguntá al usuario por el dato correcto; no uses el mensaje de período vacío.
-Si el JSON devuelve consulta válida pero filas vacías (sin "error" de parámetros), escribe únicamente: "No tengo datos suficientes para responder esa consulta en el período indicado."
-Si la pregunta no tiene ninguna herramienta disponible que la responda (tema ajeno a ventas y ajeno al historial del chatbot, preguntas generales, etc.), responde únicamente: "No tengo información para responder esa pregunta; solo manejo datos de ventas y estadísticas del uso del asistente (herramientas chat_*)."
-Preguntas sobre qué valores existen en la BD ("¿qué provincias hay?", "¿qué líneas hay?", "¿qué corporativos están registrados?", "¿qué zonas de precio existen?") SÍ son respondibles usando ventasgeneral_catalogo.
-Nunca uses ejemplos ficticios ni rellenes con valores hipotéticos.
-
-Para preguntas de "compraron más", "clientes compradores", "ventas", "facturado", "valor vendido" o similar, usa ventasgeneral_top_clientes_globales o ventasgeneral_top_productos/ventasgeneral_resumen según convenga.
-Solo usa ventasgeneral_top_clientes_nota_credito si el usuario pide explícitamente notas de crédito, NC, TDoc=07, devoluciones o anulaciones.
-Si hay filas de ranking/top, escribe primero la lista numerada (1. nombre: N líneas o notas, importe S/ X) y al final UNA línea con reporte_url; no respondas solo con el gráfico ni repitas el mismo párrafo.
-
-COMPARATIVO ESTRICTO: cuando el usuario pide comparar dos períodos (dos meses, A vs B, enero vs febrero, etc.) DEBES llamar UNA SOLA VEZ a ventasgeneral_comparativo_periodos con periodo_a_desde, periodo_a_hasta, periodo_b_desde, periodo_b_hasta. NUNCA llames ventasgeneral_barras_ventas_dimension dos veces ni calcules tú mismo la diferencia — el resultado sería inventado.
-
-LÍNEA COMERCIAL: cuando el usuario pregunte por una línea usa las herramientas de línea. El campo LineaComercial guarda texto, no códigos numéricos. Valores reales en la base de datos:
-"Pollo Vivo" | "Pollo Beneficiado" | "Pollo trozado Seco" | "Embutidos" | "Menudencia" | "Semielaborados" | "Pavos" | "Precocidos" | "Huevos SF" | "Pollo Congelado San Fer." | "Cerdos" | "Promociones embutidos" | "Venta de insumos" | "Envases"
-Mapeo de códigos que puede mencionar el usuario: línea 601 = "Pollo Vivo". Si el usuario dice "pollo vivo" o "línea 601" → linea_comercial="Pollo Vivo".
-Productos dentro de Pollo Vivo: cod_item 100 = carne, cod_item 103 = brasa. Usa cod_item cuando el usuario filtre por tipo de producto.
-Mercados (DescripcionZonaPrecio) disponibles para Pollo Vivo: AQPMERCADO, TACNA, ILO, MOQUEGUA, MOLLENDO, CAMANA, LAJOYA, PEDREGAL. Pasa el valor como parámetro "mercado" cuando el usuario filtre por mercado/zona.
-- resumen provincia/cliente → ventasgeneral_linea_resumen_provincia (linea_comercial obligatorio, pasar el texto exacto). No pases top_n salvo que el usuario pida explícitamente un top N; sin top_n se devuelven todas las filas provincia+cliente.
-- ventas por día provincia/cliente → ventasgeneral_linea_diario_provincia
-- precio por día provincia/cliente (resumen con cantidad/peso/valor, orden por fecha y por peso dentro de cada día) → ventasgeneral_linea_precio_diario
-- precio resumen por provincia (UNA fila por provincia, SIN clientes ni días, con precio/kg ponderado del período) → ventasgeneral_linea_precio_resumen_provincia. Úsala cuando el usuario pida "precio por provincia", "precio resumen por provincia" o "precio promedio por provincia" sin querer ver clientes ni diario. Requiere fecha_desde/fecha_hasta y linea_comercial; si falta período o línea, pregúntalos antes de llamar.
-- mix carne vs brasa / comparar productos → ventasgeneral_linea_mix_productos (agrupa por CodigoItem, incluye pct_peso)
-La comparación es case-insensitive. Si el usuario no especifica la línea, pregúntala antes de llamar la herramienta.
-
-Mapeo herramientas:
-- más NC por cliente → ventasgeneral_top_clientes_nota_credito (URL: /modules/reports/ventas-top-clientes-nc?desde=&hasta=&top=)
-- pareto NC por zona → ventasgeneral_pareto_nc_zonaprecio (/modules/reports/pareto-nc-zona?…, no por cliente)
-- top compra global → ventasgeneral_top_clientes_globales
-- top por zona precio → ventasgeneral_top_clientes_zona_precio
-- barras dimensión → ventasgeneral_barras_ventas_dimension
-- comparativo 2 períodos → ventasgeneral_comparativo_periodos (UNA llamada, no dos barras)
-- productos → ventasgeneral_top_productos
-- mix TDoc → ventasgeneral_mix_tdoc
-- ruta/corp → ventasgeneral_barras_ruta_comercial / ventasgeneral_barras_corporativo
-- serie mensual → ventasgeneral_serie_mensual_valor
-- proyección ventas → ventasgeneral_proyeccion_ventas
-- ventas línea resumen → ventasgeneral_linea_resumen_provincia
-- ventas línea por día → ventasgeneral_linea_diario_provincia
-- precio línea por día → ventasgeneral_linea_precio_diario
-- precio línea resumen por provincia → ventasgeneral_linea_precio_resumen_provincia
-- mix productos / carne vs brasa → ventasgeneral_linea_mix_productos
-- líneas sueltas → ventasgeneral_buscar
-- totales → ventasgeneral_resumen
-- catálogo/maestro de valores → ventasgeneral_catalogo (campo: provincia, linea_comercial, corporativo, zona_precio, zona_comercial, ruta, tipo_documento). Usar para preguntas como "¿qué provincias hay?", "¿qué líneas comerciales existen?", "¿qué corporativos están registrados?", "¿qué zonas de precio hay?", "¿qué tipos de documento hay?". Las fechas son opcionales.
-
-META-CONSULTAS SOBRE EL PROPIO CHATBOT (auditoría de uso): cuando el usuario pregunte por el uso del CHAT/BOT — NO por ventas — usa SIEMPRE las herramientas chat_*. Reconocé estas señales: "preguntas que se hicieron", "consultas del chatbot", "cuánto se usó el bot", "qué usuario preguntó más", "qué preguntó admin/gerente", "actividad del chat", "auditoría de chats", "logs de preguntas".
-- estadísticas de un usuario o globales → chat_usuario_estadisticas (omití username para global). Ej: "¿cuántas preguntas hizo admin esta semana?".
-- ranking de usuarios → chat_top_usuarios. Ej: "¿qué usuario consultó más en mayo?".
-- evolución diaria de uso → chat_actividad_por_dia. Ej: "actividad del bot esta semana".
-- lista de preguntas literales → chat_listar_preguntas. Ej: "mostrame las últimas 10 preguntas de gerente".
-- búsqueda por texto en preguntas → chat_buscar_pregunta. Ej: "¿alguien preguntó por Pollo Vivo?".
-- resumen de threads/chats por usuario → chat_resumen_threads.
-Reglas comunes: fechas YYYY-MM-DD obligatorias salvo en chat_buscar_pregunta (donde son opcionales). Si faltan, pedilas. "Esta semana", "este mes", "hoy" → convertí a YYYY-MM-DD usando la fecha que conocés y confirmá si hace falta. Estas tools NO devuelven reporte_url; respondé en texto plano con los conteos/listas, sin URLs inventadas.
-
-URL RELATIVA OBLIGATORIA: escribe ÚNICAMENTE la ruta que empieza por /modules/ (ej: /modules/ventasgeneral/resumen-tabla?fecha_desde=2026-01-01&fecha_hasta=2026-03-31). JAMÁS uses https://, http://, example.com, localhost ni ningún dominio — el enlace quedaría roto. JAMÁS agregues fragmentos #grafico ni #nada.
-Un solo reporte_url por respuesta, en UNA línea sin backticks, sin partir la URL. Resumen/buscar: /modules/ventasgeneral/resumen-tabla o …/buscar-tabla. Otros: /modules/reports/<slug>?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&…
-
-Moneda: importes en soles peruanos con prefijo S/ (ej. S/ 1,234,567.89). No uses $ ni USD.
-Lenguaje: evita jerga de BD (no "Valor", "SUM(Valor)", "Cantidad" como etiqueta técnica). Usá "importe", "monto en soles", "unidades", "cantidad vendida", "peso total".
-Español, breve."""
+URL: solo /modules/... sin dominio ni #fragmento, sin backticks, una sola por respuesta.
+Moneda S/ (S/ 1,234,567.89). Di "importe"/"monto" no "Valor"/"SUM". Español, breve."""
 
 
 def _unify_pareto_links(reply: str) -> str:
@@ -199,6 +143,52 @@ def _is_rate_limit_error(msg: str) -> bool:
     ))
 
 
+_LINEA_TOOLS = {
+    'ventasgeneral_linea_resumen_provincia',
+    'ventasgeneral_linea_diario_provincia',
+    'ventasgeneral_linea_precio_diario',
+    'ventasgeneral_linea_precio_resumen_provincia',
+    'ventasgeneral_linea_mix_productos',
+}
+_CHAT_TOOLS = {
+    'chat_usuario_estadisticas',
+    'chat_top_usuarios',
+    'chat_actividad_por_dia',
+    'chat_listar_preguntas',
+    'chat_buscar_pregunta',
+    'chat_resumen_threads',
+}
+_NC_TOOLS = {
+    'ventasgeneral_top_clientes_nota_credito',
+    'ventasgeneral_pareto_nc_zonaprecio',
+}
+
+_LINEA_KW = ('línea', 'linea', 'pollo', 'embutido', 'menudencia', 'semielaborado',
+              'pavos', 'pavo', 'precocido', 'huevo', 'cerdo', 'promocion',
+              'insumo', 'envase', 'brasa', 'trozado', 'beneficiado', 'congelado',
+              'precio por', 'carne', 'lineacomercial')
+_CHAT_KW  = ('chatbot', 'chat', 'bot', 'preguntas que', 'preguntó', 'pregunto',
+             'actividad del', 'auditoría', 'auditoria', 'cuánto se usó', 'cuanto se uso',
+             'quién preguntó', 'quien pregunto', 'threads', 'hilos', 'usuarios del')
+_NC_KW    = ('nota', ' nc ', 'nc,', 'nc.', 'devolución', 'devolucion',
+             'anulación', 'anulacion', 'crédito', 'credito', 'nota de crédito',
+             'nota de credito')
+
+
+def _filter_tools(user_message: str, all_tools: list) -> list:
+    msg = (' ' + (user_message or '').lower() + ' ')
+    exclude: set = set()
+    if not any(k in msg for k in _LINEA_KW):
+        exclude |= _LINEA_TOOLS
+    if not any(k in msg for k in _CHAT_KW):
+        exclude |= _CHAT_TOOLS
+    if not any(k in msg for k in _NC_KW):
+        exclude |= _NC_TOOLS
+    if not exclude:
+        return all_tools
+    return [t for t in all_tools if t.get('function', {}).get('name', '') not in exclude]
+
+
 @bp.route("/api/health_llm", methods=["GET"])
 def health_llm():
     provider = resolve_llm_provider()
@@ -239,6 +229,7 @@ def chat():
     try:
         llm_client, provider = _get_llm_client()
     except RuntimeError as e:
+        _log.error("/api/chat no se pudo crear cliente LLM | %s", str(e)[:500])
         return jsonify({'ok': False, 'error': str(e)}), 503
 
     label = db_label()
@@ -256,6 +247,27 @@ def chat():
         system['content'] += (' Preferencias opcionales declaradas por el usuario '
                               '(no invalidan datos de herramientas ni permiten inventar cifras; solo guían tono o foco): '
                               + user_context)
+
+    # Resultado previo en caché (encadenamiento secuencial sin BD)
+    prev_result_parsed = None
+    raw_prev = data.get('prev_result')
+    if isinstance(raw_prev, str) and raw_prev.strip():
+        try:
+            prev_result_parsed = json.loads(raw_prev)
+        except Exception:
+            prev_result_parsed = None
+    if isinstance(prev_result_parsed, dict):
+        for key in ('filas', 'filas_ranking', 'filas_pareto', 'filas_diario'):
+            rows = prev_result_parsed.get(key)
+            if isinstance(rows, list) and rows:
+                campos = list(rows[0].keys())[:12]
+                system['content'] += (
+                    f'\n\nRESULTADO PREVIO EN CACHÉ ({len(rows)} filas, campos: {", ".join(campos)}): '
+                    'disponible para subgrupos sin ir a la BD. '
+                    'Si el usuario pide filtrar/ordenar/extraer un subgrupo de la última consulta, '
+                    'llama filtrar_previo ANTES de consultar la BD.'
+                )
+                break
 
     sanitized = []
     for m in messages_in:
@@ -287,8 +299,8 @@ def chat():
         if m['role'] != 'assistant' or not re.search(r'^\s*\d+\.\s*(?:Cliente|Empresa|Clientes?)\s+\d+', m['content'], re.MULTILINE | re.IGNORECASE)
     ]
 
-    if len(sanitized) > 6:
-        sanitized = sanitized[-6:]
+    if len(sanitized) > 4:
+        sanitized = sanitized[-4:]
 
     if not sanitized:
         return jsonify({'error': 'No hay mensajes válidos'}), 400
@@ -297,12 +309,15 @@ def chat():
 
     try:
         conn = get_connection()
-        executor = ToolExecutor(conn)
-        tools = ventas_tool_definitions() + chat_history_tool_definitions()
+        executor = ToolExecutor(conn, prev_result=prev_result_parsed)
+        _all_tools = ventas_tool_definitions() + chat_history_tool_definitions()
+        _last_user = next((m['content'] for m in reversed(messages) if m.get('role') == 'user'), '')
+        tools = _filter_tools(_last_user, _all_tools)
 
         result = llm_client.chat_with_tools(
             messages, tools,
-            lambda name, args: executor.execute(name, args)
+            lambda name, args: executor.execute(name, args),
+            try_fast_format=try_fast_format,
         )
 
         reply = enrich_reply(str(result.get('reply') or ''), result.get('messages') or [])
@@ -316,24 +331,233 @@ def chat():
         if suffix:
             reply = (reply + suffix).strip()
 
-        return jsonify({'reply': _unify_pareto_links(reply), 'ok': True})
+        # Extraer el último resultado de herramienta para encadenamiento secuencial
+        last_result = None
+        for msg in reversed(result.get('messages') or []):
+            if msg.get('role') == 'tool':
+                try:
+                    parsed = json.loads(msg.get('content', ''))
+                    if not isinstance(parsed, dict):
+                        break
+                    parsed.pop('_sql_traces', None)
+                    for key in ('filas', 'filas_ranking', 'filas_pareto', 'filas_diario'):
+                        rows = parsed.get(key)
+                        if isinstance(rows, list) and 0 < len(rows) <= 500:
+                            last_result = json.dumps(parsed, ensure_ascii=False, default=str)
+                            break
+                except Exception:
+                    pass
+                break
+
+        return jsonify({'reply': _unify_pareto_links(reply), 'ok': True, 'last_result': last_result})
 
     except RuntimeError as e:
         msg = str(e)
         if _is_rate_limit_error(msg):
+            _log.warning(
+                "/api/chat LLM transitorio | provider=%s | http_cliente=429 | %s",
+                provider,
+                msg[:800],
+            )
             ra = _parse_retry_after_seconds(msg)
             resp = jsonify({'ok': False, 'error': msg})
             if ra is not None:
                 resp.headers['Retry-After'] = str(ra)
             return resp, 429
+        _log.error(
+            "/api/chat LLM RuntimeError | provider=%s | http_cliente=500 | %s",
+            provider,
+            msg[:800],
+        )
         return jsonify({'ok': False, 'error': msg}), 500
 
     except Exception as e:
         msg = str(e)
         if _is_rate_limit_error(msg):
+            _log.warning(
+                "/api/chat LLM transitorio | provider=%s | http_cliente=429 | %s",
+                provider,
+                msg[:800],
+            )
             ra = _parse_retry_after_seconds(msg)
             resp = jsonify({'ok': False, 'error': msg})
             if ra is not None:
                 resp.headers['Retry-After'] = str(ra)
             return resp, 429
+        _log.exception(
+            "/api/chat error inesperado | provider=%s | http_cliente=500",
+            provider,
+        )
         return jsonify({'ok': False, 'error': msg}), 500
+
+
+def _extract_last_result(working: list) -> str | None:
+    """Extrae el último resultado de herramienta cacheable de la lista de mensajes."""
+    for msg in reversed(working or []):
+        if msg.get('role') != 'tool':
+            continue
+        try:
+            parsed = json.loads(msg.get('content', ''))
+            if not isinstance(parsed, dict):
+                break
+            parsed.pop('_sql_traces', None)
+            for key in ('filas', 'filas_ranking', 'filas_pareto', 'filas_diario'):
+                rows = parsed.get(key)
+                if isinstance(rows, list) and 0 < len(rows) <= 500:
+                    return json.dumps(parsed, ensure_ascii=False, default=str)
+        except Exception:
+            pass
+        break
+    return None
+
+
+def _build_messages(data: dict) -> tuple:
+    """
+    Parsea y sanitiza el request. Retorna (messages, prev_result_parsed, system_content, error_response).
+    error_response es distinto de None si hay un error que debe retornarse al cliente.
+    """
+    messages_in = data.get('messages')
+    if not isinstance(messages_in, list):
+        return None, None, None, (jsonify({'error': 'Falta messages (array)'}), 400)
+
+    try:
+        llm_client, _ = _get_llm_client()
+    except RuntimeError as e:
+        return None, None, None, (jsonify({'ok': False, 'error': str(e)}), 503)
+
+    label = db_label()
+    system = {'role': 'system', 'content': SYSTEM_TEMPLATE.format(db_label=label)}
+
+    user_context = ''
+    if isinstance(data.get('user_context'), str):
+        user_context = data['user_context'].strip()[:800]
+        user_context = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', user_context)
+    if user_context:
+        system['content'] += (' Preferencias opcionales declaradas por el usuario '
+                              '(no invalidan datos de herramientas ni permiten inventar cifras; solo guían tono o foco): '
+                              + user_context)
+
+    prev_result_parsed = None
+    raw_prev = data.get('prev_result')
+    if isinstance(raw_prev, str) and raw_prev.strip():
+        try:
+            prev_result_parsed = json.loads(raw_prev)
+        except Exception:
+            prev_result_parsed = None
+    if isinstance(prev_result_parsed, dict):
+        for key in ('filas', 'filas_ranking', 'filas_pareto', 'filas_diario'):
+            rows = prev_result_parsed.get(key)
+            if isinstance(rows, list) and rows:
+                campos = list(rows[0].keys())[:12]
+                system['content'] += (
+                    f'\n\nRESULTADO PREVIO EN CACHÉ ({len(rows)} filas, campos: {", ".join(campos)}): '
+                    'disponible para subgrupos sin ir a la BD. '
+                    'Si el usuario pide filtrar/ordenar/extraer un subgrupo de la última consulta, '
+                    'llama filtrar_previo ANTES de consultar la BD.'
+                )
+                break
+
+    sanitized = []
+    for m in messages_in:
+        if not isinstance(m, dict):
+            continue
+        role = m.get('role', '')
+        if role not in ('user', 'assistant'):
+            continue
+        content = m.get('content', '')
+        if not isinstance(content, str):
+            continue
+        if role == 'assistant' and content:
+            sql_markers = ['\n\nSELECT ', '\nSELECT ', '\n\nSentencia SQL', '\nSentencia SQL', '\n\n---\n']
+            cut_at = -1
+            for marker in sql_markers:
+                pos = content.find(marker)
+                if pos != -1 and (cut_at < 0 or pos < cut_at):
+                    cut_at = pos
+            if cut_at > 20:
+                content = content[:cut_at].rstrip()
+        if len(content) > 4000:
+            content = content[:4000]
+        if not content:
+            continue
+        sanitized.append({'role': role, 'content': content})
+
+    sanitized = [
+        m for m in sanitized
+        if m['role'] != 'assistant' or not re.search(
+            r'^\s*\d+\.\s*(?:Cliente|Empresa|Clientes?)\s+\d+', m['content'], re.MULTILINE | re.IGNORECASE)
+    ]
+    if len(sanitized) > 4:
+        sanitized = sanitized[-4:]
+    if not sanitized:
+        return None, None, None, (jsonify({'error': 'No hay mensajes válidos'}), 400)
+
+    return [system] + sanitized, prev_result_parsed, llm_client, None
+
+
+@bp.route('/api/chat/stream', methods=['POST'])
+@bp.route('/api/chat/stream.php', methods=['POST'])
+def chat_stream():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': 'JSON inválido'}), 400
+
+    messages, prev_result_parsed, llm_client, err = _build_messages(data)
+    if err:
+        return err
+
+    q = queue.SimpleQueue()
+
+    def worker():
+        try:
+            conn = get_connection()
+            executor = ToolExecutor(conn, prev_result=prev_result_parsed)
+            _all_tools = ventas_tool_definitions() + chat_history_tool_definitions()
+            _last_user = next((m['content'] for m in reversed(messages) if m.get('role') == 'user'), '')
+            tools = _filter_tools(_last_user, _all_tools)
+
+            def on_event(event):
+                q.put(event)
+
+            reply, working = llm_client.chat_with_tools_stream(
+                messages, tools,
+                lambda name, args: executor.execute(name, args),
+                on_event,
+                try_fast_format=try_fast_format,
+            )
+
+            reply = enrich_reply(str(reply or ''), working)
+            reply = _unify_pareto_links(reply)
+
+            sql_traces = executor.pull_sql_traces()
+            sql_suffix = ''
+            if sql_traces:
+                sql_suffix = ('\n\n' + '\n\n'.join(sql_traces)
+                              + '\n\n---\nSentencia SQL ejecutada (texto plano):\n'
+                              + '\n\n'.join(sql_traces))
+
+            q.put({
+                'type': 'done',
+                'reply': reply + sql_suffix if sql_suffix else reply,
+                'last_result': _extract_last_result(working),
+            })
+        except Exception as e:
+            _log.exception("/api/chat/stream worker error")
+            q.put({'type': 'error', 'text': str(e)})
+        finally:
+            q.put(None)
+
+    threading.Thread(target=worker, daemon=True).start()
+
+    def generate():
+        while True:
+            event = q.get()
+            if event is None:
+                break
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no', 'Connection': 'keep-alive'},
+    )

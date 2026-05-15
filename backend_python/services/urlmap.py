@@ -52,4 +52,5 @@ def chat_assistant_config_dict(user_key: str) -> dict[str, str]:
         'modulesBase': '/modules/',
         'userKey': user_key,
         'threadsApi': API_CHAT_THREADS,
+        'chatbotPage': '/?page=chatbot',
     }

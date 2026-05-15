@@ -1,0 +1,389 @@
+"""
+Formatea resultados de herramientas directamente en Python, sin llamada al LLM.
+Elimina el segundo round-trip al LLM en el 80% de las consultas típicas.
+Retorna None si el resultado es complejo o tiene error (el LLM se encarga).
+"""
+import json
+
+
+def _m(val):
+    """Formatea un número como importe en soles."""
+    try:
+        return f"S/ {float(val):,.2f}"
+    except (ValueError, TypeError):
+        return str(val)
+
+
+def _n(val):
+    """Formatea un entero con separador de miles."""
+    try:
+        return f"{int(float(val)):,}"
+    except (ValueError, TypeError):
+        return str(val)
+
+
+def _periodo(result):
+    p = result.get('periodo', {})
+    if isinstance(p, dict):
+        d, h = p.get('desde', ''), p.get('hasta', '')
+        if d and h:
+            return f"{d} al {h}"
+    return ''
+
+
+def _url(result):
+    return str(result.get('reporte_url', '') or '')
+
+
+def _ranking_clientes(filas, campo_valor='suma_valor', campo_nombre='nombre_cliente',
+                      campo_lineas=None, campo_pct=None):
+    lines = []
+    for i, r in enumerate(filas, 1):
+        nombre = r.get(campo_nombre) or r.get('nombre_cliente') or '?'
+        valor = _m(r.get(campo_valor, 0))
+        extra = []
+        if campo_lineas and r.get(campo_lineas) is not None:
+            extra.append(f"{_n(r[campo_lineas])} líneas")
+        if campo_pct and r.get(campo_pct) is not None:
+            extra.append(f"{float(r[campo_pct]):.1f}%")
+        suffix = f" ({', '.join(extra)})" if extra else ''
+        lines.append(f"{i}. {nombre}: {valor}{suffix}")
+    return lines
+
+
+def _auto_row_summary(row: dict) -> str:
+    """Genera una línea de resumen de una fila con campos desconocidos."""
+    money_fields = ('suma_valor', 'Valor', 'valor', 'importe', 'total')
+    name_fields = ('nombre_cliente', 'glosa', 'etiqueta', 'nombre', 'Cliente', 'NombreCliente')
+    label = next((str(row[k]) for k in name_fields if row.get(k)), None)
+    amount = next((_m(row[k]) for k in money_fields if row.get(k) is not None), None)
+    if label and amount:
+        return f"{label}: {amount}"
+    if label:
+        return label
+    # fallback: primeros 3 campos
+    parts = [f"{k}={v}" for k, v in list(row.items())[:3]]
+    return ', '.join(parts)
+
+
+# ── Formatters por herramienta ────────────────────────────────────────────────
+
+def _fmt_top_clientes_global(result):
+    filas = result.get('filas', [])
+    if not filas:
+        return None
+    per = _periodo(result)
+    total = result.get('total_valor')
+    header = "Top clientes"
+    if per:
+        header += f" del {per}"
+    if total:
+        header += f" (total período: {_m(total)})"
+    lines = [header + ":\n"]
+    lines += _ranking_clientes(filas, campo_lineas='lineas', campo_pct='pct_del_total')
+    url = _url(result)
+    if url:
+        lines.append(f"\n{url}")
+    return '\n'.join(lines)
+
+
+def _fmt_top_clientes_zona(result):
+    filas = result.get('filas_ranking', [])
+    if not filas:
+        return None
+    zona = result.get('prefijo_descri_zona_precio', '')
+    per = _periodo(result)
+    total_zona = result.get('total_valor_zona')
+    header = f"Top clientes zona {zona}" if zona else "Top clientes por zona"
+    if per:
+        header += f" ({per})"
+    if total_zona:
+        header += f" — total zona: {_m(total_zona)}"
+    lines = [header + ":\n"]
+    lines += _ranking_clientes(filas, campo_lineas='lineas_venta', campo_pct='pct_del_total_zona')
+    url = _url(result)
+    if url:
+        lines.append(f"\n{url}")
+    return '\n'.join(lines)
+
+
+def _fmt_top_productos(result):
+    filas = result.get('filas', [])
+    if not filas:
+        return None
+    per = _periodo(result)
+    header = "Top productos"
+    if per:
+        header += f" del {per}"
+    lines = [header + ":\n"]
+    for i, r in enumerate(filas, 1):
+        glosa = r.get('glosa') or r.get('GlosaDetalle') or '?'
+        valor = _m(r.get('suma_valor', 0))
+        cant = r.get('suma_cantidad')
+        suffix = f" (cantidad: {_n(cant)})" if cant is not None else ''
+        lines.append(f"{i}. {glosa}: {valor}{suffix}")
+    url = _url(result)
+    if url:
+        lines.append(f"\n{url}")
+    return '\n'.join(lines)
+
+
+def _fmt_resumen(result):
+    agr = result.get('agregados', {})
+    if not agr:
+        return None
+    per = _periodo(result)
+    lines = [f"Resumen del {per}:\n" if per else "Resumen:\n"]
+    n = agr.get('filas')
+    if n is not None:
+        lines.append(f"- Registros: {_n(n)}")
+    sv = agr.get('suma_valor')
+    if sv is not None:
+        lines.append(f"- Importe total: {_m(sv)}")
+    sc = agr.get('suma_cantidad')
+    if sc is not None:
+        lines.append(f"- Cantidad total: {_n(sc)}")
+    sp = agr.get('suma_peso')
+    if sp is not None:
+        lines.append(f"- Peso total: {_n(sp)} kg")
+    url = _url(result)
+    if url:
+        lines.append(f"\n{url}")
+    return '\n'.join(lines)
+
+
+def _fmt_barras_dimension(result):
+    filas = result.get('filas', [])
+    if not filas:
+        return None
+    per = _periodo(result)
+    dim = result.get('dimension', '')
+    header = f"Ventas por {'zona precio' if dim == 'precio' else 'zona comercial'}"
+    if per:
+        header += f" del {per}"
+    lines = [header + ":\n"]
+    for i, r in enumerate(filas, 1):
+        etq = r.get('etiqueta') or '?'
+        valor = _m(r.get('suma_valor', 0))
+        lineas = r.get('lineas')
+        suffix = f" ({_n(lineas)} líneas)" if lineas else ''
+        lines.append(f"{i}. {etq}: {valor}{suffix}")
+    url = _url(result)
+    if url:
+        lines.append(f"\n{url}")
+    return '\n'.join(lines)
+
+
+def _fmt_top_clientes_nc(result):
+    filas = result.get('filas_ranking', [])
+    if not filas:
+        return None
+    per = _periodo(result)
+    header = "Top clientes con notas de crédito"
+    if per:
+        header += f" del {per}"
+    lines = [header + ":\n"]
+    for i, r in enumerate(filas, 1):
+        nombre = r.get('nombre_cliente') or '?'
+        valor = _m(r.get('suma_valor', 0))
+        nc = r.get('num_nc') or r.get('lineas_nc')
+        suffix = f" ({_n(nc)} NC)" if nc else ''
+        lines.append(f"{i}. {nombre}: {valor}{suffix}")
+    url = _url(result)
+    if url:
+        lines.append(f"\n{url}")
+    return '\n'.join(lines)
+
+
+def _fmt_filtrar_previo(result):
+    rows = None
+    for key in ('filas', 'filas_ranking', 'filas_pareto'):
+        rows = result.get(key)
+        if rows:
+            break
+    if not rows:
+        return "No se encontraron registros con ese filtro en el resultado anterior."
+    total = result.get('_total_filtrado', len(rows))
+    lines = [f"Resultado filtrado ({_n(total)} registros):\n"]
+    for i, r in enumerate(rows, 1):
+        lines.append(f"{i}. {_auto_row_summary(r)}")
+    return '\n'.join(lines)
+
+
+def _fmt_catalogo(result):
+    filas = result.get('filas', [])
+    if not filas:
+        return None
+    campo = result.get('campo', '')
+    header = f"Valores de {campo}" if campo else "Catálogo"
+    lines = [header + ":\n"]
+    for r in filas:
+        val = next(iter(r.values()), '') if r else ''
+        lines.append(f"- {val}")
+    return '\n'.join(lines)
+
+
+def _fmt_pareto_nc(result):
+    filas = result.get('filas_pareto', [])
+    if not filas:
+        return None
+    per = _periodo(result)
+    total = result.get('total_impacto_nc_valor_abs')
+    header = "Pareto NC por zona de precio"
+    if per:
+        header += f" del {per}"
+    if total:
+        header += f" (total NC: {_m(total)})"
+    lines = [header + ":\n"]
+    for i, r in enumerate(filas, 1):
+        zona = r.get('zona') or '?'
+        valor = _m(r.get('impacto_abs_valor', 0))
+        lineas = r.get('lineas_nc')
+        pct = r.get('pct_del_total')
+        acum = r.get('pct_acumulado')
+        parts = []
+        if lineas is not None:
+            parts.append(f"{_n(lineas)} líneas NC")
+        if pct is not None:
+            parts.append(f"{float(pct):.1f}% del total")
+        if acum is not None:
+            parts.append(f"acumulado: {float(acum):.1f}%")
+        suffix = f" ({', '.join(parts)})" if parts else ''
+        lines.append(f"{i}. **{zona}**: {valor}{suffix}")
+    url = _url(result)
+    if url:
+        lines.append(f"\n{url}")
+    return '\n'.join(lines)
+
+
+def _fmt_barras_ruta(result):
+    filas = result.get('filas', [])
+    if not filas:
+        return None
+    per = _periodo(result)
+    header = "Ventas por ruta comercial"
+    if per:
+        header += f" del {per}"
+    lines = [header + ":\n"]
+    for i, r in enumerate(filas, 1):
+        etq = r.get('etiqueta') or r.get('ruta') or r.get('RutaComercial') or '?'
+        valor = _m(r.get('suma_valor', 0))
+        lineas = r.get('lineas')
+        suffix = f" ({_n(lineas)} líneas)" if lineas else ''
+        lines.append(f"{i}. {etq}: {valor}{suffix}")
+    url = _url(result)
+    if url:
+        lines.append(f"\n{url}")
+    return '\n'.join(lines)
+
+
+def _fmt_barras_corporativo(result):
+    filas = result.get('filas', [])
+    if not filas:
+        return None
+    per = _periodo(result)
+    header = "Ventas por corporativo"
+    if per:
+        header += f" del {per}"
+    lines = [header + ":\n"]
+    for i, r in enumerate(filas, 1):
+        etq = (
+            r.get('etiqueta')
+            or r.get('nombre_coorporativo')
+            or r.get('NombreCoorporativo')
+            or '?'
+        )
+        valor = _m(r.get('suma_valor', 0))
+        lineas = r.get('lineas')
+        suffix = f" ({_n(lineas)} líneas)" if lineas else ''
+        lines.append(f"{i}. {etq}: {valor}{suffix}")
+    url = _url(result)
+    if url:
+        lines.append(f"\n{url}")
+    return '\n'.join(lines)
+
+
+def _fmt_mix_tdoc(result):
+    filas = result.get('filas', [])
+    if not filas:
+        return None
+    per = _periodo(result)
+    header = "Mix por tipo de documento"
+    if per:
+        header += f" del {per}"
+    lines = [header + ":\n"]
+    for i, r in enumerate(filas, 1):
+        tdoc = r.get('tipo_documento') or r.get('TipoDocumento') or r.get('etiqueta') or '?'
+        valor = _m(r.get('suma_valor', 0))
+        pct = r.get('pct_del_total')
+        suffix = f" ({float(pct):.1f}%)" if pct is not None else ''
+        lines.append(f"{i}. {tdoc}: {valor}{suffix}")
+    url = _url(result)
+    if url:
+        lines.append(f"\n{url}")
+    return '\n'.join(lines)
+
+
+def _fmt_serie_mensual(result):
+    filas = result.get('filas', [])
+    if not filas:
+        return None
+    per = _periodo(result)
+    header = "Serie mensual de ventas"
+    if per:
+        header += f" ({per})"
+    lines = [header + ":\n"]
+    for r in filas:
+        mes = r.get('mes') or r.get('periodo') or r.get('etiqueta') or '?'
+        valor = _m(r.get('suma_valor', 0))
+        lines.append(f"- {mes}: {valor}")
+    url = _url(result)
+    if url:
+        lines.append(f"\n{url}")
+    return '\n'.join(lines)
+
+
+# ── Dispatcher ────────────────────────────────────────────────────────────────
+
+_FORMATTERS = {
+    'ventasgeneral_top_clientes_globales':    _fmt_top_clientes_global,
+    'ventasgeneral_top_clientes_zona_precio': _fmt_top_clientes_zona,
+    'ventasgeneral_top_productos':            _fmt_top_productos,
+    'ventasgeneral_resumen':                  _fmt_resumen,
+    'ventasgeneral_barras_ventas_dimension':  _fmt_barras_dimension,
+    'ventasgeneral_top_clientes_nota_credito': _fmt_top_clientes_nc,
+    'filtrar_previo':                         _fmt_filtrar_previo,
+    'ventasgeneral_catalogo':                 _fmt_catalogo,
+    'ventasgeneral_pareto_nc_zonaprecio':     _fmt_pareto_nc,
+    'ventasgeneral_barras_ruta_comercial':    _fmt_barras_ruta,
+    'ventasgeneral_barras_corporativo':       _fmt_barras_corporativo,
+    'ventasgeneral_mix_tdoc':                 _fmt_mix_tdoc,
+    'ventasgeneral_serie_mensual_valor':      _fmt_serie_mensual,
+}
+
+
+def try_fast_format(tool_name: str, result_json: str) -> str | None:
+    """
+    Intenta formatear el resultado sin LLM.
+    Retorna el texto formateado o None (el LLM debe hacerlo).
+    """
+    try:
+        result = json.loads(result_json)
+    except Exception:
+        return None
+
+    if not isinstance(result, dict):
+        return None
+
+    # Si hay error en el resultado, dejar al LLM para que lo explique bien
+    if result.get('error'):
+        return None
+
+    fn = _FORMATTERS.get(tool_name)
+    if fn is None:
+        return None
+
+    try:
+        return fn(result)
+    except Exception:
+        return None

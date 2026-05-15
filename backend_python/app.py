@@ -1,13 +1,14 @@
 import os
 import sys
+import time
+from collections import defaultdict
+from datetime import timedelta
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from flask import Flask, send_from_directory
+from flask import Flask, send_from_directory, request, jsonify, g
 from dotenv import load_dotenv
 
-# En Windows es común que queden variables viejas en el entorno.
-# Forzamos que `.env` tenga prioridad para que cambios de modelo/proveedor apliquen tras reiniciar.
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'), override=True)
 
 PUBLIC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'public'))
@@ -17,9 +18,48 @@ app = Flask(
     template_folder='templates',
     static_folder=None,
 )
-app.secret_key = os.getenv('FLASK_SECRET', 'cambiar-en-produccion-usar-valor-aleatorio-largo')
+
+secret = os.getenv('FLASK_SECRET', '').strip()
+if not secret:
+    raise RuntimeError('FLASK_SECRET no configurado en .env — agrega una clave aleatoria larga.')
+app.secret_key = secret
+
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)  # sesión expira en 8h
+
+# ── Rate limiting en memoria (simple, reinicia con el servidor) ──────────────
+_RL_WINDOW = 60          # ventana en segundos
+_RL_MAX_API = 30         # máx llamadas al /api/chat por IP por minuto
+_rl_counters: dict = defaultdict(list)
+
+def _check_rate_limit(ip: str, limit: int) -> bool:
+    """Retorna True si la IP superó el límite. Limpia entradas viejas."""
+    now = time.time()
+    hits = _rl_counters[ip]
+    _rl_counters[ip] = [t for t in hits if now - t < _RL_WINDOW]
+    if len(_rl_counters[ip]) >= limit:
+        return True
+    _rl_counters[ip].append(now)
+    return False
+
+
+@app.before_request
+def _security_checks():
+    # Rate limit solo en endpoints de chat (protege el crédito de Gemini)
+    if request.path.startswith('/api/chat'):
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()
+        if _check_rate_limit(ip, _RL_MAX_API):
+            return jsonify({'ok': False, 'error': 'Demasiadas solicitudes. Esperá un minuto.'}), 429
+
+
+@app.after_request
+def _security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    return response
 
 # Rutas JSON/HTML específicas primero (antes del catch-all /modules/…)
 from routes.auth import bp as auth_bp

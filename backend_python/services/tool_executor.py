@@ -211,9 +211,10 @@ class SqlInterpolator:
 
 
 class ToolExecutor:
-    def __init__(self, conn):
+    def __init__(self, conn, prev_result=None):
         self._conn = conn
         self._sql_traces = []
+        self._prev_result = prev_result  # dict or None
 
     def pull_sql_traces(self):
         t = self._sql_traces[:]
@@ -249,6 +250,7 @@ class ToolExecutor:
                 'chat_listar_preguntas': self._chat_listar_preguntas,
                 'chat_buscar_pregunta': self._chat_buscar_pregunta,
                 'chat_resumen_threads': self._chat_resumen_threads,
+                'filtrar_previo': self._filtrar_previo,
             }
             fn = dispatch.get(name)
             if fn is None:
@@ -1528,4 +1530,79 @@ class ToolExecutor:
             'filtro': {'username': username or '(todos)'},
             'filas': filas,
             '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _filtrar_previo(self, args):
+        """Filtra/ordena el resultado de la consulta anterior sin tocar la BD."""
+        if not self._prev_result:
+            return {'error': 'No hay resultado previo en caché. Hacé primero una consulta a la BD.'}
+
+        data = self._prev_result
+        rows = None
+        rows_key = None
+        for key in ('filas', 'filas_ranking', 'filas_pareto', 'filas_diario'):
+            if isinstance(data.get(key), list):
+                rows = list(data[key])
+                rows_key = key
+                break
+
+        if rows is None:
+            return {'error': 'El resultado previo no contiene filas filtrables.'}
+
+        # Filtrar
+        campo = str(args.get('campo') or '').strip()
+        valor = str(args.get('valor_filtro') or '').strip()
+        comparador = str(args.get('comparador') or 'igual').lower()
+
+        if campo and valor:
+            filtered = []
+            for row in rows:
+                cell = str(row.get(campo, '')).strip()
+                if comparador == 'contiene':
+                    match = valor.lower() in cell.lower()
+                elif comparador == 'mayor':
+                    try:
+                        match = float(cell.replace(',', '')) > float(valor.replace(',', ''))
+                    except (ValueError, TypeError):
+                        match = False
+                elif comparador == 'menor':
+                    try:
+                        match = float(cell.replace(',', '')) < float(valor.replace(',', ''))
+                    except (ValueError, TypeError):
+                        match = False
+                else:  # igual (default)
+                    match = cell.lower() == valor.lower()
+                if match:
+                    filtered.append(row)
+            rows = filtered
+
+        # Ordenar
+        ordenar_por = str(args.get('ordenar_por') or '').strip()
+        orden = str(args.get('orden') or 'desc').lower()
+
+        if ordenar_por:
+            reverse = orden != 'asc'
+            def _sort_key(row):
+                v = row.get(ordenar_por)
+                if v is None:
+                    return (1, 0, '')
+                try:
+                    return (0, float(str(v).replace(',', '')), '')
+                except (ValueError, TypeError):
+                    return (0, 0, str(v).lower())
+            rows = sorted(rows, key=_sort_key, reverse=reverse)
+
+        # Limitar
+        top_n = args.get('top_n')
+        if top_n is not None:
+            try:
+                top_n = max(1, min(500, int(top_n)))
+                rows = rows[:top_n]
+            except (ValueError, TypeError):
+                pass
+
+        return {
+            rows_key: rows,
+            '_origen': 'cache_previo',
+            '_total_filtrado': len(rows),
         }

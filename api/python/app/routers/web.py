@@ -138,6 +138,7 @@ def index_get(request: Request) -> Any:
         "modulesBase": "/modules/",
         "userKey": u["username"],
         "threadsApi": "/api/chat_threads.php",
+        "chatbotPage": "/index.php?page=chatbot",
     }
 
     ctx: dict[str, Any] = {
