@@ -848,12 +848,54 @@
         return /^\/modules\/(reports|ventasgeneral)\b/i.test(u);
     }
 
-    /** Montos mostrados como soles (S/), no dólares ($), en la vista del chat. */
-    function formatImportesSoles(text) {
+    /** Formatea número con separador de miles (es-PE). No reformatea si ya trae comas. */
+    function _formatNumberToken(numStr, fixedDecimals) {
+        const raw = String(numStr || '').trim();
+        if (!raw || raw.indexOf(',') >= 0) return raw;
+        const clean = raw.replace(/,/g, '');
+        if (!/^-?\d+(\.\d+)?$/.test(clean)) return raw;
+        const n = parseFloat(clean);
+        if (!isFinite(n)) return raw;
+        if (fixedDecimals != null) {
+            return n.toLocaleString('es-PE', {
+                minimumFractionDigits: fixedDecimals,
+                maximumFractionDigits: fixedDecimals,
+            });
+        }
+        if (clean.indexOf('.') >= 0) {
+            const dec = clean.split('.')[1].length;
+            return n.toLocaleString('es-PE', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+        }
+        return n.toLocaleString('es-PE', { maximumFractionDigits: 0 });
+    }
+
+    /** Montos S/, unidades, kg, líneas y otros números grandes en texto del asistente. */
+    function formatChatDisplayNumbers(text) {
         let s = String(text || '');
-        // $ 1,234.56 o $1234567.89 (evita tocar URLs: no hay espacio tras $ en http)
+        // $ → S/ (evita tocar http://…)
         s = s.replace(/\$\s*([\d]{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)/g, 'S/ $1');
+        // S/ 1234567.89 → S/ 1,234,567.89
+        s = s.replace(/\bS\/\s*(\d+(?:\.\d+)?)\b/g, function (_, n) {
+            return 'S/ ' + _formatNumberToken(n, String(n).indexOf('.') >= 0 ? 2 : null);
+        });
+        s = s.replace(/(\d+(?:\.\d+)?)\s+unidades\b/gi, function (_, n) {
+            return _formatNumberToken(n) + ' unidades';
+        });
+        s = s.replace(/(\d+(?:\.\d+)?)\s+kg\b/gi, function (_, n) {
+            return _formatNumberToken(n) + ' kg';
+        });
+        s = s.replace(/(\d+(?:\.\d+)?)\s+líneas\b/gi, function (_, n) {
+            return _formatNumberToken(n) + ' líneas';
+        });
+        s = s.replace(/(\d+(?:\.\d+)?)\s+notas de crédito\b/gi, function (_, n) {
+            return _formatNumberToken(n) + ' notas de crédito';
+        });
         return s;
+    }
+
+    /** @deprecated alias */
+    function formatImportesSoles(text) {
+        return formatChatDisplayNumbers(text);
     }
 
     function linkifyAssistant(text) {
@@ -1009,12 +1051,18 @@
 
     function _ctColHeader(v) {
         var s = _sanitizeCellDisplay(String(v || '').trim());
-        if (/^S\/\s/.test(s)) return 'Importe';
+        if (/^S\/\s/.test(s) || /^-?S\/\s/.test(s)) return 'Importe';
+        if (/líneas?\s+NC/i.test(s)) return 'Líneas NC';
+        if (/líneas?/i.test(s) && /^\d/.test(s)) return 'Líneas';
+        if (/kg/i.test(s) && /^\d/.test(s)) return 'Peso (kg)';
+        if (/^\d[\d,.]+%$/.test(s)) return '% total';
+        if (/acumulado/i.test(s)) return '% acum.';
         var mPer = s.match(/^(periodo\s+[A-Z])\s+S\//i);
         if (mPer) return _ctCap(mPer[1]);
+        if (/^precio\b/i.test(s)) return 'Precio/kg';
         var mLbl = s.match(/^([a-záéíóúüñ ]+?)\s+S\//i);
         if (mLbl) return _ctCap(mLbl[1].trim());
-        var mNum = s.match(/^[\d,.]+\s+(.+)$/);
+        var mNum = s.match(/^-?[\d,.]+\s+(.+)$/);
         if (mNum) return _ctCap(mNum[1].trim());
         var mPct = s.match(/^[\d,.]+%\s+(.+)$/);
         if (mPct) return _ctCap(mPct[1].trim());
@@ -1022,11 +1070,44 @@
         return _ctCap(s);
     }
 
+    /** Divide una cadena de valores por ", " respetando paréntesis y números con coma (S/ 1,234.56). */
+    function _ctSplitVals(s) {
+        var vals = [], cur = '', depth = 0;
+        for (var i = 0; i < s.length; i++) {
+            var c = s[i];
+            if (c === '(') { depth++; cur += c; continue; }
+            if (c === ')') { depth--; cur += c; continue; }
+            // Coma dentro de paréntesis o en número (dígito antes Y después de ",")
+            if (c === ',' && depth === 0) {
+                var prev = cur.trimEnd().slice(-1);
+                var next = s[i + 1];
+                var afterNext = s[i + 2] || '';
+                var numAfter = next === ' ' && /\d/.test(afterNext) && /\d/.test(prev);
+                if (next === ' ' && !numAfter) {
+                    vals.push(_sanitizeCellDisplay(cur.trim()));
+                    cur = ''; i++; continue;
+                }
+            }
+            cur += c;
+        }
+        if (cur.trim()) vals.push(_sanitizeCellDisplay(cur.trim()));
+        return vals.length ? vals : [_sanitizeCellDisplay(s)];
+    }
+
     function _ctParseItem(raw) {
+        // Intenta separador ": "
         var ci = raw.indexOf(': ');
-        if (ci < 0) return { name: _sanitizeCellDisplay(raw), extra: '', vals: [_sanitizeCellDisplay(raw)] };
-        var name = _sanitizeCellDisplay(raw.slice(0, ci).trim());
-        var vals = raw.slice(ci + 2).trim().split(', ').map(function (v) { return _sanitizeCellDisplay(v); });
+        // Intenta separador " - " (usado por el LLM en algunos formatos)
+        var di = raw.indexOf(' - ');
+        var sep = -1, sepLen = 0;
+        if (ci >= 0 && (di < 0 || ci <= di)) { sep = ci; sepLen = 2; }
+        else if (di >= 0) { sep = di; sepLen = 3; }
+
+        if (sep < 0) return { name: _sanitizeCellDisplay(raw), extra: '', vals: [_sanitizeCellDisplay(raw)] };
+
+        var name = _sanitizeCellDisplay(raw.slice(0, sep).replace(/\*\*/g, '').trim());
+        var rest = raw.slice(sep + sepLen).trim();
+        var vals = _ctSplitVals(rest);
         var nm = name.match(/^(.*?)\s*\(([^)]+)\)$/);
         if (nm) return { name: _sanitizeCellDisplay(nm[1].trim()), extra: _sanitizeCellDisplay(nm[2].trim()), vals: vals };
         return { name: name, extra: '', vals: vals };
@@ -1068,10 +1149,14 @@
         return h;
     }
 
+    function _ctIsNumericCol(header) {
+        return /^(Importe|Líneas|Peso|Unidades|Precio|%|N°$)/.test(header);
+    }
+
     function _ctBuildWidget(items) {
         var parsed = items.map(function(it) { return _ctParseItem(it.raw); });
         var hasExtra = parsed.some(function(p) { return p.extra !== ''; });
-        var cols = ['N°', hasExtra ? 'Nombre' : 'Concepto'];
+        var cols = ['N°', 'Nombre'];
         if (hasExtra) cols.push('Extra');
         var firstVals = parsed[0].vals;
         for (var vi = 0; vi < firstVals.length; vi++) cols.push(_ctColHeader(firstVals[vi]));
@@ -1088,9 +1173,15 @@
         var pp = 30, total = Math.max(1, Math.ceil(rows.length / pp));
         var initRows = rows.slice(0, pp), endIdx = Math.min(pp, rows.length);
         var infoText = rows.length > 0 ? 'Mostrando 1 a ' + endIdx + ' de ' + rows.length + ' registros' : 'Sin resultados';
-        var thead = cols.map(function(c) { return '<th>' + escapeHtml(c) + '</th>'; }).join('');
+        var thead = cols.map(function(c) {
+            var align = _ctIsNumericCol(c) ? ' style="text-align:right"' : '';
+            return '<th' + align + '>' + escapeHtml(c) + '</th>';
+        }).join('');
         var tbody = initRows.map(function(row) {
-            return '<tr>' + row.map(function(c) { return '<td>' + escapeHtml(String(c)) + '</td>'; }).join('') + '</tr>';
+            return '<tr>' + row.map(function(c, ci) {
+                var align = _ctIsNumericCol(cols[ci]) ? ' style="text-align:right"' : '';
+                return '<td' + align + '>' + escapeHtml(String(c)) + '</td>';
+            }).join('') + '</tr>';
         }).join('');
         var initCards = initRows.map(function(row) {
             var fields = cols.slice(1).map(function(col, ci) {
@@ -1324,15 +1415,20 @@
     }
     // ───────────────────────────────────────────────────────────────────────────
 
+    function _userIsAdmin() {
+        var r = (window.__VENTAS_CHAT && window.__VENTAS_CHAT.userRole || '').toLowerCase();
+        return r === 'admin' || r === 'administrador';
+    }
+
     function renderAssistantHtml(fullText) {
         const parts = splitAssistantAnswerAndSql(fullText);
         if (!parts.tail) return _chatTextToHtml(parts.head);
-        return (
-            _chatTextToHtml(parts.head) +
-            '\n\n' +
-            '<details class="ventas-chat-sql-fold"><summary class="ventas-chat-sql-fold-summary">Detalle técnico (SQL)</summary>' +
-            '<pre class="ventas-chat-sql-pre">' + escapeHtml(parts.tail) + '</pre></details>'
-        );
+        var html = _chatTextToHtml(parts.head);
+        if (_userIsAdmin()) {
+            html += '\n\n<details class="ventas-chat-sql-fold"><summary class="ventas-chat-sql-fold-summary">Detalle técnico (SQL)</summary>'
+                  + '<pre class="ventas-chat-sql-pre">' + escapeHtml(parts.tail) + '</pre></details>';
+        }
+        return html;
     }
 
     function _assistantBodyHasWideTable(html) {

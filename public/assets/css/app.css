@@ -1744,7 +1744,8 @@ html[data-theme="dark"] .gestion-role-wrap--default {
     align-items: center;
     gap: 0.35rem;
 }
-.gestion-acciones-row input[type="password"] {
+.gestion-acciones-row input[type="password"],
+.gestion-acciones-row input[type="text"] {
     min-width: 8.5rem;
     max-width: 11rem;
     padding: 0.35rem 0.5rem;
@@ -1753,10 +1754,43 @@ html[data-theme="dark"] .gestion-role-wrap--default {
     background: var(--input-bg, #f8fafc);
     font-size: 0.8125rem;
 }
-html[data-theme="dark"] .gestion-acciones-row input[type="password"] {
+html[data-theme="dark"] .gestion-acciones-row input[type="password"],
+html[data-theme="dark"] .gestion-acciones-row input[type="text"] {
     background: var(--input-bg);
     border-color: var(--input-border);
     color: var(--text);
+}
+/* eye toggle wrapper */
+.pw-toggle-wrap {
+    display: inline-flex;
+    align-items: stretch;
+}
+.pw-toggle-wrap input[type="password"],
+.pw-toggle-wrap input[type="text"] {
+    border-top-right-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    border-right: none !important;
+    max-width: none;
+}
+.pw-toggle-btn {
+    flex-shrink: 0;
+    background: var(--input-bg, #f8fafc);
+    border: 1px solid var(--input-border, #cbd5e1);
+    border-left: none;
+    border-radius: 0 var(--radius-sm, 4px) var(--radius-sm, 4px) 0;
+    padding: 0 0.5rem;
+    cursor: pointer;
+    color: #9ca3af;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    line-height: 1;
+}
+.pw-toggle-btn:hover { color: #2563eb; }
+html[data-theme="dark"] .pw-toggle-btn {
+    background: var(--input-bg);
+    border-color: var(--input-border);
+    color: var(--text-muted, #a1a1aa);
 }
 .btn-gestion-key {
     display: inline-flex;

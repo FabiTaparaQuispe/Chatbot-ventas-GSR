@@ -35,7 +35,10 @@
                         {% endfor %}
                     </select></div>
                 <div class="filter-field"><label for="u_password">Contraseña</label>
-                    <input type="password" id="u_password" name="password" required minlength="6" placeholder="Mínimo 6 caracteres"></div>
+                    <div class="pw-toggle-wrap">
+                        <input type="password" id="u_password" name="password" required minlength="6" placeholder="Mínimo 6 caracteres">
+                        <button type="button" class="pw-toggle-btn" onclick="_togglePw(this)" tabindex="-1" aria-label="Mostrar/ocultar contraseña"><i class="fas fa-eye" aria-hidden="true"></i></button>
+                    </div></div>
                 <div class="filter-field"><label for="u_active">Activo</label>
                     <select id="u_active" name="is_active"><option value="1" selected>Sí</option><option value="0">No</option></select></div>
             </div>
@@ -88,7 +91,10 @@
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token|e }}">
                                 <input type="hidden" name="accion" value="reset_password">
                                 <input type="hidden" name="id" value="{{ uid }}">
-                                <input type="password" name="new_password" minlength="6" required placeholder="Nueva clave" style="min-width: 10rem;">
+                                <div class="pw-toggle-wrap">
+                                    <input type="password" name="new_password" minlength="6" required placeholder="Nueva clave" style="min-width: 10rem;">
+                                    <button type="button" class="pw-toggle-btn" onclick="_togglePw(this)" tabindex="-1" aria-label="Mostrar/ocultar contraseña"><i class="fas fa-eye" aria-hidden="true"></i></button>
+                                </div>
                                 <button type="submit" class="btn btn-primary">Reset</button>
                             </form>
                         </div>
@@ -101,6 +107,16 @@
 </div>
 {% endblock %}
 {% block extra_scripts %}
+<script>
+function _togglePw(btn) {
+    var inp = btn.previousElementSibling;
+    if (!inp) return;
+    var show = inp.type === 'password';
+    inp.type = show ? 'text' : 'password';
+    var ico = btn.querySelector('i');
+    if (ico) { ico.classList.toggle('fa-eye', !show); ico.classList.toggle('fa-eye-slash', show); }
+}
+</script>
 <script>
 (function () {
     var btn = document.getElementById('btnToggleUsuariosCrear');

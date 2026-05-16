@@ -282,7 +282,14 @@ def _fmt_barras_corporativo(result):
     if not filas:
         return None
     per = _periodo(result)
-    header = "Ventas por corporativo"
+    nom_cli = result.get('filtro_nombre_cliente', '')
+    nom_corp = result.get('filtro_nombre_corporativo', '')
+    if nom_cli:
+        header = f"Corporativos del cliente '{nom_cli}'"
+    elif nom_corp:
+        header = f"Ventas del corporativo '{nom_corp}'"
+    else:
+        header = "Ventas por corporativo"
     if per:
         header += f" del {per}"
     lines = [header + ":\n"]
@@ -343,6 +350,38 @@ def _fmt_serie_mensual(result):
     return '\n'.join(lines)
 
 
+def _fmt_linea_resumen(result):
+    filas = result.get('filas', [])
+    if not filas:
+        return None
+    linea = result.get('linea_comercial', '')
+    per = _periodo(result)
+    header = f"Resumen por cliente: {linea}" if linea else "Resumen por cliente"
+    if per:
+        header += f" del {per}"
+    lines = [header + ":\n"]
+    for i, r in enumerate(filas, 1):
+        nom = r.get('nombre_cliente') or '?'
+        prov = r.get('provincia') or '?'
+        qty = r.get('suma_cantidad')
+        peso = r.get('suma_peso')
+        valor = float(r.get('suma_valor') or 0)
+        parts = []
+        if qty is not None:
+            parts.append(f"{_n(qty)} unidades")
+        if peso is not None:
+            parts.append(f"{float(peso):,.2f} kg")
+        parts.append(_m(valor))
+        peso_f = float(peso) if peso is not None else 0
+        if peso_f > 0:
+            parts.append(f"precio S/ {valor / peso_f:.2f}/kg")
+        lines.append(f"{i}. {nom} ({prov}): {', '.join(parts)}")
+    url = _url(result)
+    if url:
+        lines.append(f"\n{url}")
+    return '\n'.join(lines)
+
+
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
 _FORMATTERS = {
@@ -359,6 +398,7 @@ _FORMATTERS = {
     'ventasgeneral_barras_corporativo':       _fmt_barras_corporativo,
     'ventasgeneral_mix_tdoc':                 _fmt_mix_tdoc,
     'ventasgeneral_serie_mensual_valor':      _fmt_serie_mensual,
+    'ventasgeneral_linea_resumen_provincia':  _fmt_linea_resumen,
 }
 
 

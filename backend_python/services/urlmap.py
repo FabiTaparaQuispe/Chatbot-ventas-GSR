@@ -45,7 +45,7 @@ def report_slug_url(slug: str, query: str) -> str:
     return base + ('?' + q if q else '')
 
 
-def chat_assistant_config_dict(user_key: str) -> dict[str, str]:
+def chat_assistant_config_dict(user_key: str, role: str = '') -> dict[str, str]:
     return {
         'chatApi': API_CHAT,
         'publicBase': '/',
@@ -53,4 +53,5 @@ def chat_assistant_config_dict(user_key: str) -> dict[str, str]:
         'userKey': user_key,
         'threadsApi': API_CHAT_THREADS,
         'chatbotPage': '/?page=chatbot',
+        'userRole': role or '',
     }

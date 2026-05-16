@@ -134,9 +134,11 @@ def ventas_tool_definitions():
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_barras_corporativo',
-            'description': f'Ranking de corporativos (NombreCoorporativo) por SUM(Valor). top_n acota el universo; pagina/por_pagina lo navegan. reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_BARRAS_CORPORATIVO}?…',
+            'description': f'Ranking de corporativos (NombreCoorporativo) por SUM(Valor). Filtros opcionales: nombre_cliente (NombreCliente LIKE) para ver corporativos de un cliente específico; nombre_corporativo (NombreCoorporativo LIKE) para filtrar por nombre de corporativo. top_n acota el universo; pagina/por_pagina lo navegan. reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_BARRAS_CORPORATIVO}?…',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'top_n': dn,
+                'nombre_cliente': {'type': 'string', 'description': 'Filtro parcial por NombreCliente (LIKE). Ej: "Machicado"'},
+                'nombre_corporativo': {'type': 'string', 'description': 'Filtro parcial por NombreCoorporativo (LIKE). Ej: "ABC"'},
                 'pagina': pagina, 'por_pagina': por_pagina,
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},

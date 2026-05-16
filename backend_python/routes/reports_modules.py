@@ -2352,17 +2352,54 @@ def ventas_barras_corporativo():
     except (TypeError, ValueError):
         top = 15
 
+    tipo_fecha = _tipo_fecha_param()
+    fe = _sql_fecha_dimension(tipo_fecha)
+    fecha_eje_leyenda = _fecha_eje_leyenda(tipo_fecha)
+
+    f_provincias = [v.strip() for v in request.args.getlist('provincia') if v.strip()]
+    f_corporativos = [v.strip() for v in request.args.getlist('corporativo') if v.strip()]
+    f_clientes = [v.strip() for v in request.args.getlist('cliente') if v.strip()]
+
+    nombre_cliente_q = (request.args.get('nombre_cliente') or '').strip()
+    nombre_corporativo_q = (request.args.get('nombre_corporativo') or '').strip()
+
+    conn = get_connection()
+    base_where = f' WHERE {fe} BETWEEN :d1 AND :d2'
+    base_bind: dict[str, Any] = {'d1': d1, 'd2': d2}
+    if nombre_cliente_q:
+        base_where += ' AND NombreCliente LIKE :nom_cli'
+        base_bind['nom_cli'] = f'%{nombre_cliente_q}%'
+    if nombre_corporativo_q and not f_corporativos:
+        base_where += ' AND NombreCoorporativo LIKE :nom_corp'
+        base_bind['nom_corp'] = f'%{nombre_corporativo_q}%'
+
+    (provincias_opts, corporativos_opts, clientes_opts,
+     f_provincias, f_corporativos, f_clientes, opts_tree) = _cascada_y_arbol(
+        conn, base_where, base_bind, f_provincias, f_corporativos, f_clientes)
+
+    ext_where = base_where
+    bind = dict(base_bind)
+    if f_provincias:
+        keys = [f'prov_{i}' for i in range(len(f_provincias))]
+        ext_where += ' AND Provincia IN (' + ','.join(f':{k}' for k in keys) + ')'
+        bind.update(zip(keys, f_provincias))
+    if f_corporativos:
+        keys = [f'corp_{i}' for i in range(len(f_corporativos))]
+        ext_where += ' AND NombreCoorporativo IN (' + ','.join(f':{k}' for k in keys) + ')'
+        bind.update(zip(keys, f_corporativos))
+    if f_clientes:
+        keys = [f'cli_{i}' for i in range(len(f_clientes))]
+        ext_where += ' AND CodigoCliente IN (' + ','.join(f':{k}' for k in keys) + ')'
+        bind.update(zip(keys, f_clientes))
+
     expr = "COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'(sin corporativo)')"
     sql = (f"SELECT {expr} AS nombre_coorporativo,"
            f" MAX(COALESCE(NULLIF(TRIM(CodigoCoorporativo),''),'')) AS cod_coorporativo,"
            f" COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor"
-           " FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2"
+           f" FROM ventasgeneral2{ext_where}"
            f" GROUP BY {expr} ORDER BY suma_valor DESC LIMIT {top}")
-    sql_tot = ("SELECT COALESCE(SUM(Valor),0) AS t"
-               " FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2")
-    bind = {'d1': d1, 'd2': d2}
+    sql_tot = (f"SELECT COALESCE(SUM(Valor),0) AS t FROM ventasgeneral2{ext_where}")
 
-    conn = get_connection()
     with conn.cursor() as cur:
         cur.execute(_colon_params_to_pymysql(sql), bind)
         raw = cur.fetchall() or []
@@ -2384,18 +2421,43 @@ def ventas_barras_corporativo():
             'rank': i,
             'cod_coorporativo': str(r.get('cod_coorporativo') or ''),
             'nombre_coorporativo': corp,
-            'lineas': int(r.get('lineas') or 0),
+            'lineas': f"{int(r.get('lineas') or 0):,}",
             'suma_valor': f'{sv:,.2f}',
             'pct_del_total': f'{pct:.1f}',
         })
 
+    filtros_activos: list[str] = []
+    if nombre_cliente_q:
+        filtros_activos.append(f"cliente «{nombre_cliente_q}»")
+    if nombre_corporativo_q and not f_corporativos:
+        filtros_activos.append(f"corporativo «{nombre_corporativo_q}»")
+    if f_provincias:
+        filtros_activos.append('provincia: ' + ', '.join(f_provincias))
+    if f_corporativos:
+        filtros_activos.append('corporativo: ' + ', '.join(f_corporativos))
+    if f_clientes:
+        filtros_activos.append(f'{len(f_clientes)} cliente(s)')
+
     ctx = _report_shell_context(f'Top {top} corporativos')
     ctx.update({
         'd1': d1, 'd2': d2, 'top': top,
+        'tipo_fecha': tipo_fecha,
+        'fecha_eje_leyenda': fecha_eje_leyenda,
         'filas': filas,
         'total_valor': f'{total:,.2f}',
         'pdf_filename': f'barras_corporativo_{d1}_{d2}.pdf',
         'chart_data': {'labels': chart_labels, 'valores': chart_valores},
+        'provincias_opts': provincias_opts,
+        'corporativos_opts': corporativos_opts,
+        'clientes_opts': clientes_opts,
+        'f_provincias': f_provincias,
+        'f_corporativos': f_corporativos,
+        'f_clientes': f_clientes,
+        'opts_tree': opts_tree,
+        'nombre_cliente_q': nombre_cliente_q,
+        'nombre_corporativo_q': nombre_corporativo_q,
+        'filtros_activos': filtros_activos,
+        'body_class': 'app-page-reporte-wide',
     })
     return render_template('pages/reporte_barras_corporativo.html', **ctx)
 

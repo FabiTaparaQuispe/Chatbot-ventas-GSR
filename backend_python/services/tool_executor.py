@@ -796,17 +796,31 @@ class ToolExecutor:
         pagina = _parse_pagina(args)
         por_pagina = _parse_por_pagina(args)
         expr = _col_etiqueta('corporativo')
+        where_extra = ''
+        params = {'d1': d1, 'd2': d2}
+        nom_cli = str(args.get('nombre_cliente') or '').strip()
+        if nom_cli:
+            where_extra += ' AND NombreCliente LIKE %(nom_cli)s'
+            params['nom_cli'] = f'%{nom_cli}%'
+        nom_corp = str(args.get('nombre_corporativo') or '').strip()
+        if nom_corp:
+            where_extra += f' AND {expr} LIKE %(nom_corp)s'
+            params['nom_corp'] = f'%{nom_corp}%'
         sql = (f"SELECT {expr} AS nombre_coorporativo,"
                f" MAX(COALESCE(NULLIF(TRIM(CodigoCoorporativo),''),'')) AS cod_coorporativo,"
                f" COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor"
-               f" FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+               f" FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s{where_extra}"
                f" GROUP BY {expr} ORDER BY suma_valor DESC LIMIT {top}")
-        params = {'d1': d1, 'd2': d2}
         rows = _q(self._conn, sql, params)
         filas_all = [dict(r) for r in rows]
         filas = _paginate_list(filas_all, pagina, por_pagina)
-        q = _qs({'desde': d1, 'hasta': d2, 'top': top})
-        return {
+        q_params = {'desde': d1, 'hasta': d2, 'top': top}
+        if nom_cli:
+            q_params['nombre_cliente'] = nom_cli
+        if nom_corp:
+            q_params['nombre_corporativo'] = nom_corp
+        q = _qs(q_params)
+        result = {
             'tabla': 'ventasgeneral',
             'tipo': 'barras_corporativo',
             'periodo': {'desde': d1, 'hasta': d2},
@@ -815,6 +829,11 @@ class ToolExecutor:
             'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_BARRAS_CORPORATIVO, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
+        if nom_cli:
+            result['filtro_nombre_cliente'] = nom_cli
+        if nom_corp:
+            result['filtro_nombre_corporativo'] = nom_corp
+        return result
 
     def _serie_mensual(self, args):
         d1, d2 = _parse_date_range(args)
@@ -1193,6 +1212,7 @@ class ToolExecutor:
         'zona_comercial':  'ZonaComercial',
         'ruta':            'RutaComercial',
         'tipo_documento':  'TipoDocumento',
+        'cliente':         'NombreCliente',
     }
 
     def _catalogo(self, args):

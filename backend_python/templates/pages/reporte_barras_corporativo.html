@@ -2,17 +2,110 @@
 {% block content %}
 <div class="page-head">
     <h1>Top {{ top }} corporativos</h1>
-    <p class="page-lead">FechaContable del <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong> · ranking por importe total (S/).</p>
+    <p class="page-lead">
+        <strong>{{ fecha_eje_leyenda|default('Fecha contable') }}</strong> del <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong>
+        · ranking por importe total (S/).
+        {% if filtros_activos %}
+        <br><span style="color:var(--muted);font-size:0.92em;">Filtros: {{ filtros_activos|join(' · ') }}</span>
+        {% endif %}
+    </p>
 </div>
 
 <div class="reporte-page">
+
     <div class="card-filtros-demo reporte-informe-panel">
-        <div class="reporte-informe-toolbar">
-            <button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button>
+        <div class="card-filtros-demo__head" id="filtrosHead" role="button" tabindex="0" aria-controls="filtrosBody" aria-expanded="true">
+            <div class="card-filtros-demo__head-left">
+                <span class="card-filtros-demo__emoji" aria-hidden="true"><i class="fa-solid fa-filter"></i></span>
+                <span class="card-filtros-demo__title">Filtros</span>
+            </div>
+            <span class="card-filtros-demo__chev card-filtros-demo__chev--open" id="filtrosChev" aria-hidden="true"><i class="fa-solid fa-chevron-down"></i></span>
         </div>
+        <div class="card-filtros-demo__body" id="filtrosBody">
+            <form method="get" class="filter-form filter-form--reporte" autocomplete="off">
+                <input type="hidden" name="top" value="{{ top }}">
+                {% if nombre_cliente_q %}
+                <input type="hidden" name="nombre_cliente" value="{{ nombre_cliente_q|e }}">
+                {% endif %}
+                {% if nombre_corporativo_q and not f_corporativos %}
+                <input type="hidden" name="nombre_corporativo" value="{{ nombre_corporativo_q|e }}">
+                {% endif %}
+
+                <div class="filter-row">
+                    <div class="filter-field">
+                        <label for="fDesde">Desde</label>
+                        <input type="date" id="fDesde" name="desde" value="{{ d1 }}" required />
+                    </div>
+                    <div class="filter-field">
+                        <label for="fHasta">Hasta</label>
+                        <input type="date" id="fHasta" name="hasta" value="{{ d2 }}" required />
+                    </div>
+                </div>
+
+                <div class="filter-row filter-row--reporte-line-prov">
+                    <div class="filter-field">
+                        <label for="fTipoFecha">Período según</label>
+                        <select id="fTipoFecha" name="tipo_fecha">
+                            <option value="contable" {% if (tipo_fecha|default('contable')) != 'proceso' %}selected{% endif %}>Fecha contable</option>
+                            <option value="proceso" {% if (tipo_fecha|default('contable')) == 'proceso' %}selected{% endif %}>Día de proceso (fechaProceso)</option>
+                        </select>
+                    </div>
+                    <div class="filter-field filter-field--provincia">
+                        <label for="fProv">Provincia</label>
+                        <select id="fProv" name="provincia">
+                            <option value="">— Todas —</option>
+                            {% for p in provincias_opts %}
+                            <option value="{{ p }}" {% if f_provincias and p == f_provincias[0] %}selected{% endif %}>{{ p }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="filter-field" id="wCorp" style="display:none">
+                        <label for="fCorp">Corporativo</label>
+                        <select id="fCorp" name="corporativo">
+                            <option value="">— Todos —</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="filter-row filter-row--reporte-cliente">
+                    <div class="filter-field" id="wCli" style="display:none">
+                        <label for="fCli">Cliente</label>
+                        <select id="fCli" name="cliente">
+                            <option value="">— Todos —</option>
+                        </select>
+                    </div>
+                    {% if nombre_cliente_q %}
+                    <div class="filter-field">
+                        <label>Cliente (texto)</label>
+                        <input type="text" value="{{ nombre_cliente_q }}" readonly class="input-readonly" title="Filtro del chat; use Limpiar para quitarlo" />
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="reporte-filter-bar">
+                    <div class="filter-actions">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fa-solid fa-check" aria-hidden="true"></i> Aplicar
+                        </button>
+                        <a class="btn btn-ghost" href="{{ request.path }}?desde={{ d1 }}&hasta={{ d2 }}&top={{ top }}{% if (tipo_fecha|default('contable')) == 'proceso' %}&tipo_fecha=proceso{% endif %}">
+                            <i class="fa-solid fa-eraser" aria-hidden="true"></i> Limpiar
+                        </a>
+                    </div>
+                    <div class="reporte-filter-bar__export">
+                        <button type="button" class="btn btn-primary" id="btn-pdf">
+                            <i class="fa-solid fa-file-pdf" aria-hidden="true"></i> Descargar PDF
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
         <div id="reporte-pdf-root">
             <h2 class="reporte-informe-title">Ventas por NombreCoorporativo</h2>
-            <p class="reporte-informe-meta">Importe total período: <strong>S/ {{ total_valor }}</strong></p>
+            <p class="reporte-informe-meta">
+                Período ({{ fecha_eje_leyenda|default('Fecha contable') }}): <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong>
+                · Importe total período: <strong>S/ {{ total_valor }}</strong>
+            </p>
 
             {% if filas %}
             <div class="table-wrapper overflow-x-auto productos-dt-skin">
@@ -49,7 +142,13 @@
                 </table>
             </div>
             {% else %}
-            <p style="color:var(--muted);">No se encontraron registros en el período seleccionado.</p>
+            <p style="color:var(--muted);">
+                No se encontraron registros en el período seleccionado.
+                {% if filtros_activos or f_provincias or f_corporativos or f_clientes %}
+                <a href="{{ request.path }}?desde={{ d1 }}&hasta={{ d2 }}&top={{ top }}{% if (tipo_fecha|default('contable')) == 'proceso' %}&tipo_fecha=proceso{% endif %}"
+                   style="color:var(--accent);">Limpiar filtros</a>
+                {% endif %}
+            </p>
             {% endif %}
         </div>
     </div>
@@ -63,7 +162,118 @@
 </div>
 {% endblock %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css">
+<style>
+.select2-container { width: 100% !important; }
+.select2-selection { min-height: 38px !important; display: flex !important; align-items: center !important; }
+.select2-selection__rendered { line-height: normal !important; }
+.select2-selection__arrow { height: 100% !important; }
+.filter-form .input-readonly { opacity: 0.85; cursor: default; }
+</style>
+{% endblock %}
+
 {% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+(function () {
+    var TREE = {{ opts_tree | tojson }};
+    var iP = {{ (f_provincias[0] if f_provincias else '') | tojson }};
+    var iC = {{ (f_corporativos[0] if f_corporativos else '') | tojson }};
+    var iK = {{ (f_clientes[0] if f_clientes else '') | tojson }};
+
+    var S2_BASE = {
+        width: '100%',
+        allowClear: true,
+        language: { noResults: function () { return 'Sin resultados'; } }
+    };
+
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function resetSelect(wrapperId, selId) {
+        var $s = $('#' + selId);
+        try { $s.select2('destroy'); } catch (e) {}
+        $s.empty().append('<option value="">— Todos —</option>').prop('disabled', true);
+        $('#' + wrapperId).hide();
+    }
+
+    function initS2(selId, placeholder) {
+        $('#' + selId).prop('disabled', false).select2($.extend({}, S2_BASE, { placeholder: placeholder }));
+    }
+
+    function onProvChange() {
+        var prov = $('#fProv').val();
+        resetSelect('wCorp', 'fCorp');
+        resetSelect('wCli', 'fCli');
+        if (!prov || !TREE[prov]) return;
+        var corps = TREE[prov].corps || [];
+        if (!corps.length) return;
+        corps.forEach(function (c) {
+            $('#fCorp').append('<option value="' + esc(c) + '">' + esc(c) + '</option>');
+        });
+        $('#wCorp').show();
+        initS2('fCorp', '— Todos —');
+        $('#fCorp').off('change.corp').on('change.corp', onCorpChange);
+    }
+
+    function onCorpChange() {
+        var prov = $('#fProv').val();
+        var corp = $('#fCorp').val();
+        resetSelect('wCli', 'fCli');
+        if (!prov || !corp || !TREE[prov]) return;
+        var clients = ((TREE[prov].clients || {})[corp]) || [];
+        if (!clients.length) return;
+        clients.forEach(function (c) {
+            $('#fCli').append('<option value="' + esc(c.cod) + '">' + esc(c.cod) + ' — ' + esc(c.nombre) + '</option>');
+        });
+        $('#wCli').show();
+        initS2('fCli', '— Todos —');
+    }
+
+    $(function () {
+        initS2('fProv', '— Todas —');
+        $('#fProv').on('change', onProvChange);
+
+        if (iP) {
+            $('#fProv').val(iP).trigger('change.select2');
+            onProvChange();
+            if (iC) {
+                setTimeout(function () {
+                    $('#fCorp').val(iC).trigger('change.select2');
+                    onCorpChange();
+                    if (iK) {
+                        setTimeout(function () {
+                            $('#fCli').val(iK).trigger('change.select2');
+                        }, 0);
+                    }
+                }, 0);
+            }
+        }
+    });
+})();
+(function () {
+    var head = document.getElementById('filtrosHead');
+    var body = document.getElementById('filtrosBody');
+    var chev = document.getElementById('filtrosChev');
+    function setOpen(isOpen) {
+        if (!body) return;
+        body.classList.toggle('hidden', !isOpen);
+        if (chev) chev.classList.toggle('card-filtros-demo__chev--open', isOpen);
+        if (head) head.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    }
+    function toggle() { setOpen(body && body.classList.contains('hidden')); }
+    if (head && body) {
+        head.addEventListener('click', toggle);
+        head.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+        });
+        setOpen(true);
+    }
+})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
 <script src="/assets/js/chart_reporte_datalabels.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
@@ -74,11 +284,13 @@
     var d = {{ chart_data | tojson }};
     var legCol = typeof reporteChartLegendColor === 'function' ? reporteChartLegendColor() : '#1e293b';
     var anim = window.reporteChartAnimate || {};
+    var chartInst = null;
+
     function build() {
         if (!window.Chart) return;
         var ctx = document.getElementById('chartBarras');
-        if (!ctx || !d.labels) return;
-        new Chart(ctx, {
+        if (!ctx || !d.labels || !d.labels.length) return;
+        chartInst = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels: d.labels,
@@ -99,8 +311,48 @@
             }),
         });
     }
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
-    else build();
+
+    function parseNum(s) {
+        var n = parseFloat(String(s == null ? '' : s).replace(/[^\d.\-]/g, ''));
+        return isNaN(n) ? null : n;
+    }
+
+    function syncChartFromTable() {
+        if (!chartInst) return;
+        var tableEl = document.querySelector('table.rct-auto');
+        if (!tableEl || !tableEl.__rct || !tableEl.__rct.origData) return;
+        var fi = tableEl.__rct.filteredIndices || (tableEl.__rct.getFilteredIndices ? tableEl.__rct.getFilteredIndices() : []) || [];
+        var data = tableEl.__rct.origData || [];
+        var cols = tableEl.__rct.cols || [];
+        var idxCorp = -1, idxVal = -1;
+        for (var i = 0; i < cols.length; i++) {
+            if (/corporativo/i.test(cols[i])) idxCorp = i;
+            if (/importe/i.test(cols[i])) idxVal = i;
+        }
+        if (idxCorp < 0 || idxVal < 0) return;
+        var use = fi.length && fi.length < data.length ? fi : data.map(function (_, j) { return j; });
+        var labels = [], valores = [];
+        use.forEach(function (ri) {
+            var row = data[ri] || [];
+            labels.push(String(row[idxCorp] || '').slice(0, 25));
+            valores.push(parseNum(row[idxVal]) || 0);
+        });
+        chartInst.data.labels = labels;
+        chartInst.data.datasets[0].data = valores;
+        chartInst.update('none');
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () {
+            build();
+            var t = document.querySelector('table.rct-auto');
+            if (t) t.addEventListener('rct:filtered', syncChartFromTable);
+        });
+    } else {
+        build();
+        var t2 = document.querySelector('table.rct-auto');
+        if (t2) t2.addEventListener('rct:filtered', syncChartFromTable);
+    }
 })();
 </script>
 {% endblock %}

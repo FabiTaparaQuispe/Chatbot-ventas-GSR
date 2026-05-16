@@ -165,7 +165,7 @@ def index():
         "flash_ok": flash_ok,
         "flash_err": flash_err,
         "csrf_token": csrf_token,
-        "chat_assistant_config": chat_assistant_config_dict(usuario or "anon"),
+        "chat_assistant_config": chat_assistant_config_dict(usuario or "anon", role or ""),
     }
 
     tpl = f"pages/{page}.html"

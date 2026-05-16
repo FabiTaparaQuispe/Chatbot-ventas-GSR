@@ -40,6 +40,14 @@ def _fmt_num(v, decimals=2) -> str:
     return s
 
 
+def _fmt_int(v) -> str:
+    """Entero con separador de miles (unidades, líneas, etc.)."""
+    try:
+        return f'{int(float(v)):,}'
+    except (TypeError, ValueError):
+        return str(v)
+
+
 _FAKE_DOMAIN_RE = re.compile(
     r'https?://(?:example\.com|localhost(?::\d+)?|127\.0\.0\.1(?::\d+)?)(?::\d+)?(/[^\s<>"\']*)',
     re.IGNORECASE,
@@ -260,10 +268,10 @@ def _lines_linea_resumen_provincia(filas):
         nom = str(r.get('nombre_cliente') or '')
         prov = str(r.get('provincia') or '')
         ln = int(r.get('lineas') or 0)
-        cant = _fmt_num(r.get('suma_cantidad') or 0)
+        cant = _fmt_int(r.get('suma_cantidad') or 0)
         peso = _fmt_num(r.get('suma_peso') or 0)
         v = _fmt_num(r.get('suma_valor') or 0)
-        out.append(f'{i}. {nom} ({prov}): {ln:,} líneas, {cant} unidades, {peso} kg, S/ {v}')
+        out.append(f'{i}. {nom} ({prov}): {_fmt_int(ln)} líneas, {cant} unidades, {peso} kg, S/ {v}')
     return '\n'.join(out)
 
 
@@ -276,7 +284,7 @@ def _lines_linea_precio_resumen_provincia(filas, payload):
         v = _fmt_num(r.get('suma_valor') or 0)
         pk = r.get('precio_kg')
         precio_s = f'S/ {_fmt_num(pk, 2)}' if pk is not None else 'S/ —'
-        out.append(f'{i}. {prov}: {precio_s} ({ln:,} líneas, {peso} kg, S/ {v})')
+        out.append(f'{i}. {prov}: {precio_s} ({_fmt_int(ln)} líneas, {peso} kg, S/ {v})')
     total_pk = payload.get('total_precio_kg')
     if total_pk is not None:
         out.append(f'Total ponderado del período: S/ {_fmt_num(total_pk, 2)}')
