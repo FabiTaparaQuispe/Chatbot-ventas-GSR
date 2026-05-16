@@ -370,7 +370,7 @@ def _fmt_linea_resumen(result):
         if qty is not None:
             parts.append(f"{_n(qty)} unidades")
         if peso is not None:
-            parts.append(f"{float(peso):,.2f} kg")
+            parts.append(f"{_fmt_num(peso)} kg")
         parts.append(_m(valor))
         peso_f = float(peso) if peso is not None else 0
         if peso_f > 0:

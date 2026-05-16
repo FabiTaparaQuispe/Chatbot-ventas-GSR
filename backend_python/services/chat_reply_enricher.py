@@ -62,6 +62,54 @@ def _sanitize_urls(text: str) -> str:
     return text
 
 
+def _format_display_numbers(text: str) -> str:
+    """Aplica separador de miles a unidades, kg, líneas y montos S/ en texto libre."""
+    if not text:
+        return text
+    s = str(text)
+
+    def _fmt_token(num_str: str, decimals: int | None = None) -> str:
+        raw = num_str.strip()
+        if ',' in raw:
+            return raw
+        try:
+            n = float(raw.replace(',', ''))
+        except (TypeError, ValueError):
+            return raw
+        if decimals is not None:
+            return f'{n:,.{decimals}f}'
+        if '.' in raw:
+            dec = len(raw.split('.')[1])
+            return f'{n:,.{dec}f}'
+        return f'{int(n):,}'
+
+    s = re.sub(
+        r'\bS/\s*(\d+(?:\.\d+)?)\b',
+        lambda m: 'S/ ' + _fmt_token(m.group(1), 2 if '.' in m.group(1) else None),
+        s,
+        flags=re.IGNORECASE,
+    )
+    s = re.sub(
+        r'(\d+(?:\.\d+)?)\s+unidades\b',
+        lambda m: _fmt_token(m.group(1)) + ' unidades',
+        s,
+        flags=re.IGNORECASE,
+    )
+    s = re.sub(
+        r'(\d+(?:\.\d+)?)\s+kg\b',
+        lambda m: _fmt_token(m.group(1)) + ' kg',
+        s,
+        flags=re.IGNORECASE,
+    )
+    s = re.sub(
+        r'(\d+(?:\.\d+)?)\s+líneas\b',
+        lambda m: _fmt_token(m.group(1)) + ' líneas',
+        s,
+        flags=re.IGNORECASE,
+    )
+    return s
+
+
 def _dedup_module_url(text: str) -> str:
     """Remove a duplicate /modules/... URL line when the same URL already appears in the text."""
     lines = text.splitlines()
@@ -85,7 +133,7 @@ def _dedup_module_url(text: str) -> str:
 
 
 def enrich_reply(reply: str, groq_messages: list) -> str:
-    reply = _sanitize_urls(reply.strip())
+    reply = _format_display_numbers(_sanitize_urls(reply.strip()))
     payload = _last_tool_payload(groq_messages)
     if payload is None:
         if _uses_generic_labels(reply):
@@ -93,7 +141,7 @@ def enrich_reply(reply: str, groq_messages: list) -> str:
             note = ('Los nombres de cliente no están disponibles porque el asistente respondió desde el historial '
                     'sin consultar la base de datos. '
                     'Hacé la misma pregunta de nuevo para obtener los datos actualizados.')
-            return (note + '\n\n' + url).strip() if url else note
+            return _format_display_numbers((note + '\n\n' + url).strip() if url else note)
         return reply
 
     summary = _format_payload(payload)
@@ -101,19 +149,19 @@ def enrich_reply(reply: str, groq_messages: list) -> str:
         return reply
 
     if _uses_generic_labels(reply):
-        return _summary_with_url(summary, reply, payload)
+        return _format_display_numbers(_summary_with_url(summary, reply, payload))
 
     if _looks_like_ranking(reply):
         url = str(payload.get('reporte_url') or '').strip()
         if url and not _extract_reporte_url(reply):
             reply = (reply + '\n\n' + url).strip()
-        return _dedup_module_url(reply)
+        return _format_display_numbers(_dedup_module_url(reply))
 
     head = summary[:120]
     if head and reply and summary[:60].lower() in reply.lower():
         return reply
 
-    return (summary + ('\n\n' + reply if reply else '')).strip()
+    return _format_display_numbers((summary + ('\n\n' + reply if reply else '')).strip())
 
 
 def _last_tool_payload(messages: list):

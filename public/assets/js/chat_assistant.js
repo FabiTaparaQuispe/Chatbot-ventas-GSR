@@ -898,6 +898,11 @@
         return formatChatDisplayNumbers(text);
     }
 
+    /** Mismo criterio que formatChatDisplayNumbers, para celdas de tablas HTML del chat. */
+    function formatCellDisplayNumbers(text) {
+        return formatChatDisplayNumbers(text);
+    }
+
     function linkifyAssistant(text) {
         let t = normalizeTextForLinkify(text);
         t = unwrapBackticksAroundPhpUrls(t);
@@ -958,7 +963,10 @@
                 k = '—';
                 v = inner;
             }
-            rows.push({ k: _sanitizeCellDisplay(k), v: _sanitizeCellDisplay(v) });
+            rows.push({
+                k: _sanitizeCellDisplay(k),
+                v: formatCellDisplayNumbers(_sanitizeCellDisplay(v)),
+            });
         });
         if (rows.length < 2) return null;
         var h = '<div class="ventas-chat-inline-table-wrap"><table class="ventas-chat-simple-table"><thead><tr><th>Concepto</th><th>Detalle</th></tr></thead><tbody>';
@@ -1107,7 +1115,7 @@
 
         var name = _sanitizeCellDisplay(raw.slice(0, sep).replace(/\*\*/g, '').trim());
         var rest = raw.slice(sep + sepLen).trim();
-        var vals = _ctSplitVals(rest);
+        var vals = _ctSplitVals(rest).map(function (v) { return formatCellDisplayNumbers(v); });
         var nm = name.match(/^(.*?)\s*\(([^)]+)\)$/);
         if (nm) return { name: _sanitizeCellDisplay(nm[1].trim()), extra: _sanitizeCellDisplay(nm[2].trim()), vals: vals };
         return { name: name, extra: '', vals: vals };
@@ -1341,7 +1349,8 @@
         bodyRows.forEach(function (row) {
             tbody += '<tr>';
             for (let c = 0; c < headerCells.length; c++) {
-                tbody += '<td>' + escapeHtml(row[c] != null ? row[c] : '') + '</td>';
+                var cell = row[c] != null ? row[c] : '';
+                tbody += '<td>' + escapeHtml(formatCellDisplayNumbers(cell)) + '</td>';
             }
             tbody += '</tr>';
         });
