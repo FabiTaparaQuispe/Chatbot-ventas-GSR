@@ -55,7 +55,7 @@ def _report_shell_context(page_title: str) -> dict[str, Any]:
         'flash_ok': '',
         'flash_err': '',
         'csrf_token': '',
-        'chat_assistant_config': chat_assistant_config_dict(usuario or 'anon'),
+        'chat_assistant_config': chat_assistant_config_dict(usuario or 'anon', role),
     }
 
 

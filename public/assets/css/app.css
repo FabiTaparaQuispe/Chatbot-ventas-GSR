@@ -1744,6 +1744,8 @@ html[data-theme="dark"] .gestion-role-wrap--default {
     align-items: center;
     gap: 0.35rem;
 }
+.gestion-acciones-row .pw-toggle-wrap input[type="password"],
+.gestion-acciones-row .pw-toggle-wrap input[type="text"],
 .gestion-acciones-row input[type="password"],
 .gestion-acciones-row input[type="text"] {
     min-width: 8.5rem;
@@ -1754,6 +1756,12 @@ html[data-theme="dark"] .gestion-role-wrap--default {
     background: var(--input-bg, #f8fafc);
     font-size: 0.8125rem;
 }
+.gestion-acciones-row .pw-toggle-wrap {
+    min-width: 8.5rem;
+    max-width: 11.5rem;
+}
+html[data-theme="dark"] .gestion-acciones-row .pw-toggle-wrap input[type="password"],
+html[data-theme="dark"] .gestion-acciones-row .pw-toggle-wrap input[type="text"],
 html[data-theme="dark"] .gestion-acciones-row input[type="password"],
 html[data-theme="dark"] .gestion-acciones-row input[type="text"] {
     background: var(--input-bg);
@@ -1832,6 +1840,41 @@ html[data-theme="dark"] .gestion-user-card .gestion-card-actions {
 .gestion-user-card .gestion-reset-inline input[type="password"] {
     flex: 1;
     min-width: 0;
+}
+
+.gestion-mi-clave {
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border, #e4e4e7);
+}
+.gestion-mi-clave__title {
+    margin: 0 0 0.35rem;
+    font-size: 0.95rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+.gestion-mi-clave__hint {
+    margin: 0 0 0.75rem;
+    font-size: 0.82rem;
+    color: var(--text-muted, #6b7280);
+}
+.gestion-mi-clave__form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.65rem;
+}
+.gestion-mi-clave__pw {
+    min-width: 12rem;
+    max-width: 16rem;
+}
+.gestion-mi-clave__pw input {
+    min-width: 10rem;
+}
+.gestion-mi-clave:target {
+    scroll-margin-top: 1rem;
 }
 
 /* Encabezado azul como referencia (se aplica por id específico) */
@@ -2403,3 +2446,212 @@ html[data-theme="dark"] .ventas-chat-table-widget .data-table tbody tr:hover td 
     background: rgba(59,130,246,0.1);
 }
 
+/* ── Modal de usuario ─────────────────────────────────────────────────────── */
+.app-udialog-backdrop {
+    position: fixed;
+    inset: 0;
+    background: transparent;
+    z-index: 1100;
+}
+
+.app-udialog {
+    position: fixed;
+    z-index: 1101;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+    min-width: 18rem;
+    max-width: calc(100vw - 16px);
+    animation: appUdialogSlideIn 0.16s cubic-bezier(0.34, 1.4, 0.64, 1);
+    overflow: hidden;
+}
+
+@keyframes appUdialogSlideIn {
+    from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.app-udialog-head {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1.1rem 1rem 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.app-udialog-avatar {
+    flex-shrink: 0;
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+}
+
+.app-udialog-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.app-udialog-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.app-udialog-display {
+    font-size: 0.78rem;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.app-udialog-close {
+    flex-shrink: 0;
+    width: 1.85rem;
+    height: 1.85rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    transition: background 0.14s, color 0.14s;
+}
+.app-udialog-close:hover {
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.app-udialog-body {
+    padding: 0.5rem;
+}
+
+.app-udialog-action {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.6rem 0.75rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+    font-weight: 500;
+    font-family: inherit;
+    text-decoration: none;
+    transition: background 0.13s;
+    color: var(--text);
+}
+.app-udialog-action:hover {
+    background: var(--surface-2);
+}
+.app-udialog-action--danger {
+    color: #dc2626;
+}
+.app-udialog-action--danger:hover {
+    background: rgba(220, 38, 38, 0.08);
+}
+html[data-theme="dark"] .app-udialog-action--danger {
+    color: #f87171;
+}
+html[data-theme="dark"] .app-udialog-action--danger:hover {
+    background: rgba(248, 113, 113, 0.10);
+}
+
+.app-udialog-chev {
+    margin-left: auto;
+    font-size: 0.7rem;
+    color: var(--muted);
+    transition: transform 0.2s ease;
+}
+.app-udialog-chev--open { transform: rotate(180deg); }
+
+.app-udialog-separator {
+    height: 1px;
+    background: var(--border);
+    margin: 0.25rem 0.5rem;
+}
+
+.app-udialog-pw-panel { border-top: 1px solid var(--border); }
+
+.app-udialog-pw-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem 0.75rem 0.6rem;
+}
+
+.app-udialog-pw-wrap { width: 100%; }
+
+.app-udialog-pw-wrap input[type="password"],
+.app-udialog-pw-wrap input[type="text"] {
+    width: 100%;
+    font-size: 0.875rem;
+}
+
+.app-udialog-pw-actions { display: flex; justify-content: flex-end; }
+
+.app-udialog-pw-msg {
+    font-size: 0.8rem;
+    margin: 0;
+    padding: 0.3rem 0.5rem;
+    border-radius: var(--radius-sm);
+}
+.app-udialog-pw-msg--ok  { color: #16a34a; background: rgba(22,163,74,0.08); }
+.app-udialog-pw-msg--err { color: #dc2626; background: rgba(220,38,38,0.08); }
+html[data-theme="dark"] .app-udialog-pw-msg--ok  { color: #4ade80; background: rgba(74,222,128,0.10); }
+html[data-theme="dark"] .app-udialog-pw-msg--err { color: #f87171; background: rgba(248,113,113,0.10); }
+
+/* ── Botón atrás en el diálogo ──────────────────────────────────────────── */
+.app-udialog-back {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-radius: 6px;
+    color: var(--text, #111);
+    transition: background 0.15s;
+    flex-shrink: 0;
+}
+.app-udialog-back:hover { background: rgba(0,0,0,0.07); }
+html[data-theme="dark"] .app-udialog-back:hover { background: rgba(255,255,255,0.08); }
+
+/* ── Vista contraseña dentro del diálogo ────────────────────────────────── */
+.app-udialog-pw-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+.app-udialog-pw-hint {
+    font-size: 0.8rem;
+    color: var(--text-muted, #6b7280);
+    margin: 0;
+    line-height: 1.45;
+}
+.app-udialog-pw-body .pw-toggle-wrap input[type="password"],
+.app-udialog-pw-body .pw-toggle-wrap input[type="text"] {
+    max-width: none;
+    width: 100%;
+    box-sizing: border-box;
+}
+.app-udialog-pw-save {
+    width: 100%;
+    justify-content: center;
+}

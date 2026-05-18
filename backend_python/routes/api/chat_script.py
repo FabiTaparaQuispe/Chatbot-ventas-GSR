@@ -25,7 +25,8 @@ def _load_js() -> str:
 @bp.route("/modules/chat_assistant_script.php")
 def chat_script():
     user_key = str(session.get("usuario") or "anon")
-    cfg = chat_assistant_config_dict(user_key)
+    role = str(session.get("role") or "")
+    cfg = chat_assistant_config_dict(user_key, role)
     header = (
         "window.__VENTAS_CHAT = window.__VENTAS_CHAT || {};\n"
         f"Object.assign(window.__VENTAS_CHAT, {json.dumps(cfg, ensure_ascii=False)});\n"

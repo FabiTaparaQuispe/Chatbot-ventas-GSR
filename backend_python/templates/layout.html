@@ -91,9 +91,95 @@
 <script>
 window.__VENTAS_CHAT = window.__VENTAS_CHAT || {};
 Object.assign(window.__VENTAS_CHAT, {{ chat_assistant_config|tojson }});
+window.__VENTAS_CHAT.csrfToken = {{ csrf_token|tojson }};
 </script>
 <script src="/assets/js/chat_assistant.js" defer></script>
 <script src="/assets/js/report-table-ctrl.js" defer></script>
 {% block extra_scripts %}{% endblock %}
+
+<!-- Diálogo usuario -->
+<div class="app-udialog-backdrop" id="appUserDialogBackdrop" hidden aria-hidden="true"></div>
+<div class="app-udialog" id="appUserDialog" role="dialog" aria-modal="true" aria-labelledby="appUserDialogTitle" hidden>
+    <div class="app-udialog-head">
+        <button type="button" class="app-udialog-back" id="appUdialogBtnBack" hidden aria-label="Volver">
+            <i class="fas fa-arrow-left" aria-hidden="true"></i>
+        </button>
+        <div class="app-udialog-avatar" id="appUdialogAvatar"><i class="fas fa-user" aria-hidden="true"></i></div>
+        <div class="app-udialog-info">
+            <span class="app-udialog-name" id="appUserDialogTitle">{{ usuario|e }}</span>
+            {% if display_name and display_name != usuario %}
+            <span class="app-udialog-display">{{ display_name|e }}</span>
+            {% endif %}
+        </div>
+        <button type="button" class="app-udialog-close" id="appUserDialogClose" aria-label="Cerrar">
+            <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
+    </div>
+    <!-- Vista: opciones -->
+    <div class="app-udialog-body" id="appUdialogViewOptions">
+        <a href="/?page=gestion_usuarios#gestionCambiarClave" class="app-udialog-action" id="appUdialogBtnChangePw">
+            <i class="fas fa-key" aria-hidden="true"></i>
+            <span>Cambiar contraseña</span>
+            <i class="fas fa-chevron-right app-udialog-chev-right" aria-hidden="true"></i>
+        </a>
+        <div class="app-udialog-separator"></div>
+        <a href="/logout" class="app-udialog-action app-udialog-action--danger">
+            <i class="fas fa-sign-out-alt" aria-hidden="true"></i>
+            <span>Salir</span>
+        </a>
+    </div>
+</div>
+
+
+<script>
+(function () {
+    var menuBtn  = document.getElementById('appBtnUserMenu');
+    var dialog   = document.getElementById('appUserDialog');
+    var backdrop = document.getElementById('appUserDialogBackdrop');
+    var closeBtn = document.getElementById('appUserDialogClose');
+    var pwLink   = document.getElementById('appUdialogBtnChangePw');
+
+    if (!menuBtn || !dialog || !backdrop) return;
+
+    function positionDialog() {
+        var r = menuBtn.getBoundingClientRect();
+        dialog.style.top   = (r.bottom + 8) + 'px';
+        dialog.style.left  = r.left + 'px';
+        dialog.style.right = 'auto';
+        var dr = dialog.getBoundingClientRect();
+        if (dr.right > window.innerWidth - 8)
+            dialog.style.left = Math.max(8, window.innerWidth - dr.width - 8) + 'px';
+    }
+
+    function openDialog() {
+        backdrop.hidden = false;
+        backdrop.removeAttribute('aria-hidden');
+        dialog.hidden = false;
+        positionDialog();
+        if (closeBtn) closeBtn.focus();
+    }
+    function closeDialog() {
+        dialog.hidden = true;
+        backdrop.hidden = true;
+        backdrop.setAttribute('aria-hidden', 'true');
+    }
+
+    menuBtn.addEventListener('click', openDialog);
+    if (closeBtn) closeBtn.addEventListener('click', function () { closeDialog(); menuBtn.focus(); });
+    if (pwLink) pwLink.addEventListener('click', function () { closeDialog(); });
+    backdrop.addEventListener('click', function () { closeDialog(); menuBtn.focus(); });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !dialog.hidden) {
+            e.preventDefault();
+            closeDialog();
+            menuBtn.focus();
+        }
+    });
+    window.addEventListener('resize', function () {
+        if (!dialog.hidden) positionDialog();
+    });
+})();
+</script>
 </body>
 </html>

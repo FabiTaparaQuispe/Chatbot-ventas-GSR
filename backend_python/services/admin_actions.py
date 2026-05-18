@@ -175,3 +175,33 @@ def process_gestion_post(
                 raise RuntimeError("Acción no reconocida.")
     except Exception as e:
         flash["err"] = str(e)
+
+
+def process_gestion_self_post(
+    session: dict[str, Any],
+    form: dict[str, str],
+    my_username: str,
+    flash: dict[str, str],
+) -> None:
+    """Usuario no admin: solo puede cambiar su propia contraseña en gestión."""
+    if not check_csrf(session, form.get("csrf_token")):
+        flash["err"] = "Solicitud inválida (CSRF)."
+        return
+    accion = str(form.get("accion") or "")
+    if accion != "reset_password":
+        flash["err"] = "Acción no permitida."
+        return
+    password = str(form.get("new_password") or "")
+    if len(password) < 6:
+        flash["err"] = "La contraseña debe tener al menos 6 caracteres."
+        return
+    try:
+        conn = get_connection()
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE app_users SET password_hash = %s WHERE username = %s",
+                (hash_password(password), my_username),
+            )
+        flash["ok"] = "Contraseña actualizada correctamente."
+    except Exception as e:
+        flash["err"] = str(e)

@@ -3,9 +3,14 @@ from __future__ import annotations
 import secrets
 from typing import Any
 
-from flask import Blueprint, redirect, render_template, request, session, url_for
+from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
 
-from services.admin_actions import process_gestion_post, process_usuarios_post
+from services.admin_actions import (
+    process_gestion_post,
+    process_gestion_self_post,
+    process_usuarios_post,
+)
+from services.passwords import hash_password
 from services.db import get_connection
 from services.historial_data import (
     build_stats,
@@ -78,8 +83,11 @@ def index():
         flash: dict[str, str] = {}
         if page == "usuarios" and role == "admin":
             process_usuarios_post(session, dict(request.form), flash)
-        elif page == "gestion_usuarios" and role in ROLES_GESTION_USUARIOS:
-            process_gestion_post(session, dict(request.form), str(session.get("usuario") or ""), flash)
+        elif page == "gestion_usuarios":
+            if role in ROLES_GESTION_USUARIOS:
+                process_gestion_post(session, dict(request.form), str(session.get("usuario") or ""), flash)
+            else:
+                process_gestion_self_post(session, dict(request.form), str(session.get("usuario") or ""), flash)
         else:
             flash["err"] = "POST no permitido en esta página."
         if flash.get("ok"):
@@ -107,8 +115,7 @@ def index():
 
     if page == "usuarios" and role != "admin":
         return redirect(url_for("pages.index"))
-    if page == "gestion_usuarios" and role not in ROLES_GESTION_USUARIOS:
-        return redirect(url_for("pages.index"))
+    # gestion_usuarios es accesible a todos; admin/administrador ven todos, el resto solo su propio usuario
     if page == "historial_preguntas" and role not in ROLES_HISTORIAL:
         return redirect(url_for("pages.index"))
     if page in ("ventas", "ventasgeneral2") and role not in ROLES_VENTAS_GENERAL:
@@ -118,7 +125,7 @@ def index():
         "chatbot": "Chatbot",
         "historial_preguntas": "Preguntas al chatbot",
         "usuarios": "Usuarios",
-        "gestion_usuarios": "Creación de usuarios",
+        "gestion_usuarios": "Administración de usuario",
         "ventasgeneral2": "Ventas general 2",
     }
     page_title = page_titles.get(page, "Ventas general")
@@ -242,25 +249,61 @@ def index():
         ctx["normalize_user_role"] = normalize_user_role
     elif page == "gestion_usuarios":
         conn = get_connection()
+        gestion_es_admin = role in ROLES_GESTION_USUARIOS
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id, username, display_name, role, is_active, last_login_at, created_at "
-                "FROM app_users WHERE role IN ('administrador','estrategico','tactico','operativo') "
-                "ORDER BY created_at DESC, id DESC"
-            )
+            if gestion_es_admin:
+                cur.execute(
+                    "SELECT id, username, display_name, role, is_active, last_login_at, created_at "
+                    "FROM app_users WHERE role IN ('administrador','estrategico','tactico','operativo') "
+                    "ORDER BY created_at DESC, id DESC"
+                )
+            else:
+                cur.execute(
+                    "SELECT id, username, display_name, role, is_active, last_login_at, created_at "
+                    "FROM app_users WHERE username = %s",
+                    (usuario,),
+                )
             users = cur.fetchall() or []
         ctx["users"] = [dict(u) for u in users]
-        ctx["roles_crear"] = {
-            "estrategico": "Estratégico",
-            "tactico": "Táctico",
-            "operativo": "Operativo",
-        }
-        ctx["roles_gestion"] = {
-            "administrador": "Administrador",
-            "estrategico": "Estratégico",
-            "tactico": "Táctico",
-            "operativo": "Operativo",
-        }
+        ctx["gestion_es_admin"] = gestion_es_admin
+        if gestion_es_admin:
+            ctx["roles_crear"] = {
+                "estrategico": "Estratégico",
+                "tactico": "Táctico",
+                "operativo": "Operativo",
+            }
+            ctx["roles_gestion"] = {
+                "administrador": "Administrador",
+                "estrategico": "Estratégico",
+                "tactico": "Táctico",
+                "operativo": "Operativo",
+            }
         ctx["normalize_user_role"] = normalize_user_role
 
     return render_template(tpl, **ctx)
+
+
+@bp.route("/api/change_password", methods=["POST"])
+@require_login
+def change_password():
+    data = request.get_json(silent=True) or {}
+    csrf = str(data.get("csrf_token") or "")
+    if not csrf or csrf != session.get("csrf_token"):
+        return jsonify({"ok": False, "error": "Solicitud inválida (CSRF)."}), 403
+    new_pw = str(data.get("new_password") or "").strip()
+    if len(new_pw) < 6:
+        return jsonify({"ok": False, "error": "La contraseña debe tener al menos 6 caracteres."}), 400
+    username = str(session.get("usuario") or "")
+    if not username:
+        return jsonify({"ok": False, "error": "Sesión inválida."}), 401
+    try:
+        conn = get_connection()
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE app_users SET password_hash = %s WHERE username = %s",
+                (hash_password(new_pw), username),
+            )
+        conn.commit()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    return jsonify({"ok": True})
