@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import date
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -25,13 +26,23 @@ from urllib.request import Request, urlopen
 from openai import OpenAI
 
 from services.llm_provider import resolve_llm_provider
-from services.tools_definitions import ventas_tool_definitions
+from services.tools_definitions import chat_history_tool_definitions, ventas_tool_definitions
+
+
+def _all_tool_definitions() -> list:
+    return ventas_tool_definitions() + chat_history_tool_definitions()
 
 ROUTER_PROMPT_PATH = Path(__file__).resolve().parent.parent / 'prompts' / 'router_system_prompt.md'
 
 VALID_ROUTES = ('tool_call', 'sql_generation', 'ask_user', 'propose_new_tool')
 
-SCHEMA_TEXT = """Tabla: ventasgeneral2 (ETL desnormalizada de ventas, lista para consultar sin JOINs)
+def _build_schema_text() -> str:
+    today = date.today()
+    current_year = today.year
+    current_date = today.isoformat()
+    return f"""Tabla: ventasgeneral2 (ETL desnormalizada de ventas, lista para consultar sin JOINs)
+
+FECHA ACTUAL: {current_date}. AÑO EN CURSO: {current_year}.
 
 COLUMNAS PRINCIPALES:
 - id (INT, PRIMARY KEY)
@@ -66,11 +77,17 @@ PAGINACION (route=tool_call o sql_generation):
 
 REGLAS DE NEGOCIO:
 1. Fechas: SIEMPRE BETWEEN 'YYYY-MM-DD' AND 'YYYY-MM-DD'. Considera bisiestos.
-2. Valor: SUM(Valor) puede ser negativo si hay NC (CodigoDocumento='07').
-3. DescripcionZonaPrecio: usa LIKE 'PREFIJO%' (ej. 'LAJOYA%').
-4. Provincia: usar igualdad (Provincia = 'VALOR') con valor exacto cuando se conozca.
-5. LineaComercial: comparacion case-insensitive contra los valores reales listados.
-6. Tabla desnormalizada: NO uses JOINs.
+2. AÑO POR DEFECTO: Si el usuario NO especifica el año, usa {current_year} (año en curso).
+   Ejemplos: "abril" → '{{current_year}}-04-01' / '{{current_year}}-04-30';
+             "enero" → '{current_year}-01-01' / '{current_year}-01-31'.
+   NUNCA pidas el año si el usuario solo menciona un mes o un día.
+3. DIA UNICO: Si el usuario da solo un día (ej. "el 01 de enero 2026", "hoy"),
+   usa ESE DIA como fecha_desde Y fecha_hasta (mismo valor en ambos campos).
+4. Valor: SUM(Valor) puede ser negativo si hay NC (CodigoDocumento='07').
+5. DescripcionZonaPrecio: usa LIKE 'PREFIJO%' (ej. 'LAJOYA%').
+6. Provincia: usar igualdad (Provincia = 'VALOR') con valor exacto cuando se conozca.
+7. LineaComercial: comparacion case-insensitive contra los valores reales listados.
+8. Tabla desnormalizada: NO uses JOINs.
 """
 
 
@@ -85,11 +102,11 @@ def load_router_prompt(tools: list[dict[str, Any]] | None = None) -> str:
     parameters), que es lo que el modelo necesita para enrutar.
     """
     if tools is None:
-        tools = ventas_tool_definitions()
+        tools = _all_tool_definitions()
     template = ROUTER_PROMPT_PATH.read_text(encoding='utf-8')
     fn_blocks = [t.get('function') for t in tools if isinstance(t, dict) and 'function' in t]
     tools_json = json.dumps(fn_blocks, ensure_ascii=False, indent=2)
-    return template.replace('{SCHEMA}', SCHEMA_TEXT).replace('{TOOLS_DEFINITIONS}', tools_json)
+    return template.replace('{SCHEMA}', _build_schema_text()).replace('{TOOLS_DEFINITIONS}', tools_json)
 
 
 def _post_gemini_json(api_key: str, model: str, system: str, user_msg: str,
@@ -169,7 +186,7 @@ def _validate_decision(decision: Any) -> dict[str, Any]:
             raise RouterError('tool_call: tool_name vacío o inválido.')
         if not isinstance(tool_args, dict):
             raise RouterError('tool_call: tool_args debe ser objeto.')
-        valid_names = {t['function']['name'] for t in ventas_tool_definitions()
+        valid_names = {t['function']['name'] for t in _all_tool_definitions()
                        if isinstance(t, dict) and isinstance(t.get('function'), dict)}
         if tool_name not in valid_names:
             raise RouterError(f'tool_call: tool_name no existe en catálogo ({tool_name!r}).')

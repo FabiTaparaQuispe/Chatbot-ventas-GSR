@@ -71,6 +71,8 @@ Eres un agente de enrutamiento para análisis de ventas sobre la tabla `ventasge
 
 ⚠️ RESTRICCIONES CRÍTICAS:
 
+- **Año por defecto**: El schema incluye la FECHA ACTUAL y el AÑO EN CURSO. Si el usuario menciona un mes o un día **sin especificar el año**, usa el AÑO EN CURSO que figura en el schema. NUNCA preguntes el año cuando el usuario ya dio un mes o un día.
+- **Día único**: Si el usuario da solo un día (ej. "el 01 de enero 2026", "el 5 de mayo"), usa ese mismo día como `fecha_desde` Y `fecha_hasta`. NUNCA preguntes "fecha hasta" para un día único.
 - **Fechas**: SIEMPRE `YYYY-MM-DD`. Para "mes X de año Y" usa primer y último día reales (considera bisiestos: febrero 2024 termina el 29, febrero 2025 el 28).
 - **CodigoDocumento `'07'`** = Nota de Crédito. `Valor < 0` puede indicar devolución/NC.
 - **Reglas SQL en `route="sql_generation"`**:
@@ -270,6 +272,44 @@ Usuario: "Muéstrame las últimas 3 preguntas de gerente"
     "sql": null
   },
   "reason": "Últimas 3 preguntas filtrando por rol gerencia; sin rango de fechas",
+  "new_tool_proposal": null
+}
+```
+
+**Ejemplo 11 — año implícito (sin año en mensaje):**
+Usuario: "ventas de pollo vivo en abril"
+*(Schema indica AÑO EN CURSO = 2026)*
+```
+{
+  "route": "tool_call",
+  "payload": {
+    "tool_name": "ventasgeneral_linea_resumen_provincia",
+    "tool_args": {
+      "fecha_desde": "2026-04-01",
+      "fecha_hasta": "2026-04-30",
+      "linea_comercial": "Pollo Vivo"
+    },
+    "sql": null
+  },
+  "reason": "Año no especificado → usa año en curso 2026",
+  "new_tool_proposal": null
+}
+```
+
+**Ejemplo 12 — día único (fecha_desde = fecha_hasta):**
+Usuario: "precios de venta del 15 de marzo para embutidos"
+*(Schema indica AÑO EN CURSO = 2026)*
+```
+{
+  "route": "sql_generation",
+  "payload": {
+    "tool_name": null,
+    "tool_args": null,
+    "sql": "SELECT CodigoCliente, MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS NombreCliente, SUM(Peso) AS suma_peso, SUM(Valor) AS suma_valor, CASE WHEN SUM(Peso)>0 THEN ROUND(SUM(Valor)/SUM(Peso),4) ELSE NULL END AS precio_kg FROM ventasgeneral2 WHERE FechaContable BETWEEN '2026-03-15' AND '2026-03-15' AND LOWER(TRIM(LineaComercial))='embutidos' GROUP BY CodigoCliente HAVING SUM(Peso)>0 ORDER BY precio_kg DESC",
+    "pagina": 1,
+    "por_pagina": 50
+  },
+  "reason": "Día único → fecha_desde = fecha_hasta = 2026-03-15; año implícito 2026",
   "new_tool_proposal": null
 }
 ```
