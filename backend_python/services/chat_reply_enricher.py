@@ -132,6 +132,12 @@ def _dedup_module_url(text: str) -> str:
     return '\n'.join(out)
 
 
+def _append_url(text: str, url: str) -> str:
+    if url and not _extract_reporte_url(text):
+        return (text + '\n\n' + url).strip()
+    return text
+
+
 def enrich_reply(reply: str, groq_messages: list) -> str:
     reply = _format_display_numbers(_sanitize_urls(reply.strip()))
     payload = _last_tool_payload(groq_messages)
@@ -145,23 +151,23 @@ def enrich_reply(reply: str, groq_messages: list) -> str:
         return reply
 
     summary = _format_payload(payload)
+    report_url = str(payload.get('reporte_url') or '').strip()
+
     if not summary:
-        return reply
+        return _format_display_numbers(_append_url(reply, report_url))
 
     if _uses_generic_labels(reply):
         return _format_display_numbers(_summary_with_url(summary, reply, payload))
 
     if _looks_like_ranking(reply):
-        url = str(payload.get('reporte_url') or '').strip()
-        if url and not _extract_reporte_url(reply):
-            reply = (reply + '\n\n' + url).strip()
-        return _format_display_numbers(_dedup_module_url(reply))
+        return _format_display_numbers(_dedup_module_url(_append_url(reply, report_url)))
 
     head = summary[:120]
     if head and reply and summary[:60].lower() in reply.lower():
-        return reply
+        return _format_display_numbers(_append_url(reply, report_url))
 
-    return _format_display_numbers((summary + ('\n\n' + reply if reply else '')).strip())
+    result = _format_display_numbers((summary + ('\n\n' + reply if reply else '')).strip())
+    return _append_url(result, report_url)
 
 
 def _last_tool_payload(messages: list):
