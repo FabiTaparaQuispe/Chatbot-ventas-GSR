@@ -244,8 +244,17 @@ def chat_history_tool_definitions():
     user_opt = {
         'type': 'string',
         'description': (
-            'Username exacto del usuario del chatbot (ej. admin, gerente, usuario2). '
+            'Username exacto del usuario del chatbot (ej. admin, fabiola.tapara). '
             'Omitir para agregar todos los usuarios.'
+        ),
+    }
+    role_opt = {
+        'type': 'string',
+        'description': (
+            'Rol del usuario a filtrar. Valores posibles: admin, gerencia, administrador, '
+            'estrategico, tactico, operativo, analista, lector. '
+            'Usar cuando el usuario mencione el cargo/rol en vez del nombre de login '
+            '(ej. "gerente" → role="gerencia", "operativo", "analista").'
         ),
     }
     texto = {
@@ -290,11 +299,16 @@ def chat_history_tool_definitions():
         }},
         {'type': 'function', 'function': {
             'name': 'chat_listar_preguntas',
-            'description': 'Lista las preguntas del chatbot del período paginadas (message_id, username, content, created_at).',
+            'description': (
+                'Lista las preguntas del chatbot paginadas (message_id, username, content, created_at). '
+                'Si el usuario menciona "últimas N preguntas" sin dar fechas, omitir fecha_desde/fecha_hasta '
+                'y usar por_pagina=N. Filtrar por username (login) o role (cargo/rol).'
+            ),
             'parameters': {'type': 'object', 'properties': {
-                'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'username': user_opt,
+                'fecha_desde': d_opt, 'fecha_hasta': d_opt,
+                'username': user_opt, 'role': role_opt,
                 'pagina': pagina, 'por_pagina': por_pagina,
-            }, 'required': ['fecha_desde', 'fecha_hasta']},
+            }, 'required': []},
         }},
         {'type': 'function', 'function': {
             'name': 'chat_buscar_pregunta',

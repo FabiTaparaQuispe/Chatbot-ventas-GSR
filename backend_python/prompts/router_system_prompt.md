@@ -205,4 +205,73 @@ Usuario: "¿Qué clientes nuevos aparecen este mes que no estaban el mes pasado?
 }
 ```
 
+**Ejemplo 7 — top clientes por provincia con cantidad, peso y valor (sql_generation):**
+Usuario: "cuales son los 10 clientes que han tenido mas venta por provincia y cliente en el mes de abril y mostrar en valor y peso"
+```
+{
+  "route": "sql_generation",
+  "payload": {
+    "tool_name": null,
+    "tool_args": null,
+    "sql": "SELECT COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia, CodigoCliente, MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS NombreCliente, SUM(Cantidad) AS suma_cantidad, SUM(Peso) AS suma_peso, SUM(Valor) AS suma_valor FROM ventasgeneral2 WHERE FechaContable BETWEEN '2026-04-01' AND '2026-04-30' GROUP BY provincia, CodigoCliente ORDER BY suma_valor DESC",
+    "pagina": 1,
+    "por_pagina": 10
+  },
+  "reason": "Top por provincia+cliente; ninguna tool cubre ese agrupamiento sin linea_comercial",
+  "new_tool_proposal": null
+}
+```
+
+**Ejemplo 8 — top clientes de una provincia específica (sql_generation):**
+Usuario: "cuales son los 10 clientes con mas venta en la provincia de arequipa en abril"
+```
+{
+  "route": "sql_generation",
+  "payload": {
+    "tool_name": null,
+    "tool_args": null,
+    "sql": "SELECT CodigoCliente, MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS NombreCliente, SUM(Cantidad) AS suma_cantidad, SUM(Peso) AS suma_peso, SUM(Valor) AS suma_valor FROM ventasgeneral2 WHERE FechaContable BETWEEN '2026-04-01' AND '2026-04-30' AND Provincia = 'AREQUIPA' GROUP BY CodigoCliente ORDER BY suma_valor DESC",
+    "pagina": 1,
+    "por_pagina": 10
+  },
+  "reason": "Filtro por Provincia exacta; ninguna tool de top_clientes acepta filtro de provincia",
+  "new_tool_proposal": null
+}
+```
+
+**Ejemplo 9 — precios más altos por cliente en un día (sql_generation):**
+Usuario: "Cuáles son los precios de venta más altos del 01 de enero 2026 para Pollo Vivo"
+```
+{
+  "route": "sql_generation",
+  "payload": {
+    "tool_name": null,
+    "tool_args": null,
+    "sql": "SELECT CodigoCliente, MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS NombreCliente, COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia, SUM(Peso) AS suma_peso, SUM(Valor) AS suma_valor, CASE WHEN SUM(Peso)>0 THEN ROUND(SUM(Valor)/SUM(Peso),4) ELSE NULL END AS precio_kg FROM ventasgeneral2 WHERE FechaContable BETWEEN '2026-01-01' AND '2026-01-01' AND LOWER(TRIM(LineaComercial))='pollo vivo' GROUP BY CodigoCliente, Provincia HAVING SUM(Peso)>0 ORDER BY precio_kg DESC",
+    "pagina": 1,
+    "por_pagina": 20
+  },
+  "reason": "Ranking por precio_kg DESC no cubierto por tools existentes",
+  "new_tool_proposal": null
+}
+```
+
+**Ejemplo 10 — últimas N preguntas de usuario con rol (tool_call sin fechas):**
+Usuario: "Muéstrame las últimas 3 preguntas de gerente"
+```
+{
+  "route": "tool_call",
+  "payload": {
+    "tool_name": "chat_listar_preguntas",
+    "tool_args": {
+      "role": "gerencia",
+      "por_pagina": 3
+    },
+    "sql": null
+  },
+  "reason": "Últimas 3 preguntas filtrando por rol gerencia; sin rango de fechas",
+  "new_tool_proposal": null
+}
+```
+
 🚨 RECORDATORIO FINAL: Responde **únicamente con el objeto JSON**, sin texto explicativo, sin Markdown, sin comentarios. Tu salida debe ser parseable directamente con `JSON.parse()`.

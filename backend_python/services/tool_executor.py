@@ -649,7 +649,10 @@ class ToolExecutor:
         por_pagina = _parse_por_pagina(args)
         sql = ("SELECT CodigoCliente AS cod_cliente,"
                " MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
-               " COUNT(*) AS lineas, COALESCE(SUM(Valor),0) AS suma_valor"
+               " COUNT(*) AS lineas,"
+               " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
+               " COALESCE(SUM(Peso),0) AS suma_peso,"
+               " COALESCE(SUM(Valor),0) AS suma_valor"
                " FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
                f" GROUP BY CodigoCliente ORDER BY suma_valor DESC LIMIT {top}")
         params = {'d1': d1, 'd2': d2}
@@ -668,6 +671,8 @@ class ToolExecutor:
                 'cod_cliente': str(r.get('cod_cliente') or ''),
                 'nombre_cliente': str(r.get('nombre_cliente') or ''),
                 'lineas': int(r.get('lineas') or 0),
+                'suma_cantidad': float(r.get('suma_cantidad') or 0),
+                'suma_peso': float(r.get('suma_peso') or 0),
                 'suma_valor': sv,
                 'pct_del_total': round(pct, 2),
                 'pct_acumulado': round(cum, 2),
@@ -1389,11 +1394,15 @@ class ToolExecutor:
         }
 
     def _chat_listar_preguntas(self, args):
-        where, params, d1, d2 = self._chat_periodo_where(args, required=True)
+        where, params, d1, d2 = self._chat_periodo_where(args, required=False)
         username = str(args.get('username') or '').strip()
+        role = str(args.get('role') or '').strip().lower()
         pagina = _parse_pagina(args)
         por_pagina = _parse_por_pagina(args)
         offset = _pagination_offset(pagina, por_pagina)
+
+        # JOIN con app_users solo si se filtra por rol
+        join_users = ' INNER JOIN app_users u ON u.username = t.username' if role else ''
 
         base_where = " m.role = 'user'"
         for w in where:
@@ -1401,13 +1410,17 @@ class ToolExecutor:
         if username:
             base_where += ' AND t.username = %(username)s'
             params['username'] = username
+        if role:
+            base_where += ' AND LOWER(TRIM(u.role)) = %(role)s'
+            params['role'] = role
 
-        sql_count = (
-            'SELECT COUNT(*) AS total'
+        from_clause = (
             ' FROM app_chat_messages m'
             ' INNER JOIN app_chat_threads t ON t.id = m.thread_id'
-            ' WHERE ' + base_where
+            + join_users
         )
+
+        sql_count = 'SELECT COUNT(*) AS total' + from_clause + ' WHERE ' + base_where
         total = _count_query(self._conn, sql_count, params)
 
         sql = (
@@ -1417,10 +1430,9 @@ class ToolExecutor:
             ' t.id AS thread_id,'
             ' m.content,'
             ' m.created_at'
-            ' FROM app_chat_messages m'
-            ' INNER JOIN app_chat_threads t ON t.id = m.thread_id'
-            ' WHERE ' + base_where +
-            f' ORDER BY m.created_at DESC, m.id DESC LIMIT {int(por_pagina)} OFFSET {int(offset)}'
+            + from_clause
+            + ' WHERE ' + base_where
+            + f' ORDER BY m.created_at DESC, m.id DESC LIMIT {int(por_pagina)} OFFSET {int(offset)}'
         )
         rows = _q(self._conn, sql, params)
         filas = [{
@@ -1435,7 +1447,7 @@ class ToolExecutor:
             'tabla': 'app_chat_messages',
             'tipo': 'chat_listar_preguntas',
             'periodo': {'desde': d1, 'hasta': d2},
-            'filtro': {'username': username or '(todos)'},
+            'filtro': {'username': username or '(todos)', 'role': role or '(todos)'},
             'filas': filas,
             'paginacion': _pagination_meta(total, pagina, por_pagina),
             '_sql_traces': [{'sql': sql, 'params': params}],
