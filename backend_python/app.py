@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from flask import Flask, send_from_directory, request, jsonify, g
 from dotenv import load_dotenv
 
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'), override=True)
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'), override=False)
 
 PUBLIC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'public'))
 

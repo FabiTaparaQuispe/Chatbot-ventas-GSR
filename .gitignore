@@ -1,3 +1,6 @@
 api/config.php
 .env
 *.log
+backend_python/venv/
+backend_python/__pycache__/
+docker/init/*.sql

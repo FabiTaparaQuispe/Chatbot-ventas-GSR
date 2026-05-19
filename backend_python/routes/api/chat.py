@@ -17,7 +17,7 @@ from services.fast_format import try_fast_format
 bp = Blueprint('api_chat', __name__)
 _log = logging.getLogger(__name__)
 
-SYSTEM_TEMPLATE = """Asistente ventasgeneral2 (MySQL {db_label}). Solo tabla ventasgeneral2. Fechas YYYY-MM-DD; "marzo 2026"→2026-03-01..2026-03-31; "enero 2026 a febrero 2026"→fecha_desde=2026-01-01,fecha_hasta=2026-02-28 (último día del mes destino); "Q1 2026"→2026-01-01..2026-03-31.
+SYSTEM_TEMPLATE = """Asistente ventasgeneral2 (MySQL {db_label}). Solo tabla ventasgeneral2. Fechas YYYY-MM-DD; "marzo 2026"→2026-03-01..2026-03-31; "enero 2026 a febrero 2026"→fecha_desde=2026-01-01,fecha_hasta=2026-02-28 (último día del mes destino); "Q1 2026"→2026-01-01..2026-03-31. AÑO POR DEFECTO: si el usuario menciona un mes o un día sin especificar el año, usa 2026 — NUNCA preguntes el año. DÍA ÚNICO: si el usuario da solo un día (ej. "el 01 de enero 2026", "el 5 de mayo"), usa ese mismo día como fecha_desde Y fecha_hasta — NUNCA preguntes "fecha fin" para un día único.
 
 PARÁMETROS OBLIGATORIOS: si faltan fecha_desde/hasta o línea comercial que el usuario no dio explícitamente, pregúntaselos antes de llamar la herramienta; nunca inventes valores por defecto. zona/mercado/prefijo_descri_zona_precio son SIEMPRE opcionales — si el usuario no los menciona, no los pidas. Sin campo ciudad: usa prefijo_descri_zona_precio (AQP, TACNA, MOQUEGUA, LAJOYA…) solo cuando el usuario especificó una zona. Si dice "por zona" sin especificar cuál, usa ventasgeneral_top_clientes_globales. TDoc NC=07. Filtros extra en buscar/resumen: provincia y tipo_documento.
 
