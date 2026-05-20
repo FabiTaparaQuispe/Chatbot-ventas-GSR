@@ -2171,21 +2171,27 @@
 
     let sendInFlight = false;
     let _abortCtrl = null;
-    const stopBtn = document.getElementById('ventasChatStop');
 
+    function _getStopBtn() {
+        return document.getElementById('ventasChatStop');
+    }
     function _showStopBtn() {
-        if (stopBtn) stopBtn.hidden = false;
+        const btn = _getStopBtn();
+        if (btn) { btn.hidden = false; btn.disabled = false; }
         if (send) send.hidden = true;
     }
     function _hideStopBtn() {
-        if (stopBtn) stopBtn.hidden = true;
+        const btn = _getStopBtn();
+        if (btn) btn.hidden = true;
         if (send) send.hidden = false;
     }
-    if (stopBtn) {
-        stopBtn.addEventListener('click', function () {
+    document.addEventListener('click', function (e) {
+        if (e.target && e.target.id === 'ventasChatStop') {
+            const btn = e.target;
+            btn.disabled = true;
             if (_abortCtrl) _abortCtrl.abort();
-        });
-    }
+        }
+    }, true);
 
     async function sendMessage() {
         if (!input || !send) return;
