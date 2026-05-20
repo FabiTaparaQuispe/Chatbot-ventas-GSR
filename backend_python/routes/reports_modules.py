@@ -2462,6 +2462,98 @@ def ventas_barras_corporativo():
     return render_template('pages/reporte_barras_corporativo.html', **ctx)
 
 
+@bp.route('/modules/reports/ventas-resumen-por-linea')
+@require_login
+def ventas_resumen_por_linea():
+    from services.db import get_connection
+
+    d1 = _parse_date_string(request.args.get('desde') or request.args.get('fecha_desde'))
+    d2 = _parse_date_string(request.args.get('hasta') or request.args.get('fecha_hasta'))
+    if not d1 or not d2 or d1 > d2:
+        return _bad('Parámetros requeridos: desde y hasta (YYYY-MM-DD).')
+
+    provincia = (request.args.get('provincia') or '').strip()
+    prefijo   = (request.args.get('prefijo') or '').strip().upper()
+    lineas_raw = (request.args.get('lineas') or '').strip()
+    lineas_list = [l.strip() for l in lineas_raw.split(',') if l.strip()] if lineas_raw else []
+
+    where = ' WHERE FechaContable BETWEEN :d1 AND :d2'
+    bind: dict = {'d1': d1, 'd2': d2}
+
+    if provincia:
+        where += ' AND Provincia LIKE :prov'
+        bind['prov'] = f'%{provincia}%'
+    if prefijo:
+        where += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzo"
+        bind['prefzo'] = prefijo + '%'
+    if lineas_list:
+        keys = [f'lin{i}' for i in range(len(lineas_list))]
+        where += ' AND LineaComercial IN (' + ','.join(f':{k}' for k in keys) + ')'
+        bind.update(zip(keys, lineas_list))
+
+    sql = (
+        "SELECT COALESCE(NULLIF(TRIM(LineaComercial),''),'(sin línea)') AS linea_comercial,"
+        " COUNT(*) AS lineas,"
+        " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
+        " COALESCE(SUM(Peso),0) AS suma_peso,"
+        " COALESCE(SUM(Valor),0) AS suma_valor"
+        " FROM ventasgeneral2" + where +
+        " GROUP BY COALESCE(NULLIF(TRIM(LineaComercial),''),'(sin línea)')"
+        " ORDER BY suma_valor DESC"
+    )
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql), bind)
+        raw = cur.fetchall() or []
+
+    total = sum(float(r.get('suma_valor') or 0) for r in raw)
+    cum = 0.0
+    filas = []
+    chart_labels: list = []
+    chart_valores: list = []
+    chart_pct_acum: list = []
+    for i, r in enumerate(raw, 1):
+        sv   = float(r.get('suma_valor') or 0)
+        sp   = float(r.get('suma_peso') or 0)
+        sc   = float(r.get('suma_cantidad') or 0)
+        pct  = sv / total * 100 if total else 0.0
+        cum += pct
+        lbl  = str(r.get('linea_comercial') or '')
+        chart_labels.append(lbl[:30])
+        chart_valores.append(round(sv, 2))
+        chart_pct_acum.append(round(cum, 1))
+        filas.append({
+            'rank': i,
+            'linea_comercial': lbl,
+            'lineas': int(r.get('lineas') or 0),
+            'suma_cantidad': f'{sc:,.2f}',
+            'suma_peso': f'{sp:,.2f}',
+            'suma_valor': f'{sv:,.2f}',
+            'pct_del_total': f'{pct:.1f}',
+            'pct_acumulado': f'{cum:.1f}',
+        })
+
+    titulo = 'Ventas por línea comercial'
+    if lineas_list:
+        titulo += f' — {", ".join(lineas_list)}'
+    if provincia:
+        titulo += f' · {provincia}'
+
+    ctx = _report_shell_context(titulo)
+    ctx.update({
+        'd1': d1, 'd2': d2,
+        'titulo': titulo,
+        'provincia': provincia,
+        'prefijo': prefijo,
+        'lineas_raw': lineas_raw,
+        'filas': filas,
+        'total_valor': f'{total:,.2f}',
+        'pdf_filename': f'resumen_lineas_{d1}_{d2}.pdf',
+        'chart_data': {'labels': chart_labels, 'valores': chart_valores, 'pct_acum': chart_pct_acum},
+    })
+    return render_template('pages/reporte_resumen_por_linea.html', **ctx)
+
+
 @bp.route('/modules/reports/<slug>')
 @require_login
 def report_placeholder(slug: str):

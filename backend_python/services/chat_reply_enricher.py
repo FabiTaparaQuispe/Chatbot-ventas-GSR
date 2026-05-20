@@ -62,6 +62,17 @@ def _sanitize_urls(text: str) -> str:
     return text
 
 
+def _clean_table_asterisks(text: str) -> str:
+    """Elimina marcadores ** sueltos dentro de celdas de tabla markdown."""
+    # | ** | → quitar fila completa si la celda de concepto y detalle son vacías/asteriscos
+    text = re.sub(r'\n?\|[^|\n]*\|\s*\*\*\s*\|\s*\n', '\n', text)
+    # **texto** dentro de celda → texto (sin negrita)
+    text = re.sub(r'\*\*([^*\n|]+)\*\*', r'\1', text)
+    # asteriscos sueltos restantes en celdas
+    text = re.sub(r'(?<=\|)\s*\*+\s*(?=\|)', ' ', text)
+    return text
+
+
 def _format_display_numbers(text: str) -> str:
     """Aplica separador de miles a unidades, kg, líneas y montos S/ en texto libre."""
     if not text:
@@ -139,7 +150,7 @@ def _append_url(text: str, url: str) -> str:
 
 
 def enrich_reply(reply: str, groq_messages: list) -> str:
-    reply = _format_display_numbers(_sanitize_urls(reply.strip()))
+    reply = _format_display_numbers(_clean_table_asterisks(_sanitize_urls(reply.strip())))
     payload = _last_tool_payload(groq_messages)
     if payload is None:
         if _uses_generic_labels(reply):

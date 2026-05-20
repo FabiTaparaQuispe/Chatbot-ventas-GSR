@@ -11,6 +11,7 @@ from services.urlmap import (
     REPORT_SLUG_VENTAS_LINEA_PRECIO_RESUMEN_PROV,
     REPORT_SLUG_VENTAS_LINEA_RESUMEN_PROVINCIA,
     REPORT_SLUG_VENTAS_MIX_TDOC,
+    REPORT_SLUG_VENTAS_RESUMEN_POR_LINEA,
     REPORT_SLUG_VENTAS_SERIE_MENSUAL,
     REPORT_SLUG_VENTAS_TOP_CLIENTES_GLOBAL,
     REPORT_SLUG_VENTAS_TOP_CLIENTES_NC,
@@ -208,6 +209,29 @@ def ventas_tool_definitions():
                 'linea_comercial': {'type': 'string', 'description': "Texto de LineaComercial, ej. 'Pollo Vivo'"},
                 'mercado': pref,
             }, 'required': ['fecha_desde', 'fecha_hasta', 'linea_comercial']},
+        }},
+        {'type': 'function', 'function': {
+            'name': 'ventasgeneral_resumen_por_linea',
+            'description': (
+                f'Totales por LineaComercial: SUM(Cantidad), SUM(Peso), SUM(Valor) y % del total. '
+                f'Usar para "ventas de todas las líneas", "resumen por línea", "cuánto vendió cada línea", '
+                f'"línea de pollo" (pasar lineas_comerciales con las líneas del grupo). '
+                f'Filtros opcionales: provincia, prefijo_descri_zona_precio, lineas_comerciales. '
+                f'reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_RESUMEN_POR_LINEA}?…'
+            ),
+            'parameters': {'type': 'object', 'properties': {
+                'fecha_desde': d_opt, 'fecha_hasta': d_opt,
+                'provincia': prov,
+                'prefijo_descri_zona_precio': pref,
+                'lineas_comerciales': {
+                    'type': 'string',
+                    'description': (
+                        'Líneas a incluir separadas por coma. Dejar vacío para todas. '
+                        'Ej: "Pollo Vivo,Pollo Beneficiado,Pollo Trozado Seco,Menudencia"'
+                    ),
+                },
+                'pagina': pagina, 'por_pagina': por_pagina,
+            }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_catalogo',

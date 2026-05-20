@@ -16,6 +16,7 @@ from services.urlmap import (
     REPORT_SLUG_VENTAS_LINEA_PRECIO_RESUMEN_PROV,
     REPORT_SLUG_VENTAS_LINEA_RESUMEN_PROVINCIA,
     REPORT_SLUG_VENTAS_MIX_TDOC,
+    REPORT_SLUG_VENTAS_RESUMEN_POR_LINEA,
     REPORT_SLUG_VENTAS_SERIE_MENSUAL,
     REPORT_SLUG_VENTAS_TOP_CLIENTES_GLOBAL,
     REPORT_SLUG_VENTAS_TOP_CLIENTES_NC,
@@ -243,6 +244,7 @@ class ToolExecutor:
                 'ventasgeneral_linea_precio_diario': self._linea_precio_diario,
                 'ventasgeneral_linea_precio_resumen_provincia': self._linea_precio_resumen_provincia,
                 'ventasgeneral_linea_mix_productos': self._linea_mix_productos,
+                'ventasgeneral_resumen_por_linea': self._resumen_por_linea,
                 'ventasgeneral_catalogo': self._catalogo,
                 'chat_usuario_estadisticas': self._chat_usuario_estadisticas,
                 'chat_top_usuarios': self._chat_top_usuarios,
@@ -1159,6 +1161,78 @@ class ToolExecutor:
             'total_valor': total_valor,
             'filas': filas,
             'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_LINEA_MIX_PRODUCTOS, q),
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _resumen_por_linea(self, args):
+        d1, d2 = _parse_date_range(args)
+        pagina = _parse_pagina(args)
+        por_pagina = _parse_por_pagina(args)
+
+        where_sql = ' FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s'
+        params: dict = {'d1': d1, 'd2': d2}
+
+        provincia = str(args.get('provincia') or '').strip()
+        if provincia:
+            where_sql += ' AND Provincia LIKE %(prov)s'
+            params['prov'] = f'%{provincia}%'
+
+        prefijo = str(args.get('prefijo_descri_zona_precio') or '').strip().upper()
+        if prefijo:
+            where_sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(prefzo)s"
+            params['prefzo'] = prefijo + '%'
+
+        lineas_raw = str(args.get('lineas_comerciales') or '').strip()
+        lineas_list = [l.strip() for l in lineas_raw.split(',') if l.strip()] if lineas_raw else []
+        if lineas_list:
+            placeholders = ', '.join(f'%(lin{i})s' for i in range(len(lineas_list)))
+            where_sql += f' AND LineaComercial IN ({placeholders})'
+            for i, lin in enumerate(lineas_list):
+                params[f'lin{i}'] = lin
+
+        sql = (
+            "SELECT COALESCE(NULLIF(TRIM(LineaComercial),''),'(sin línea)') AS linea_comercial,"
+            " COUNT(*) AS lineas,"
+            " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
+            " COALESCE(SUM(Peso),0) AS suma_peso,"
+            " COALESCE(SUM(Valor),0) AS suma_valor"
+            + where_sql
+            + " GROUP BY COALESCE(NULLIF(TRIM(LineaComercial),''),'(sin línea)')"
+            " ORDER BY suma_valor DESC"
+        )
+        rows = _q(self._conn, sql, params)
+
+        total_valor = sum(float(r.get('suma_valor') or 0) for r in rows)
+        filas_all = []
+        for r in rows:
+            sv = float(r.get('suma_valor') or 0)
+            filas_all.append({
+                'linea_comercial': str(r.get('linea_comercial') or ''),
+                'lineas': int(r.get('lineas') or 0),
+                'suma_cantidad': float(r.get('suma_cantidad') or 0),
+                'suma_peso': float(r.get('suma_peso') or 0),
+                'suma_valor': sv,
+                'pct_del_total': round(sv / total_valor * 100, 2) if total_valor else 0.0,
+            })
+        filas = _paginate_list(filas_all, pagina, por_pagina)
+
+        q_params: dict = {'desde': d1, 'hasta': d2}
+        if provincia:
+            q_params['provincia'] = provincia
+        if prefijo:
+            q_params['prefijo'] = prefijo
+        if lineas_raw:
+            q_params['lineas'] = lineas_raw
+        q = _qs(q_params)
+
+        return {
+            'tabla': 'ventasgeneral',
+            'tipo': 'resumen_por_linea',
+            'periodo': {'desde': d1, 'hasta': d2},
+            'total_valor': total_valor,
+            'filas': filas,
+            'paginacion': _pagination_meta(len(filas_all), pagina, por_pagina),
+            'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_RESUMEN_POR_LINEA, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 

@@ -4,6 +4,7 @@ import os
 import queue
 import re
 import threading
+from datetime import date
 from flask import Blueprint, request, jsonify, Response, stream_with_context
 from services.db import get_connection, db_label
 from services.groq_client import GroqClient
@@ -17,7 +18,7 @@ from services.fast_format import try_fast_format
 bp = Blueprint('api_chat', __name__)
 _log = logging.getLogger(__name__)
 
-SYSTEM_TEMPLATE = """Asistente ventasgeneral2 (MySQL {db_label}). Solo tabla ventasgeneral2. Fechas YYYY-MM-DD; "marzo 2026"→2026-03-01..2026-03-31; "enero 2026 a febrero 2026"→fecha_desde=2026-01-01,fecha_hasta=2026-02-28 (último día del mes destino); "Q1 2026"→2026-01-01..2026-03-31. AÑO POR DEFECTO: si el usuario menciona un mes o un día sin especificar el año, usa 2026 — NUNCA preguntes el año. DÍA ÚNICO: si el usuario da solo un día (ej. "el 01 de enero 2026", "el 5 de mayo"), usa ese mismo día como fecha_desde Y fecha_hasta — NUNCA preguntes "fecha fin" para un día único.
+SYSTEM_TEMPLATE = """Asistente ventasgeneral2 (MySQL {db_label}). Solo tabla ventasgeneral2. Fechas YYYY-MM-DD; "marzo 2026"→2026-03-01..2026-03-31; "enero 2026 a febrero 2026"→fecha_desde=2026-01-01,fecha_hasta=2026-02-28 (último día del mes destino); "Q1 2026"→2026-01-01..2026-03-31. FECHA HOY: {today}. AÑO EN CURSO: {current_year}. AÑO POR DEFECTO: si el usuario menciona un mes o día sin especificar año, usa {current_year} — NUNCA preguntes el año. DÍA ÚNICO: si el usuario da solo un día, usa ese mismo día como fecha_desde Y fecha_hasta — NUNCA preguntes "fecha fin". YTD/HASTA HOY: "en lo que va del año", "hasta hoy", "hasta la fecha", "hasta donde hay datos" → fecha_desde={current_year}-01-01, fecha_hasta={today} — NUNCA preguntes la fecha de corte.
 
 PARÁMETROS OBLIGATORIOS: si faltan fecha_desde/hasta o línea comercial que el usuario no dio explícitamente, pregúntaselos antes de llamar la herramienta; nunca inventes valores por defecto. zona/mercado/prefijo_descri_zona_precio son SIEMPRE opcionales — si el usuario no los menciona, no los pidas. Sin campo ciudad: usa prefijo_descri_zona_precio (AQP, TACNA, MOQUEGUA, LAJOYA…) solo cuando el usuario especificó una zona. Si dice "por zona" sin especificar cuál, usa ventasgeneral_top_clientes_globales. TDoc NC=07. Filtros extra en buscar/resumen: provincia y tipo_documento.
 
@@ -27,10 +28,11 @@ COMPARATIVO: una sola llamada a ventasgeneral_comparativo_periodos con los 4 par
 
 CORPORATIVOS: "ventas de X con sus corporativos" → ventasgeneral_barras_corporativo con nombre_cliente="X" (filtra por NombreCliente). Si X es el nombre del corporativo → nombre_corporativo="X".
 
-LÍNEA COMERCIAL: LineaComercial es texto. Valores: "Pollo Vivo"|"Pollo Beneficiado"|"Pollo trozado Seco"|"Embutidos"|"Menudencia"|"Semielaborados"|"Pavos"|"Precocidos"|"Huevos SF"|"Pollo Congelado San Fer."|"Cerdos"|"Promociones embutidos"|"Venta de insumos"|"Envases". Línea 601="Pollo Vivo"; cod_item 100=carne, 103=brasa. Mercados Pollo Vivo: AQPMERCADO,TACNA,ILO,MOQUEGUA,MOLLENDO,CAMANA,LAJOYA,PEDREGAL. Herramientas de línea: resumen prov/cliente→linea_resumen_provincia; diario→linea_diario_provincia; precio/día→linea_precio_diario; precio prom prov→linea_precio_resumen_provincia; mix carne/brasa→linea_mix_productos. Si falta línea, pregúntala. El parámetro mercado/zona es OPCIONAL en todas las herramientas de línea; si el usuario no especifica zona, llama la herramienta sin ese parámetro (devuelve todas las zonas). NUNCA pidas zona si el usuario no la mencionó.
+LÍNEA COMERCIAL: LineaComercial es texto. Valores: "Pollo Vivo"|"Pollo Beneficiado"|"Pollo trozado Seco"|"Embutidos"|"Menudencia"|"Semielaborados"|"Pavos"|"Precocidos"|"Huevos SF"|"Pollo Congelado San Fer."|"Cerdos"|"Promociones embutidos"|"Venta de insumos"|"Envases". Línea 601="Pollo Vivo"; cod_item 100=carne, 103=brasa. Mercados Pollo Vivo: AQPMERCADO,TACNA,ILO,MOQUEGUA,MOLLENDO,CAMANA,LAJOYA,PEDREGAL. HERRAMIENTA DE LÍNEAS — REGLA CRÍTICA: si el usuario pide "todas las líneas", "cada línea", "resumen por línea", "cuánto vendió cada línea", "ventas por línea" → usar SIEMPRE ventasgeneral_resumen_por_linea SIN pasar lineas_comerciales. NUNCA preguntes qué línea en ese caso. GRUPO POLLO: "línea de pollo"/"grupo pollo" → ventasgeneral_resumen_por_linea con lineas_comerciales="Pollo Vivo,Pollo Beneficiado,Pollo trozado Seco,Menudencia". Detalle provincia/cliente de UNA línea específica→linea_resumen_provincia; diario UNA línea→linea_diario_provincia; precio/día→linea_precio_diario; precio prom prov→linea_precio_resumen_provincia; mix carne/brasa→linea_mix_productos. Para linea_resumen_provincia y similares, si falta la línea específica pregúntala. Mercado/zona OPCIONAL en todas; NUNCA pidas zona si el usuario no la mencionó.
 
 AUDITORÍA CHATBOT: señales "preguntas del chatbot","cuánto se usó","qué preguntó X","actividad del chat" → herramientas chat_*: estadísticas→chat_usuario_estadisticas; ranking→chat_top_usuarios; diario→chat_actividad_por_dia; lista→chat_listar_preguntas; búsqueda→chat_buscar_pregunta; threads→chat_resumen_threads. Fechas obligatorias salvo chat_buscar_pregunta y chat_listar_preguntas. chat_listar_preguntas acepta role (cargo/rol) en vez de username: "gerente"→role="gerencia", "administrador"→role="administrador", "operativo"→role="operativo", "analista"→role="analista". Para "últimas N preguntas de gerente" usa chat_listar_preguntas con role="gerencia" y por_pagina=N (sin fechas). Sin reporte_url en herramientas chat.
 
+FORMATO TABLAS: una sola tabla con columnas horizontales (una fila por ítem). NUNCA uses sub-filas ni `**` como encabezado de grupo dentro de una tabla. Para resumen_por_linea usa columnas: Línea | Peso (kg) | Valor (S/) | % del total.
 URL: solo /modules/... sin dominio ni #fragmento, sin backticks, una sola por respuesta.
 Moneda S/ (S/ 1,234,567.89). Di "importe"/"monto" no "Valor"/"SUM". Español, breve."""
 
@@ -241,7 +243,7 @@ def chat():
 
     system = {
         'role': 'system',
-        'content': SYSTEM_TEMPLATE.format(db_label=label),
+        'content': SYSTEM_TEMPLATE.format(db_label=label, today=date.today().isoformat(), current_year=date.today().year),
     }
 
     user_context = ''

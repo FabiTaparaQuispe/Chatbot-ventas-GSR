@@ -2085,12 +2085,13 @@
     // ── API calls ─────────────────────────────────────────────────────────────
     const CHAT_STREAM_API = CHAT_API + '/stream';
 
-    async function callChatApiStream() {
+    async function callChatApiStream(signal) {
         const res = await fetch(CHAT_STREAM_API, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(buildChatRequestBody()),
             credentials: 'same-origin',
+            signal: signal || null,
         });
         if (!res.ok) {
             const raw = await res.text().catch(() => '');
@@ -2169,6 +2170,23 @@
     }
 
     let sendInFlight = false;
+    let _abortCtrl = null;
+    const stopBtn = document.getElementById('ventasChatStop');
+
+    function _showStopBtn() {
+        if (stopBtn) stopBtn.hidden = false;
+        if (send) send.hidden = true;
+    }
+    function _hideStopBtn() {
+        if (stopBtn) stopBtn.hidden = true;
+        if (send) send.hidden = false;
+    }
+    if (stopBtn) {
+        stopBtn.addEventListener('click', function () {
+            if (_abortCtrl) _abortCtrl.abort();
+        });
+    }
+
     async function sendMessage() {
         if (!input || !send) return;
         const text = input.value.trim();
@@ -2184,6 +2202,8 @@
         saveHistory();
         send.disabled = true;
         sendInFlight = true;
+        _abortCtrl = new AbortController();
+        _showStopBtn();
         showTypingIndicator('');
 
         try {
@@ -2192,11 +2212,24 @@
 
             // Intentar streaming primero; fallback al endpoint clásico
             try {
-                const result = await callChatApiStream();
+                const result = await callChatApiStream(_abortCtrl.signal);
                 reply = result.reply;
                 usedStream = result.usedStream;
                 lastResult = result.lastResult;
             } catch (e1) {
+                if (e1 && e1.name === 'AbortError') {
+                    // Usuario detuvo — mostrar lo que llegó hasta ahora
+                    removeTypingIndicator();
+                    const partial = _streamRaw || '';
+                    if (partial) {
+                        finalizeStreamBubble(partial);
+                        history.push({ role: 'assistant', content: partial });
+                        saveHistory();
+                    } else {
+                        clearStreamBubble();
+                    }
+                    return;
+                }
                 clearStreamBubble();
                 removeTypingIndicator();
                 const isRetryable = (e1 && (e1.status === 500 || e1.status === 502 || e1.status === 503));
@@ -2256,6 +2289,8 @@
         } finally {
             send.disabled = false;
             sendInFlight = false;
+            _abortCtrl = null;
+            _hideStopBtn();
         }
     }
 

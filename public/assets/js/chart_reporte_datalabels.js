@@ -90,6 +90,34 @@
     }
 
     /**
+     * Para series largas (>30 puntos) solo muestra etiqueta en:
+     * primer punto, último punto, valor mínimo y valor máximo.
+     * Para series cortas muestra todos.
+     */
+    function dlDisplayKeyPoints(ctx) {
+        var data = ctx.dataset.data;
+        var i = ctx.dataIndex;
+        if (!hasVal(data[i])) return false;
+        var n = data.length;
+        if (n <= 30) return true;
+        // Siempre mostrar primero y último con valor
+        var first = 0;
+        while (first < n && !hasVal(data[first])) first++;
+        var last = n - 1;
+        while (last >= 0 && !hasVal(data[last])) last--;
+        if (i === first || i === last) return true;
+        // Mínimo y máximo globales
+        var minVal = Infinity, maxVal = -Infinity, minIdx = -1, maxIdx = -1;
+        for (var j = 0; j < n; j++) {
+            if (!hasVal(data[j])) continue;
+            var v = Number(data[j]);
+            if (v < minVal) { minVal = v; minIdx = j; }
+            if (v > maxVal) { maxVal = v; maxIdx = j; }
+        }
+        return i === minIdx || i === maxIdx;
+    }
+
+    /**
      * Devuelve el color de la serie/punto: borderColor (líneas) o backgroundColor
      * (barras, potencialmente arreglo por dato), para que la etiqueta tenga el mismo
      * color que su línea o barra y sea fácil identificar a qué corresponde.
@@ -124,9 +152,7 @@
             color: dlSeriesColor,
             align: 'top',
             offset: 4,
-            display: function (ctx) {
-                return hasVal(ctx.dataset.data[ctx.dataIndex]);
-            },
+            display: dlDisplayKeyPoints,
             formatter: function (value) {
                 if (!hasVal(value)) return '';
                 return Number(value).toLocaleString('es-PE', {
@@ -140,9 +166,7 @@
             color: dlSeriesColor,
             align: 'top',
             offset: 4,
-            display: function (ctx) {
-                return hasVal(ctx.dataset.data[ctx.dataIndex]);
-            },
+            display: dlDisplayKeyPoints,
             formatter: function (value) {
                 if (!hasVal(value)) return '';
                 return (
@@ -159,9 +183,7 @@
             color: dlSeriesColor,
             align: 'top',
             offset: 4,
-            display: function (ctx) {
-                return hasVal(ctx.dataset.data[ctx.dataIndex]);
-            },
+            display: dlDisplayKeyPoints,
             formatter: function (value) {
                 if (!hasVal(value)) return '';
                 return (
@@ -181,9 +203,7 @@
             offset: function (ctx) {
                 return 6 + (ctx.datasetIndex || 0) * 12;
             },
-            display: function (ctx) {
-                return hasVal(ctx.dataset.data[ctx.dataIndex]);
-            },
+            display: dlDisplayKeyPoints,
             formatter: function (value) {
                 if (!hasVal(value)) return '';
                 return (
