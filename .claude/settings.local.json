@@ -15,7 +15,9 @@
       "Bash(Select-Object Name)",
       "Bash(python -c \"import py_compile; py_compile.compile\\('routes/reports_modules.py', doraise=True\\); print\\('OK'\\)\")",
       "Bash(python -c \"from routes.api.chat import bp; print\\('OK'\\)\")",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ],
     "additionalDirectories": [
       "c:\\Users\\redim\\.claude\\projects\\c--xampp-htdocs-chatbotVentasGeneral-Chatbot-ventas-GSR\\memory"
