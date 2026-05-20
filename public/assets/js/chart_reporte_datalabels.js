@@ -114,7 +114,16 @@
             if (v < minVal) { minVal = v; minIdx = j; }
             if (v > maxVal) { maxVal = v; maxIdx = j; }
         }
-        return i === minIdx || i === maxIdx;
+        if (i === minIdx || i === maxIdx) return true;
+        // Puntos de inflexión: cambio >= 0.5% respecto al punto anterior válido
+        var prev = i - 1;
+        while (prev >= 0 && !hasVal(data[prev])) prev--;
+        if (prev >= 0) {
+            var cur = Number(data[i]);
+            var prevVal = Number(data[prev]);
+            if (prevVal !== 0 && Math.abs(cur - prevVal) / Math.abs(prevVal) >= 0.005) return true;
+        }
+        return false;
     }
 
     /**

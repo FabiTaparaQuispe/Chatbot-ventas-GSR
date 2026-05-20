@@ -64,10 +64,12 @@ def _sanitize_urls(text: str) -> str:
 
 def _clean_table_asterisks(text: str) -> str:
     """Elimina marcadores ** sueltos dentro de celdas de tabla markdown."""
-    # | ** | → quitar fila completa si la celda de concepto y detalle son vacías/asteriscos
+    # | ** | → quitar fila completa si la celda es solo asteriscos
     text = re.sub(r'\n?\|[^|\n]*\|\s*\*\*\s*\|\s*\n', '\n', text)
     # **texto** dentro de celda → texto (sin negrita)
     text = re.sub(r'\*\*([^*\n|]+)\*\*', r'\1', text)
+    # ** al inicio de celda: | ** valor | → | valor |
+    text = re.sub(r'\|\s*\*\*\s*([^*|])', r'| \1', text)
     # asteriscos sueltos restantes en celdas
     text = re.sub(r'(?<=\|)\s*\*+\s*(?=\|)', ' ', text)
     return text
