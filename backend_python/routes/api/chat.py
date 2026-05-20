@@ -433,7 +433,7 @@ def _build_messages(data: dict) -> tuple:
         return None, None, None, (jsonify({'ok': False, 'error': str(e)}), 503)
 
     label = db_label()
-    system = {'role': 'system', 'content': SYSTEM_TEMPLATE.format(db_label=label)}
+    system = {'role': 'system', 'content': SYSTEM_TEMPLATE.format(db_label=label, today=date.today().isoformat(), current_year=date.today().year)}
 
     user_context = ''
     if isinstance(data.get('user_context'), str):
