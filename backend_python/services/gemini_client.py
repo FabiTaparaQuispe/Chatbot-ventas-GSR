@@ -346,7 +346,7 @@ class GeminiClient:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        _max_retries = 2
+        _max_retries = 3
         for _attempt in range(_max_retries + 1):
             try:
                 with urlopen(req, timeout=60) as r:
