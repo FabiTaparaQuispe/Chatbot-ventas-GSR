@@ -346,46 +346,56 @@ class GeminiClient:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        try:
-            with urlopen(req, timeout=60) as r:
-                raw = r.read().decode("utf-8", "replace")
-                return json.loads(raw) if raw else {}
-        except HTTPError as e:
-            raw = e.read().decode("utf-8", "replace")
-            snip = (raw[:900] + "…") if len(raw) > 900 else raw
-            logger.warning(
-                "Gemini HTTP error | status=%s | model=%s | response_snippet=%s",
-                e.code,
-                self._model,
-                snip.replace("\n", " ").strip() or "(cuerpo vacío)",
-            )
-            # Mapear errores comunes a mensajes claros
-            if e.code in (429, 503):
-                hint = self._extract_retry_hint(raw)
-                if e.code == 503:
-                    base = (
-                        "Gemini API no disponible temporalmente (503). Suele ser saturación del servicio de Google; "
-                        "reintentá en 1–5 minutos. Si persiste, probá otro modelo (GEMINI_MODEL en .env) o "
-                        "cambiá a Groq: LLM_PROVIDER=groq y GROQ_API_KEY."
+        _max_retries = 2
+        for _attempt in range(_max_retries + 1):
+            try:
+                with urlopen(req, timeout=60) as r:
+                    raw = r.read().decode("utf-8", "replace")
+                    return json.loads(raw) if raw else {}
+            except HTTPError as e:
+                raw = e.read().decode("utf-8", "replace")
+                snip = (raw[:900] + "…") if len(raw) > 900 else raw
+                logger.warning(
+                    "Gemini HTTP error | status=%s | model=%s | attempt=%d | response_snippet=%s",
+                    e.code,
+                    self._model,
+                    _attempt + 1,
+                    snip.replace("\n", " ").strip() or "(cuerpo vacío)",
+                )
+                if e.code in (429, 503) and _attempt < _max_retries:
+                    wait = self._extract_retry_seconds(raw)
+                    logger.info(
+                        "Gemini %s → reintentando en %ss (intento %d/%d)",
+                        e.code, wait, _attempt + 1, _max_retries,
                     )
+                    time.sleep(wait)
+                    continue
+                # Mapear errores comunes a mensajes claros
+                if e.code in (429, 503):
+                    hint = self._extract_retry_hint(raw)
+                    if e.code == 503:
+                        base = (
+                            "Gemini API no disponible temporalmente (503). Suele ser saturación del servicio de Google; "
+                            "reintentá en 1–5 minutos. Si persiste, probá otro modelo (GEMINI_MODEL en .env) o "
+                            "cambiá a Groq: LLM_PROVIDER=groq y GROQ_API_KEY."
+                        )
+                        if hint:
+                            raise RuntimeError(f"{base} Indicación: esperar ~{hint}.") from e
+                        raise RuntimeError(base) from e
                     if hint:
-                        raise RuntimeError(f"{base} Indicación: esperar ~{hint}.") from e
-                    raise RuntimeError(base) from e
-                if hint:
-                    raise RuntimeError(f"Intentá de nuevo en {hint}.") from e
-                raise RuntimeError("Intentá de nuevo en unos segundos.") from e
-            if e.code in (401, 403):
-                # 403 suele ocurrir con API keys restringidas a navegador (HTTP referrer) o API no habilitada.
-                raise RuntimeError(
-                    "Gemini rechazó la API key (403). Si la key está restringida por HTTP referrer/navegador, "
-                    "no funcionará desde el backend. Crea una API key de servidor (sin restricción de referer), "
-                    "habilita la Generative Language API y vuelve a intentar."
-                ) from e
-            raise RuntimeError(f"Gemini HTTP {e.code}: {raw[:500]}") from e
-        except URLError as e:
-            raise RuntimeError(f"No se pudo conectar a Gemini: {e}") from e
-        except Exception as e:
-            raise RuntimeError(f"Error llamando a Gemini: {e}") from e
+                        raise RuntimeError(f"Intentá de nuevo en {hint}.") from e
+                    raise RuntimeError("Intentá de nuevo en unos segundos.") from e
+                if e.code in (401, 403):
+                    raise RuntimeError(
+                        "Gemini rechazó la API key (403). Si la key está restringida por HTTP referrer/navegador, "
+                        "no funcionará desde el backend. Crea una API key de servidor (sin restricción de referer), "
+                        "habilita la Generative Language API y vuelve a intentar."
+                    ) from e
+                raise RuntimeError(f"Gemini HTTP {e.code}: {raw[:500]}") from e
+            except URLError as e:
+                raise RuntimeError(f"No se pudo conectar a Gemini: {e}") from e
+            except Exception as e:
+                raise RuntimeError(f"Error llamando a Gemini: {e}") from e
 
     @staticmethod
     def _extract_retry_hint(raw: str) -> str | None:
@@ -406,4 +416,23 @@ class GeminiClient:
         if m3:
             return f"{float(m3.group(1)):.1f}s"
         return None
+
+    @staticmethod
+    def _extract_retry_seconds(raw: str) -> int:
+        """Extrae los segundos numéricos de la respuesta de error 429/503. Default 30s."""
+        if not raw:
+            return 30
+        for pattern in (
+            r"retry in\s+([\d.]+)\s*s",
+            r"Please retry in\s+([\d.]+)\s*s",
+            r'"seconds"\s*:\s*"?([\d.]+)"?',
+            r'"retryDelay"\s*:\s*"([\d.]+)s"',
+        ):
+            m = re.search(pattern, raw, flags=re.I)
+            if m:
+                try:
+                    return max(1, min(120, int(float(m.group(1))) + 1))
+                except Exception:
+                    pass
+        return 30
 
