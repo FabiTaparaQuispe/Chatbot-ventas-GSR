@@ -325,7 +325,7 @@ class ToolExecutor:
             q['tipo_documento'] = tdoc
 
         return {
-            'tabla': 'ventasgeneral',
+            'tabla': 'ventasgeneral2',
             'periodo': {'desde': d1, 'hasta': d2},
             'agregados': {k: (float(v) if v is not None else 0) if k != 'filas' else int(v or 0) for k, v in row.items()},
             'reporte_url': _report_canonical(REPORT_VENTASGENERAL_RESUMEN_TABLA, q),
@@ -408,7 +408,7 @@ class ToolExecutor:
         }.items() if v is not None and str(v) != ''}
 
         return {
-            'tabla': 'ventasgeneral',
+            'tabla': 'ventasgeneral2',
             'count_devuelto': len(rows),
             'paginacion': _pagination_meta(total_rows, pagina, por_pagina),
             'filas': [dict(r) for r in rows],
@@ -455,7 +455,7 @@ class ToolExecutor:
         filas = _paginate_list(filas_all, pagina, por_pagina)
         q = _qs({'desde': d1, 'hasta': d2, 'max': max_z})
         return {
-            'tabla': 'ventasgeneral',
+            'tabla': 'ventasgeneral2',
             'criterio_nc': "TDoc = '07' (notas de crédito en ETL ventasgeneral)",
             'agrupacion': 'DescripcionZonaPrecio',
             'periodo': {'desde': d1, 'hasta': d2},
@@ -518,7 +518,7 @@ class ToolExecutor:
 
         q = _qs({'desde': d1, 'hasta': d2, 'prefijo': pref, 'top': top})
         return {
-            'tabla': 'ventasgeneral',
+            'tabla': 'ventasgeneral2',
             'criterio': 'SUM(Valor) por CodigoCliente; solo líneas con DescripcionZonaPrecio LIKE prefijo%',
             'agrupacion': 'CodigoCliente (NombreCliente)',
             'periodo': {'desde': d1, 'hasta': d2},
@@ -566,7 +566,7 @@ class ToolExecutor:
         filas = _paginate_list(filas_all, pagina, por_pagina)
         q = _qs({'desde': d1, 'hasta': d2, 'dim': dim, 'top': top})
         return {
-            'tabla': 'ventasgeneral',
+            'tabla': 'ventasgeneral2',
             'tipo': f'barras_por_{dim}',
             'periodo': {'desde': d1, 'hasta': d2},
             'total_valor_periodo': total,
@@ -607,7 +607,7 @@ class ToolExecutor:
         filas = _paginate_list(filas_all, pagina, por_pagina)
         q = _qs({'a_desde': a1, 'a_hasta': a2, 'b_desde': b1, 'b_hasta': b2, 'dim': dim, 'top': top})
         return {
-            'tabla': 'ventasgeneral',
+            'tabla': 'ventasgeneral2',
             'tipo': 'comparativo_periodos',
             'periodo_a': {'desde': a1, 'hasta': a2},
             'periodo_b': {'desde': b1, 'hasta': b2},
@@ -635,7 +635,7 @@ class ToolExecutor:
         filas = _paginate_list(filas_all, pagina, por_pagina)
         q = _qs({'desde': d1, 'hasta': d2, 'top': top})
         return {
-            'tabla': 'ventasgeneral',
+            'tabla': 'ventasgeneral2',
             'tipo': 'top_productos',
             'periodo': {'desde': d1, 'hasta': d2},
             'filas': filas,
@@ -682,7 +682,7 @@ class ToolExecutor:
         filas = _paginate_list(filas_all, pagina, por_pagina)
         q = _qs({'desde': d1, 'hasta': d2, 'top': top})
         return {
-            'tabla': 'ventasgeneral',
+            'tabla': 'ventasgeneral2',
             'tipo': 'top_clientes_global',
             'periodo': {'desde': d1, 'hasta': d2},
             'total_valor': total,
@@ -731,7 +731,7 @@ class ToolExecutor:
         filas = _paginate_list(filas_all, pagina, por_pagina)
         q = _qs({'desde': d1, 'hasta': d2, 'top': top})
         return {
-            'tabla': 'ventasgeneral',
+            'tabla': 'ventasgeneral2',
             'criterio': 'CodigoDocumento = 07; ranking por COUNT(*) por CodigoCliente (notas de crédito)',
             'periodo': {'desde': d1, 'hasta': d2},
             'total_lineas_nc': total_lineas,
@@ -764,7 +764,7 @@ class ToolExecutor:
             })
         q = _qs({'desde': d1, 'hasta': d2})
         return {
-            'tabla': 'ventasgeneral',
+            'tabla': 'ventasgeneral2',
             'tipo': 'mix_tdoc',
             'periodo': {'desde': d1, 'hasta': d2},
             'total_valor': total,
@@ -788,7 +788,7 @@ class ToolExecutor:
         filas = _paginate_list(filas_all, pagina, por_pagina)
         q = _qs({'desde': d1, 'hasta': d2, 'top': top})
         return {
-            'tabla': 'ventasgeneral',
+            'tabla': 'ventasgeneral2',
             'tipo': 'barras_ruta',
             'periodo': {'desde': d1, 'hasta': d2},
             'filas': filas,
@@ -828,7 +828,7 @@ class ToolExecutor:
             q_params['nombre_corporativo'] = nom_corp
         q = _qs(q_params)
         result = {
-            'tabla': 'ventasgeneral',
+            'tabla': 'ventasgeneral2',
             'tipo': 'barras_corporativo',
             'periodo': {'desde': d1, 'hasta': d2},
             'filas': filas,
@@ -852,7 +852,7 @@ class ToolExecutor:
         rows = _q(self._conn, sql, params)
         q = _qs({'desde': d1, 'hasta': d2})
         return {
-            'tabla': 'ventasgeneral',
+            'tabla': 'ventasgeneral2',
             'tipo': 'serie_mensual_valor',
             'periodo': {'desde': d1, 'hasta': d2},
             'filas': [dict(r) for r in rows],
@@ -908,7 +908,7 @@ class ToolExecutor:
                    'pagina': pagina, 'por_pagina': por_pagina}
         q = _qs(qparams)
         return {
-            'tabla': 'ventasgeneral',
+            'tabla': 'ventasgeneral2',
             'tipo': 'linea_resumen_provincia_cliente',
             'linea_comercial': linea,
             'periodo': {'desde': d1, 'hasta': d2},
@@ -969,7 +969,7 @@ class ToolExecutor:
                  'cod_item': cod_item or None, 'mercado': mercado or None,
                  'pagina': pagina, 'por_pagina': por_pagina})
         return {
-            'tabla': 'ventasgeneral',
+            'tabla': 'ventasgeneral2',
             'tipo': 'linea_diario_provincia_cliente',
             'linea_comercial': linea,
             'periodo': {'desde': d1, 'hasta': d2},
@@ -1032,7 +1032,7 @@ class ToolExecutor:
                  'cod_item': cod_item or None, 'mercado': mercado or None,
                  'pagina': pagina, 'por_pagina': por_pagina})
         return {
-            'tabla': 'ventasgeneral',
+            'tabla': 'ventasgeneral2',
             'tipo': 'linea_precio_diario_provincia_cliente',
             'linea_comercial': linea,
             'periodo': {'desde': d1, 'hasta': d2},
@@ -1096,7 +1096,7 @@ class ToolExecutor:
         q = _qs({'desde': d1, 'hasta': d2, 'linea': linea,
                  'cod_item': cod_item or None, 'mercado': mercado or None})
         return {
-            'tabla': 'ventasgeneral',
+            'tabla': 'ventasgeneral2',
             'tipo': 'linea_precio_resumen_provincia',
             'linea_comercial': linea,
             'periodo': {'desde': d1, 'hasta': d2},
@@ -1152,7 +1152,7 @@ class ToolExecutor:
             })
         q = _qs({'desde': d1, 'hasta': d2, 'linea': linea, 'mercado': mercado or None})
         return {
-            'tabla': 'ventasgeneral',
+            'tabla': 'ventasgeneral2',
             'tipo': 'linea_mix_productos',
             'linea_comercial': linea,
             'mercado': mercado or None,
@@ -1226,7 +1226,7 @@ class ToolExecutor:
         q = _qs(q_params)
 
         return {
-            'tabla': 'ventasgeneral',
+            'tabla': 'ventasgeneral2',
             'tipo': 'resumen_por_linea',
             'periodo': {'desde': d1, 'hasta': d2},
             'total_valor': total_valor,
@@ -1272,7 +1272,7 @@ class ToolExecutor:
             })
 
         return {
-            'tabla': 'ventasgeneral',
+            'tabla': 'ventasgeneral2',
             'tipo': 'proyeccion_ventas',
             'periodo_historico': {'desde': d1, 'hasta': d2},
             'meses_historicos': n,
