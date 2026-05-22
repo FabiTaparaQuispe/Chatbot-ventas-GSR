@@ -9,8 +9,8 @@ from sqlalchemy.engine import Engine
 from app.settings import get_settings
 
 
-def _parse_pdo_mysql_dsn(dsn: str) -> tuple[str, int, str, str]:
-    """mysql:host=...;port=...;dbname=...;charset=..."""
+def _parse_pdo_mysql_dsn(dsn: str) -> tuple[str, int, str, str, int]:
+    """mysql:host=...;port=...;dbname=...;charset=...;connect_timeout=..."""
     if not dsn.lower().startswith("mysql:"):
         raise ValueError("DB_DSN debe comenzar con mysql:")
     body = dsn.split(":", 1)[1]
@@ -25,15 +25,8 @@ def _parse_pdo_mysql_dsn(dsn: str) -> tuple[str, int, str, str]:
     port = int(parts.get("port", "3306"))
     dbname = parts.get("dbname", "cia2026")
     charset = parts.get("charset", "utf8mb4")
-    return host, port, dbname, charset
-
-
-def _build_sqlalchemy_url() -> str:
-    s = get_settings()
-    host, port, db, charset = _parse_pdo_mysql_dsn(s.db_dsn)
-    user = quote_plus(s.db_user)
-    pw = quote_plus(s.db_pass)
-    return f"mysql+pymysql://{user}:{pw}@{host}:{port}/{db}?charset={charset}"
+    connect_timeout = max(3, int(parts.get("connect_timeout", "10")))
+    return host, port, dbname, charset, connect_timeout
 
 
 def db_label_from_dsn() -> str:
@@ -47,10 +40,19 @@ _engine: Engine | None = None
 def get_engine() -> Engine:
     global _engine
     if _engine is None:
+        s = get_settings()
+        host, port, db, charset, ct = _parse_pdo_mysql_dsn(s.db_dsn)
+        user = quote_plus(s.db_user)
+        pw = quote_plus(s.db_pass)
+        url = f"mysql+pymysql://{user}:{pw}@{host}:{port}/{db}?charset={charset}"
+
         eng = create_engine(
-            _build_sqlalchemy_url(),
+            url,
             pool_pre_ping=True,
             pool_recycle=300,
+            pool_size=5,
+            max_overflow=10,
+            connect_args={"connect_timeout": ct},
         )
 
         @event.listens_for(eng, "connect")

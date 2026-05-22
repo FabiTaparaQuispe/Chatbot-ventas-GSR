@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     db_user: str = Field(default="root", validation_alias="DB_USER")
     db_pass: str = Field(default="", validation_alias="DB_PASS")
 
-    # URL absoluta del sitio (mismo host que FastAPI) para enlaces sql_texto, ej. http://127.0.0.1:8000
+    # requerido para links de sql_texto en respuestas del chat
     public_base_url: str = Field(default="", validation_alias="PUBLIC_BASE_URL")
 
     session_secret: str = Field(
