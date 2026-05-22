@@ -513,7 +513,7 @@ def chat_stream():
     if err:
         return err
 
-    q = queue.SimpleQueue()
+    q = queue.Queue()
 
     def worker():
         try:
@@ -558,7 +558,11 @@ def chat_stream():
 
     def generate():
         while True:
-            event = q.get()
+            try:
+                event = q.get(timeout=20)
+            except queue.Empty:
+                yield ": keep-alive\n\n"
+                continue
             if event is None:
                 break
             yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"

@@ -2142,12 +2142,13 @@
         return { reply: finalReply, lastResult: finalLastResult, usedStream: hasTokens };
     }
 
-    async function callChatApiOnce() {
+    async function callChatApiOnce(signal) {
         const res = await fetch(CHAT_API, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(buildChatRequestBody()),
             credentials: 'same-origin',
+            signal: signal || null,
         });
         const ct = (res.headers && res.headers.get) ? (res.headers.get('content-type') || '') : '';
         const raw = await res.text().catch(() => '');
@@ -2243,11 +2244,11 @@
                 // Fallback al endpoint clásico
                 showTypingIndicator('');
                 try {
-                    reply = await callChatApiOnce();
+                    reply = await callChatApiOnce(_abortCtrl ? _abortCtrl.signal : null);
                 } catch (e2) {
                     if (e2 && (e2.status === 500 || e2.status === 502 || e2.status === 503)) {
                         await new Promise(r => setTimeout(r, 650));
-                        reply = await callChatApiOnce();
+                        reply = await callChatApiOnce(_abortCtrl ? _abortCtrl.signal : null);
                     } else {
                         throw e2;
                     }
