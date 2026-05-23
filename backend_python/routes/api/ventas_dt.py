@@ -87,6 +87,7 @@ def ventas_dt():
     nombre = str(request.args.get('nombre') or '').strip()
     numero_doc = str(request.args.get('numero_doc') or '').strip()
     tipo_documento = str(request.args.get('tipo_documento') or '').strip()
+    codigo_documento = str(request.args.get('codigo_documento') or '').strip()
     provincia = str(request.args.get('provincia') or '').strip()
 
     try:
@@ -110,6 +111,9 @@ def ventas_dt():
         if tipo_documento:
             base_where += ' AND TipoDocumento LIKE %s'
             params.append(f'%{tipo_documento}%')
+        if codigo_documento:
+            base_where += ' AND CodigoDocumento = %s'
+            params.append(codigo_documento)
         if provincia:
             base_where += ' AND Provincia LIKE %s'
             params.append(f'%{provincia}%')

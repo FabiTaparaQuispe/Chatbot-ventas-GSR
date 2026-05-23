@@ -76,6 +76,10 @@ def _filtros_resumen_caption() -> str:
     tdoc = (request.args.get('tipo_documento') or '').strip()
     if tdoc:
         bits.append(f'Tipo documento: {tdoc}')
+    cod_doc = (request.args.get('codigo_documento') or '').strip()
+    if cod_doc:
+        label = 'Nota de Crédito' if cod_doc == '07' else cod_doc
+        bits.append(f'Tipo documento: {label}')
     return ' · '.join(bits)
 
 
@@ -584,6 +588,10 @@ def ventasgeneral_resumen_tabla():
     if tdoctipo:
         sql += ' AND TipoDocumento LIKE :tdoctipo'
         bind['tdoctipo'] = f'%{tdoctipo}%'
+    cod_doc = (request.args.get('codigo_documento') or '').strip()
+    if cod_doc:
+        sql += ' AND CodigoDocumento = :cod_doc'
+        bind['cod_doc'] = cod_doc
 
     # Reuse same WHERE conditions for daily breakdown chart
     where_suffix = sql[sql.index('WHERE'):]

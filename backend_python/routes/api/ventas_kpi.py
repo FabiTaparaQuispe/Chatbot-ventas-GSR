@@ -29,6 +29,7 @@ def ventas_kpi():
     nombre = str(request.args.get('nombre') or '').strip()
     numero_doc = str(request.args.get('numero_doc') or '').strip()
     tipo_documento = str(request.args.get('tipo_documento') or '').strip()
+    codigo_documento = str(request.args.get('codigo_documento') or '').strip()
     provincia = str(request.args.get('provincia') or '').strip()
 
     where = ' WHERE 1=1'
@@ -48,6 +49,9 @@ def ventas_kpi():
     if tipo_documento:
         where += ' AND TipoDocumento LIKE %s'
         params.append(f'%{tipo_documento}%')
+    if codigo_documento:
+        where += ' AND CodigoDocumento = %s'
+        params.append(codigo_documento)
     if provincia:
         where += ' AND Provincia LIKE %s'
         params.append(f'%{provincia}%')

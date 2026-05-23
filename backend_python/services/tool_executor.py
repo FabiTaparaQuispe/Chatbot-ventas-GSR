@@ -329,7 +329,7 @@ class ToolExecutor:
         if tdoc:
             q['tipo_documento'] = tdoc
         if cod_doc:
-            q['tipo_documento'] = 'Nota de Crédito' if cod_doc == '07' else cod_doc
+            q['codigo_documento'] = cod_doc
 
         return {
             'tabla': 'ventasgeneral2',
