@@ -42,11 +42,12 @@ def ventas_tool_definitions():
     return [
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_resumen',
-            'description': f'Totales ventasgeneral (filas, suma Valor/Cantidad/Peso) con filtros opcionales. reporte_url={REPORT_VENTASGENERAL_RESUMEN_TABLA}?…',
+            'description': f'Totales ventasgeneral (filas, suma Valor/Cantidad/Peso) con filtros opcionales. Para notas de crédito usar codigo_documento="07". reporte_url={REPORT_VENTASGENERAL_RESUMEN_TABLA}?…',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt,
                 'zona_comercial': d, 'cod_cliente': d,
                 'prefijo_descri_zona_precio': pref, 'provincia': prov, 'tipo_documento': tdoc,
+                'codigo_documento': {'type': 'string', 'description': 'Código de tipo de documento: "07"=Nota de Crédito. Usar en vez de tipo_documento para filtrar NCs.'},
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
@@ -71,8 +72,8 @@ def ventas_tool_definitions():
             'name': 'ventasgeneral_nc_por_corporativo',
             'description': (
                 'Notas de crédito (TDoc=07) agrupadas por corporativo: COUNT(*) lineas_nc, SUM(Valor), SUM(Peso) '
-                'y % del total por NombreCoorporativo. Usar cuando preguntan "¿qué corporativos tienen notas de crédito?", '
-                '"notas de crédito por corporativo", o cuando en una consulta de NCs se pide ver también los corporativos.'
+                'y % del total por NombreCoorporativo. LLAMAR SIEMPRE junto a ventasgeneral_resumen o ventasgeneral_pareto_nc_zonaprecio '
+                'cuando el usuario pregunta por notas de crédito (cantidad, total, detalle), para mostrar automáticamente el desglose por corporativo.'
             ),
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'top_n': dn,

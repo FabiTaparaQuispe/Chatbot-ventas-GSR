@@ -311,6 +311,10 @@ class ToolExecutor:
         if tdoc:
             sql += ' AND TipoDocumento LIKE %(tdoc)s'
             params['tdoc'] = f'%{tdoc}%'
+        cod_doc = str(args.get('codigo_documento') or '').strip()
+        if cod_doc:
+            sql += ' AND CodigoDocumento = %(cod_doc)s'
+            params['cod_doc'] = cod_doc
 
         row = _q1(self._conn, sql, params) or {}
         q = {'fecha_desde': d1, 'fecha_hasta': d2}
@@ -324,6 +328,8 @@ class ToolExecutor:
             q['provincia'] = prov
         if tdoc:
             q['tipo_documento'] = tdoc
+        if cod_doc:
+            q['tipo_documento'] = 'Nota de Crédito' if cod_doc == '07' else cod_doc
 
         return {
             'tabla': 'ventasgeneral2',
