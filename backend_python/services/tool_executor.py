@@ -234,6 +234,7 @@ class ToolExecutor:
                 'ventasgeneral_top_productos': self._top_productos,
                 'ventasgeneral_top_clientes_globales': self._top_clientes_global,
                 'ventasgeneral_top_clientes_nota_credito': self._top_clientes_nc,
+                'ventasgeneral_nc_por_corporativo': self._nc_por_corporativo,
                 'ventasgeneral_mix_tdoc': self._mix_tdoc,
                 'ventasgeneral_barras_ruta_comercial': self._barras_ruta,
                 'ventasgeneral_barras_corporativo': self._barras_corporativo,
@@ -740,6 +741,56 @@ class ToolExecutor:
             'filas': filas,
             'paginacion': _pagination_meta(len(filas_all), pagina, por_pagina),
             'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_TOP_CLIENTES_NC, q),
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _nc_por_corporativo(self, args):
+        d1, d2 = _parse_date_range(args)
+        top = _int_arg(args.get('top_n'), 50, 1, 200)
+        pagina = _parse_pagina(args)
+        por_pagina = _parse_por_pagina(args)
+        tdoc_cond = "COALESCE(NULLIF(TRIM(CodigoDocumento),''),'') = '07'"
+        sql = (f"SELECT CodigoCoorporativo AS cod_corporativo,"
+               f" MAX(COALESCE(NULLIF(TRIM(NombreCoorporativo),''),'(sin corporativo)')) AS nombre_corporativo,"
+               f" COUNT(*) AS lineas_nc,"
+               f" COALESCE(SUM(Valor),0) AS suma_valor,"
+               f" COALESCE(SUM(Peso),0) AS suma_peso"
+               f" FROM ventasgeneral2"
+               f" WHERE FechaContable BETWEEN %(d1)s AND %(d2)s AND {tdoc_cond}"
+               f" GROUP BY CodigoCoorporativo"
+               f" ORDER BY lineas_nc DESC, suma_valor ASC LIMIT {top}")
+        params = {'d1': d1, 'd2': d2}
+        raw = _q(self._conn, sql, params)
+        sql_tot = (f"SELECT COUNT(*) AS n, COALESCE(SUM(Valor),0) AS v"
+                   f" FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s AND {tdoc_cond}")
+        tot_row = _q1(self._conn, sql_tot, params) or {}
+        total_lineas = int(tot_row.get('n') or 0)
+        total_valor_nc = float(tot_row.get('v') or 0)
+        cum = 0.0
+        filas_all = []
+        for r in raw:
+            ln = int(r.get('lineas_nc') or 0)
+            pct = ln / total_lineas * 100 if total_lineas else 0.0
+            cum += pct
+            filas_all.append({
+                'cod_corporativo': str(r.get('cod_corporativo') or ''),
+                'nombre_corporativo': str(r.get('nombre_corporativo') or ''),
+                'lineas_nc': ln,
+                'suma_valor': float(r.get('suma_valor') or 0),
+                'suma_peso': float(r.get('suma_peso') or 0),
+                'pct_lineas_del_total': round(pct, 2),
+                'pct_lineas_acumulado': round(cum, 2),
+            })
+        filas = _paginate_list(filas_all, pagina, por_pagina)
+        q = _qs({'desde': d1, 'hasta': d2, 'top': top})
+        return {
+            'tabla': 'ventasgeneral2',
+            'criterio': 'CodigoDocumento = 07; ranking por COUNT(*) por CodigoCoorporativo',
+            'periodo': {'desde': d1, 'hasta': d2},
+            'total_lineas_nc': total_lineas,
+            'total_valor_nc': total_valor_nc,
+            'filas': filas,
+            'paginacion': _pagination_meta(len(filas_all), pagina, por_pagina),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 

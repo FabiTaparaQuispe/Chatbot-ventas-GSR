@@ -68,6 +68,18 @@ def ventas_tool_definitions():
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
+            'name': 'ventasgeneral_nc_por_corporativo',
+            'description': (
+                'Notas de crédito (TDoc=07) agrupadas por corporativo: COUNT(*) lineas_nc, SUM(Valor), SUM(Peso) '
+                'y % del total por NombreCoorporativo. Usar cuando preguntan "¿qué corporativos tienen notas de crédito?", '
+                '"notas de crédito por corporativo", o cuando en una consulta de NCs se pide ver también los corporativos.'
+            ),
+            'parameters': {'type': 'object', 'properties': {
+                'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'top_n': dn,
+                'pagina': pagina, 'por_pagina': por_pagina,
+            }, 'required': ['fecha_desde', 'fecha_hasta']},
+        }},
+        {'type': 'function', 'function': {
             'name': 'ventasgeneral_top_clientes_zona_precio',
             'description': f'Top clientes por SUM(Valor) dentro de una zona de precio (prefijo obligatorio). top_n acota el universo; pagina/por_pagina lo navegan. reporte_url={REPORTS_PREFIX}{REPORT_SLUG_PARETO_CLIENTES_ZONA}?…',
             'parameters': {'type': 'object', 'properties': {
