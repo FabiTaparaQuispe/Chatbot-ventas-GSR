@@ -14,6 +14,7 @@ from services.tool_executor import ToolExecutor
 from services.tools_definitions import ventas_tool_definitions, chat_history_tool_definitions
 from services.chat_reply_enricher import enrich_reply
 from services.fast_format import try_fast_format
+from services.sql_trace_display import format_sql_traces_for_display
 
 bp = Blueprint('api_chat', __name__)
 _log = logging.getLogger(__name__)
@@ -34,7 +35,9 @@ LÍNEA COMERCIAL: LineaComercial es texto. Valores: "Pollo Vivo"|"Pollo Benefici
 
 AUDITORÍA CHATBOT: señales "preguntas del chatbot","cuánto se usó","qué preguntó X","actividad del chat" → herramientas chat_*: estadísticas→chat_usuario_estadisticas; ranking→chat_top_usuarios; diario→chat_actividad_por_dia; lista→chat_listar_preguntas; búsqueda→chat_buscar_pregunta; threads→chat_resumen_threads. Fechas obligatorias salvo chat_buscar_pregunta y chat_listar_preguntas. chat_listar_preguntas acepta role (cargo/rol) en vez de username: "gerente"→role="gerencia", "administrador"→role="administrador", "operativo"→role="operativo", "analista"→role="analista". Para "últimas N preguntas de gerente" usa chat_listar_preguntas con role="gerencia" y por_pagina=N (sin fechas). Sin reporte_url en herramientas chat.
 
-FORMATO TABLAS: una sola tabla con columnas horizontales (una fila por ítem). NUNCA uses `**` en ninguna parte de una celda de tabla — ni al inicio, ni al final, ni como encabezado de grupo. Cada celda solo texto plano o número. Para resumen_por_linea usa columnas: Línea | Peso (kg) | Valor (S/) | % del total.
+RESUMEN POR PROVINCIA: "ventas por provincia", "resumen por provincia", "desglose por provincia", "cuánto vendió cada provincia" → ventasgeneral_resumen_por_provincia UNA sola vez. PROHIBIDO llamar ventasgeneral_resumen varias veces con provincia distinta.
+
+FORMATO TABLAS: una sola tabla con columnas horizontales (una fila por ítem). NUNCA uses `**` en ninguna parte de una celda de tabla — ni al inicio, ni al final, ni como encabezado de grupo. Cada celda solo texto plano o número. Para resumen_por_linea usa columnas: Línea | Peso (kg) | Valor (S/) | % del total. Para resumen_por_provincia: Provincia | Peso (kg) | Importe (S/).
 URL: solo /modules/... sin dominio ni #fragmento, sin backticks, una sola por respuesta.
 Moneda S/ (S/ 1,234,567.89). Di "importe"/"monto" no "Valor"/"SUM". Español, breve."""
 
@@ -342,9 +345,9 @@ def chat():
 
         sql_traces = executor.pull_sql_traces()
         suffix = ''
-        if sql_traces:
-            suffix += '\n\n' + '\n\n'.join(sql_traces)
-            suffix += '\n\n---\nSentencia SQL ejecutada (texto plano):\n' + '\n\n'.join(sql_traces)
+        sql_text = format_sql_traces_for_display(sql_traces)
+        if sql_text:
+            suffix = '\n\n' + sql_text
 
         if suffix:
             reply = (reply + suffix).strip()
@@ -556,10 +559,9 @@ def chat_stream():
 
             sql_traces = executor.pull_sql_traces()
             sql_suffix = ''
-            if sql_traces:
-                sql_suffix = ('\n\n' + '\n\n'.join(sql_traces)
-                              + '\n\n---\nSentencia SQL ejecutada (texto plano):\n'
-                              + '\n\n'.join(sql_traces))
+            sql_text = format_sql_traces_for_display(sql_traces)
+            if sql_text:
+                sql_suffix = '\n\n' + sql_text
 
             q.put({
                 'type': 'done',

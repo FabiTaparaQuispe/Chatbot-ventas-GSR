@@ -269,6 +269,9 @@ def _format_payload(payload: dict) -> str:
     if not isinstance(first, dict):
         return ''
 
+    if str(payload.get('tipo') or '') == 'resumen_por_provincia':
+        return _lines_resumen_por_provincia(filas)
+
     if str(payload.get('tipo') or '') == 'linea_resumen_provincia_cliente':
         return _lines_linea_resumen_provincia(filas)
 
@@ -327,6 +330,16 @@ def _lines_top_nc(filas):
         v = _fmt_num(r.get('suma_valor') or 0)
         out.append(f'{i}. {nom}: {ln} notas de crédito por valor de {v}')
     return '\n'.join(out)
+
+
+def _lines_resumen_por_provincia(filas):
+    lines = ['| Provincia | Peso (kg) | Importe (S/) |', '| --- | ---: | ---: |']
+    for r in filas:
+        prov = str(r.get('provincia') or '')
+        peso = _fmt_num(r.get('suma_peso') or 0)
+        v = _fmt_num(r.get('suma_valor') or 0)
+        lines.append(f'| {prov} | {peso} | S/ {v} |')
+    return '\n'.join(lines)
 
 
 def _lines_linea_resumen_provincia(filas):

@@ -277,6 +277,30 @@ def _fmt_barras_ruta(result):
     return '\n'.join(lines)
 
 
+def _fmt_resumen_por_provincia(result):
+    filas = result.get('filas', [])
+    if not filas:
+        return None
+    per = _periodo(result)
+    header = 'Resumen de ventas por provincia'
+    if per:
+        header += f' del {per}'
+    lines = [
+        header + ':\n',
+        '| Provincia | Peso (kg) | Importe (S/) |',
+        '| --- | ---: | ---: |',
+    ]
+    for r in filas:
+        prov = r.get('provincia') or '?'
+        peso = f"{float(r.get('suma_peso') or 0):,.2f}"
+        valor = _m(r.get('suma_valor', 0))
+        lines.append(f'| {prov} | {peso} | {valor} |')
+    url = _url(result)
+    if url:
+        lines.append(f'\n{url}')
+    return '\n'.join(lines)
+
+
 def _fmt_barras_corporativo(result):
     filas = result.get('filas', [])
     if not filas:
@@ -399,6 +423,7 @@ _FORMATTERS = {
     'ventasgeneral_mix_tdoc':                 _fmt_mix_tdoc,
     'ventasgeneral_serie_mensual_valor':      _fmt_serie_mensual,
     'ventasgeneral_linea_resumen_provincia':  _fmt_linea_resumen,
+    'ventasgeneral_resumen_por_provincia':    _fmt_resumen_por_provincia,
 }
 
 

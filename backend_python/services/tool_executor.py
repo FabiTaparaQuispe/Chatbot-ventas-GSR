@@ -246,6 +246,7 @@ class ToolExecutor:
                 'ventasgeneral_linea_precio_resumen_provincia': self._linea_precio_resumen_provincia,
                 'ventasgeneral_linea_mix_productos': self._linea_mix_productos,
                 'ventasgeneral_resumen_por_linea': self._resumen_por_linea,
+                'ventasgeneral_resumen_por_provincia': self._resumen_por_provincia,
                 'ventasgeneral_catalogo': self._catalogo,
                 'chat_usuario_estadisticas': self._chat_usuario_estadisticas,
                 'chat_top_usuarios': self._chat_top_usuarios,
@@ -1311,6 +1312,96 @@ class ToolExecutor:
             'filas': filas,
             'paginacion': _pagination_meta(len(filas_all), pagina, por_pagina),
             'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_RESUMEN_POR_LINEA, q),
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _resumen_por_provincia(self, args):
+        d1, d2 = _parse_date_range(args)
+        pagina = _parse_pagina(args)
+        por_pagina = _parse_por_pagina(args)
+
+        where_sql = ' FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s'
+        params: dict = {'d1': d1, 'd2': d2}
+
+        linea = str(args.get('linea_comercial') or '').strip()
+        if linea:
+            _linea_where, _linea_bind = linea_where_fragment(self._conn, linea, style='pyformat')
+            where_sql += _linea_where
+            params.update(_linea_bind)
+
+        zona = str(args.get('zona_comercial') or '').strip()
+        if zona:
+            where_sql += ' AND ZonaComercial LIKE %(zona)s'
+            params['zona'] = f'%{zona}%'
+
+        cod = str(args.get('cod_cliente') or '').strip()
+        if cod:
+            where_sql += ' AND CodigoCliente = %(cod)s'
+            params['cod'] = cod
+
+        pref_z = str(args.get('prefijo_descri_zona_precio') or '').strip().upper()
+        if pref_z:
+            where_sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(prefzp)s"
+            params['prefzp'] = pref_z + '%'
+
+        tdoc = str(args.get('tipo_documento') or '').strip()
+        if tdoc:
+            where_sql += ' AND TipoDocumento LIKE %(tdoc)s'
+            params['tdoc'] = f'%{tdoc}%'
+
+        cod_doc = str(args.get('codigo_documento') or '').strip()
+        if cod_doc:
+            where_sql += ' AND CodigoDocumento = %(cod_doc)s'
+            params['cod_doc'] = cod_doc
+
+        sql = (
+            "SELECT COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
+            " COUNT(*) AS lineas,"
+            " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
+            " COALESCE(SUM(Peso),0) AS suma_peso,"
+            " COALESCE(SUM(Valor),0) AS suma_valor"
+            + where_sql
+            + " GROUP BY COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)')"
+            " ORDER BY suma_valor DESC"
+        )
+        rows = _q(self._conn, sql, params)
+
+        total_valor = sum(float(r.get('suma_valor') or 0) for r in rows)
+        filas_all = []
+        for r in rows:
+            sv = float(r.get('suma_valor') or 0)
+            filas_all.append({
+                'provincia': str(r.get('provincia') or ''),
+                'lineas': int(r.get('lineas') or 0),
+                'suma_cantidad': float(r.get('suma_cantidad') or 0),
+                'suma_peso': float(r.get('suma_peso') or 0),
+                'suma_valor': sv,
+                'pct_del_total': round(sv / total_valor * 100, 2) if total_valor else 0.0,
+            })
+        filas = _paginate_list(filas_all, pagina, por_pagina)
+
+        q = {'fecha_desde': d1, 'fecha_hasta': d2}
+        if linea:
+            q['linea_comercial'] = linea
+        if zona:
+            q['zona_comercial'] = zona
+        if cod:
+            q['cod_cliente'] = cod
+        if pref_z:
+            q['prefijo_descri_zona_precio'] = pref_z
+        if tdoc:
+            q['tipo_documento'] = tdoc
+        if cod_doc:
+            q['codigo_documento'] = cod_doc
+
+        return {
+            'tabla': 'ventasgeneral2',
+            'tipo': 'resumen_por_provincia',
+            'periodo': {'desde': d1, 'hasta': d2},
+            'total_valor': total_valor,
+            'filas': filas,
+            'paginacion': _pagination_meta(len(filas_all), pagina, por_pagina),
+            'reporte_url': _report_canonical(REPORT_VENTASGENERAL_RESUMEN_TABLA, q),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 

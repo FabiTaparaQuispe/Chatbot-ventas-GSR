@@ -250,6 +250,28 @@ def ventas_tool_definitions():
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
+            'name': 'ventasgeneral_resumen_por_provincia',
+            'description': (
+                'Totales por Provincia: SUM(Cantidad), SUM(Peso), SUM(Valor) y % del total. '
+                'Usar para "resumen de ventas por provincia", "ventas por provincia", '
+                '"desglose por provincia", "cuánto vendió cada provincia". '
+                'UNA sola llamada — NUNCA llames ventasgeneral_resumen varias veces con provincia distinta. '
+                'Filtros opcionales: linea_comercial, zona_comercial, cod_cliente, prefijo_descri_zona_precio, '
+                'tipo_documento, codigo_documento (07 para NC). '
+                f'reporte_url={REPORT_VENTASGENERAL_RESUMEN_TABLA}?…'
+            ),
+            'parameters': {'type': 'object', 'properties': {
+                'fecha_desde': d_opt, 'fecha_hasta': d_opt,
+                'linea_comercial': {'type': 'string', 'description': "Texto de LineaComercial, ej. 'Pollo Vivo'"},
+                'zona_comercial': {'type': 'string'},
+                'cod_cliente': {'type': 'string'},
+                'prefijo_descri_zona_precio': pref,
+                'tipo_documento': tdoc,
+                'codigo_documento': {'type': 'string', 'description': 'Código TDoc, ej. 07 para notas de crédito'},
+                'pagina': pagina, 'por_pagina': por_pagina,
+            }, 'required': ['fecha_desde', 'fecha_hasta']},
+        }},
+        {'type': 'function', 'function': {
             'name': 'ventasgeneral_catalogo',
             'description': (
                 'Devuelve los valores distintos (catálogo/maestro) de un campo de ventasgeneral2. '
