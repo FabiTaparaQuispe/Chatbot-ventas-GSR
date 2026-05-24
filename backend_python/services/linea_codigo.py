@@ -128,9 +128,5 @@ def index_hint_ventasgeneral2(
     tf = (tipo_fecha or 'contable').strip().lower()
     if tf == 'proceso':
         return ' FORCE INDEX (idx_vg2_fproc)'
-    if tf != 'contable':
-        return ''
-    cod = resolver_codigo_linea(conn, linea_texto)
-    if cod:
-        return ' FORCE INDEX (idx_vg2_fcont_linea)'
+    # idx_vg2_fcont_linea no existe en producción — no forzar índice
     return ''
