@@ -1452,7 +1452,7 @@
 
     let assistantStreamGen = 0;
 
-    function streamAssistantIntoBody(bodyEl, fullText, gen, outerDiv) {
+    function streamAssistantIntoBody(bodyEl, fullText, gen, outerDiv, onComplete) {
         const full = String(fullText);
         const parts = splitAssistantAnswerAndSql(full);
         const head = parts.head || '';
@@ -1479,6 +1479,7 @@
                 if (outerDiv && _assistantBodyHasWideTable(bodyEl.innerHTML)) outerDiv.classList.add('has-table');
                 if (outerDiv) outerDiv.classList.remove('ventas-chat-msg--streaming');
                 if (log) log.scrollTop = log.scrollHeight;
+                if (typeof onComplete === 'function') onComplete();
             }
         }
         window.setTimeout(tick, 0);
@@ -1518,7 +1519,7 @@
                 assistantStreamGen += 1;
                 const gen = assistantStreamGen;
                 div.classList.add('ventas-chat-msg--streaming');
-                streamAssistantIntoBody(body, text, gen, div);
+                streamAssistantIntoBody(body, text, gen, div, options.onComplete || null);
             } else {
                 body.innerHTML = renderAssistantHtml(text);
                 if (_assistantBodyHasWideTable(body.innerHTML)) div.classList.add('has-table');
@@ -2178,6 +2179,7 @@
 
     let sendInFlight = false;
     let _abortCtrl = null;
+    let _stopDeferredToAnim = false; // true = la animación llamará _hideStopBtn al terminar
 
     function _getStopBtn() {
         return document.getElementById('ventasChatStop');
@@ -2275,7 +2277,12 @@
                     finalizeStreamBubble(reply);
                 } else {
                     removeTypingIndicator();
-                    append('assistant', reply, { streamAssistant: true });
+                    // El botón se oculta cuando la animación termina, no en finally
+                    _stopDeferredToAnim = true;
+                    append('assistant', reply, { streamAssistant: true, onComplete: function () {
+                        _stopDeferredToAnim = false;
+                        _hideStopBtn();
+                    }});
                 }
             } else {
                 clearStreamBubble();
@@ -2303,7 +2310,8 @@
             send.disabled = false;
             sendInFlight = false;
             _abortCtrl = null;
-            _hideStopBtn();
+            // Si la animación de escritura terminará el trabajo, no ocultar el botón aquí
+            if (!_stopDeferredToAnim) _hideStopBtn();
         }
     }
 
