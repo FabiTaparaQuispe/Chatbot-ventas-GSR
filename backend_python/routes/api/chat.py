@@ -297,6 +297,15 @@ def chat():
                     cut_at = pos
             if cut_at > 20:
                 content = content[:cut_at].rstrip()
+            # Conservar solo la primera oración del asistente en el historial para evitar
+            # que fechas y valores concretos de respuestas anteriores contaminen la siguiente consulta.
+            for sep in ('\n\n', '\n', '. '):
+                idx = content.find(sep)
+                if 0 < idx <= 220:
+                    content = content[:idx].rstrip()
+                    break
+            if len(content) > 220:
+                content = content[:220].rstrip() + '…'
         if len(content) > 4000:
             content = content[:4000]
         if not content:
@@ -485,6 +494,13 @@ def _build_messages(data: dict) -> tuple:
                     cut_at = pos
             if cut_at > 20:
                 content = content[:cut_at].rstrip()
+            for sep in ('\n\n', '\n', '. '):
+                idx = content.find(sep)
+                if 0 < idx <= 220:
+                    content = content[:idx].rstrip()
+                    break
+            if len(content) > 220:
+                content = content[:220].rstrip() + '…'
         if len(content) > 4000:
             content = content[:4000]
         if not content:
