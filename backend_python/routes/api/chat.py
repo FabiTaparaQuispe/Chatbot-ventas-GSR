@@ -175,7 +175,7 @@ _NC_TOOLS = {
 _LINEA_KW = ('línea', 'linea', 'pollo', 'embutido', 'menudencia', 'semielaborado',
               'pavos', 'pavo', 'precocido', 'huevo', 'cerdo', 'promocion',
               'insumo', 'envase', 'brasa', 'trozado', 'beneficiado', 'congelado',
-              'precio por', 'carne', 'lineacomercial')
+              'precio por', 'precio', 'por kg', 'precio/kg', 'caro por', 'carne', 'lineacomercial')
 _CHAT_KW  = ('chatbot', 'chat', 'bot', 'preguntas que', 'preguntó', 'pregunto',
              'actividad del', 'auditoría', 'auditoria', 'cuánto se usó', 'cuanto se uso',
              'quién preguntó', 'quien pregunto', 'threads', 'hilos', 'usuarios del',
