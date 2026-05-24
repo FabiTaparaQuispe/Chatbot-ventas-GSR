@@ -1,6 +1,10 @@
 import json
+import logging
+import traceback
 from datetime import date
 from urllib.parse import urlencode
+
+_log = logging.getLogger(__name__)
 
 from services.linea_codigo import index_hint_ventasgeneral2, linea_where_fragment
 from services.urlmap import (
@@ -271,6 +275,7 @@ class ToolExecutor:
                 ),
             }
         except Exception as e:
+            _log.error('tool_executor error [%s]: %s\n%s', name, e, traceback.format_exc())
             result = {'error': str(e)}
 
         traces = result.pop('_sql_traces', [])
