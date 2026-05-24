@@ -180,7 +180,7 @@ def sql_interpolate(sql, params):
     out = sql
     for k, v in sorted(params.items(), key=lambda x: -len(str(x[0]))):
         literal = _literal(v)
-        out = out.replace(k, literal, 1)
+        out = out.replace(f'%({k})s', literal, 1)
     return out
 
 
@@ -277,7 +277,7 @@ class ToolExecutor:
             if isinstance(t, dict) and 'sql' in t and 'params' in t:
                 interp = t['sql']
                 for k, v in sorted(t['params'].items(), key=lambda x: -len(str(x[0]))):
-                    interp = interp.replace(k, _literal(v))
+                    interp = interp.replace(f'%({k})s', _literal(v))
                 self._sql_traces.append(interp)
             elif isinstance(t, str):
                 self._sql_traces.append(t)
@@ -290,6 +290,12 @@ class ToolExecutor:
                ' COALESCE(SUM(Cantidad),0) AS suma_cantidad, COALESCE(SUM(Peso),0) AS suma_peso'
                ' FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s')
         params = {'d1': d1, 'd2': d2}
+
+        linea = str(args.get('linea_comercial') or '').strip()
+        if linea:
+            _linea_where, _linea_bind = linea_where_fragment(self._conn, linea, style='pyformat')
+            sql += _linea_where
+            params.update(_linea_bind)
 
         zona = str(args.get('zona_comercial') or '').strip()
         if zona:
@@ -318,6 +324,8 @@ class ToolExecutor:
 
         row = _q1(self._conn, sql, params) or {}
         q = {'fecha_desde': d1, 'fecha_hasta': d2}
+        if linea:
+            q['linea_comercial'] = linea
         if zona:
             q['zona_comercial'] = zona
         if cod:

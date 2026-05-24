@@ -42,12 +42,13 @@ def ventas_tool_definitions():
     return [
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_resumen',
-            'description': f'Totales ventasgeneral (filas, suma Valor/Cantidad/Peso) con filtros opcionales. Para notas de crédito usar codigo_documento="07". reporte_url={REPORT_VENTASGENERAL_RESUMEN_TABLA}?…',
+            'description': f'Totales ventasgeneral (filas, suma Valor/Cantidad/Peso) con filtros opcionales. Para notas de crédito usar codigo_documento="07". Para filtrar por una línea comercial específica usar linea_comercial. reporte_url={REPORT_VENTASGENERAL_RESUMEN_TABLA}?…',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt,
                 'zona_comercial': d, 'cod_cliente': d,
                 'prefijo_descri_zona_precio': pref, 'provincia': prov, 'tipo_documento': tdoc,
                 'codigo_documento': {'type': 'string', 'description': 'Código de tipo de documento: "07"=Nota de Crédito. Usar en vez de tipo_documento para filtrar NCs.'},
+                'linea_comercial': {'type': 'string', 'description': "Filtra por línea comercial exacta, ej. 'Pollo Vivo', 'Embutidos'. Usar cuando el usuario pide totales de UNA línea específica sin desglose."},
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
