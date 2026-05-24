@@ -550,6 +550,10 @@
                 }
                 append(m.role, m.content);
             }
+            // Scroll al último mensaje tras renderizar todos (incluyendo tablas)
+            if (log) {
+                window.setTimeout(function () { log.scrollTop = log.scrollHeight; }, 80);
+            }
             renderThreadsList();
         })();
     }
@@ -1728,6 +1732,8 @@
         applyShortcutsVisibility();
         if (input) input.focus();
         syncOpenFullHref();
+        // Al abrir el panel, posicionar en el último mensaje
+        if (log) window.setTimeout(function () { log.scrollTop = log.scrollHeight; }, 60);
     }
 
     function closePanel() {
