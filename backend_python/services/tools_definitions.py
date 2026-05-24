@@ -118,9 +118,11 @@ def ventas_tool_definitions():
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_top_clientes_globales',
-            'description': f'Top clientes global por SUM(Valor), sin filtro de zona. top_n acota el universo; pagina/por_pagina lo navegan. reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_TOP_CLIENTES_GLOBAL}?…',
+            'description': f'Top clientes global por SUM(Valor). Soporta filtros opcionales: provincia (ej. AREQUIPA, TACNA) y linea_comercial. Usar cuando el usuario pide top clientes por provincia o sin especificar zona de precio. top_n acota el universo; pagina/por_pagina lo navegan. reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_TOP_CLIENTES_GLOBAL}?…',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'top_n': dn,
+                'provincia': prov,
+                'linea_comercial': {'type': 'string', 'description': "Filtra por línea comercial, ej. 'Pollo Vivo'"},
                 'pagina': pagina, 'por_pagina': por_pagina,
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},

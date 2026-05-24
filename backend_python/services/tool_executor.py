@@ -664,6 +664,19 @@ class ToolExecutor:
         top = _int_arg(args.get('top_n'), 10, 1, 100)
         pagina = _parse_pagina(args)
         por_pagina = _parse_por_pagina(args)
+        prov = str(args.get('provincia') or '').strip()
+        linea = str(args.get('linea_comercial') or '').strip()
+
+        where_extra = ''
+        params = {'d1': d1, 'd2': d2}
+        if prov:
+            where_extra += ' AND Provincia LIKE %(prov)s'
+            params['prov'] = f'%{prov}%'
+        if linea:
+            _linea_where, _linea_bind = linea_where_fragment(self._conn, linea, style='pyformat')
+            where_extra += _linea_where
+            params.update(_linea_bind)
+
         sql = ("SELECT CodigoCliente AS cod_cliente,"
                " MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
                " COUNT(*) AS lineas,"
@@ -671,11 +684,11 @@ class ToolExecutor:
                " COALESCE(SUM(Peso),0) AS suma_peso,"
                " COALESCE(SUM(Valor),0) AS suma_valor"
                " FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+               + where_extra +
                f" GROUP BY CodigoCliente ORDER BY suma_valor DESC LIMIT {top}")
-        params = {'d1': d1, 'd2': d2}
         raw = _q(self._conn, sql, params)
         total_row = _q1(self._conn,
-            'SELECT COALESCE(SUM(Valor),0) AS t FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s',
+            'SELECT COALESCE(SUM(Valor),0) AS t FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s' + where_extra,
             params)
         total = float((total_row or {}).get('t') or 0)
         cum = 0.0
