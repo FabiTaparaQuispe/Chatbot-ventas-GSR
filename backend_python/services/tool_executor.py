@@ -311,6 +311,10 @@ class ToolExecutor:
         if cod:
             sql += ' AND CodigoCliente = %(cod)s'
             params['cod'] = cod
+        nom_cli = str(args.get('nombre_cliente') or '').strip()
+        if nom_cli:
+            sql += ' AND NombreCliente LIKE %(nom_cli)s'
+            params['nom_cli'] = f'%{nom_cli}%'
         pref_z = str(args.get('prefijo_descri_zona_precio') or '').strip().upper()
         if pref_z:
             sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(prefzp)s"
@@ -336,6 +340,8 @@ class ToolExecutor:
             q['zona_comercial'] = zona
         if cod:
             q['cod_cliente'] = cod
+        if nom_cli:
+            q['nombre_cliente'] = nom_cli
         if pref_z:
             q['prefijo_descri_zona_precio'] = pref_z
         if prov:

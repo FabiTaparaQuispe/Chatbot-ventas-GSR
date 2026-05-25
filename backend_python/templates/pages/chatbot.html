@@ -72,6 +72,8 @@
     }
     .ventas-chat-menu-item:hover { background: rgba(37,99,235,0.1); }
     a.ventas-chat-menu-item.ventas-chat-menu-link { text-decoration: none; box-sizing: border-box; }
+    .chatbot-stop-btn { background: #ef4444 !important; color: #fff !important; border-color: #ef4444 !important; }
+    .chatbot-stop-btn:hover { background: #dc2626 !important; border-color: #dc2626 !important; }
 </style>
 
 <button type="button" id="ventasChatPipBackdrop" class="ventas-chat-pip-backdrop" hidden aria-hidden="true" tabindex="-1" title="Cerrar vista ventana"></button>
@@ -129,6 +131,7 @@
             <textarea id="ventasChatInput" rows="1" placeholder="Escribe tu pregunta sobre ventas, fechas, clientes, productos…"></textarea>
             <div class="chatbot-composer-row">
                 <button type="button" id="ventasChatMic" class="ventas-chat-mic-btn-full" aria-label="Dictado por voz" title="Dictado por voz" aria-pressed="false">🎙 Dictar</button>
+                <button type="button" id="ventasChatStop" class="btn chatbot-send chatbot-stop-btn" hidden>&#9632; Detener</button>
                 <button type="button" id="ventasChatSend" class="btn btn-primary chatbot-send">Enviar</button>
             </div>
         </div>
