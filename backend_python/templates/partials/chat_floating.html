@@ -28,6 +28,10 @@
     }
     html[data-theme="dark"] .chat-panel { box-shadow: 0 16px 48px rgba(0,0,0,0.55); }
     .chat-panel[hidden] { display: none !important; }
+    .chat-panel--minimized { min-height: 0 !important; resize: none !important; }
+    .chat-panel--minimized > *:not(.chat-panel-head) { display: none !important; }
+    #ventasChatMinimize { font-size: 1.5rem; line-height: 1; }
+    .chat-panel--minimized #ventasChatMinimize { transform: rotate(180deg); }
     .chat-panel-head {
         display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
         padding: 0.85rem 1rem;
@@ -190,6 +194,7 @@
                     {% endif %}
                 </div>
             </details>
+            <button type="button" id="ventasChatMinimize" class="chat-icon-btn" aria-label="Minimizar" title="Minimizar">⌄</button>
             <button type="button" id="ventasChatClose" class="chat-icon-btn" aria-label="Cerrar">×</button>
         </div>
     </div>

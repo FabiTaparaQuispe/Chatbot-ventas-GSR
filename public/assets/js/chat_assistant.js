@@ -30,6 +30,7 @@
     const errEl = document.getElementById('ventasChatError');
     const fab = isFull ? null : document.getElementById('ventasChatFab');
     const panel = document.getElementById('ventasChatPanel');
+    const minimizeBtn = document.getElementById('ventasChatMinimize');
     const closeBtn = document.getElementById('ventasChatClose');
     const clearBtn = document.getElementById('ventasChatClear');
     const faqSelect = document.getElementById('ventasChatFaqSelect');
@@ -1768,6 +1769,14 @@
         syncOpenFullHref();
         openFullEl.addEventListener('pointerdown', syncOpenFullHref);
         openFullEl.addEventListener('focus', syncOpenFullHref);
+    }
+    if (minimizeBtn && panel) {
+        minimizeBtn.addEventListener('click', function () {
+            panel.classList.toggle('chat-panel--minimized');
+            const minimized = panel.classList.contains('chat-panel--minimized');
+            minimizeBtn.setAttribute('aria-label', minimized ? 'Restaurar' : 'Minimizar');
+            minimizeBtn.setAttribute('title', minimized ? 'Restaurar' : 'Minimizar');
+        });
     }
     if (closeBtn) {
         closeBtn.addEventListener('click', closePanel);

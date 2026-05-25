@@ -50,6 +50,7 @@ def ventas_tool_definitions():
                 'prefijo_descri_zona_precio': pref, 'provincia': prov, 'tipo_documento': tdoc,
                 'codigo_documento': {'type': 'string', 'description': 'Código de tipo de documento: "07"=Nota de Crédito. Usar en vez de tipo_documento para filtrar NCs.'},
                 'linea_comercial': {'type': 'string', 'description': "Filtra por línea comercial exacta, ej. 'Pollo Vivo', 'Embutidos'. Usar cuando el usuario pide totales de UNA línea específica sin desglose."},
+                'excluir_nc': {'type': 'boolean', 'description': 'Si true, excluye Notas de Crédito (CodigoDocumento=07) del total. Usar cuando se quiere el total bruto de ventas (facturas+boletas) como denominador para calcular % de NCs.'},
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {

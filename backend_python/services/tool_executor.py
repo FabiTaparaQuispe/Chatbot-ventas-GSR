@@ -333,6 +333,9 @@ class ToolExecutor:
         if cod_doc:
             sql += ' AND CodigoDocumento = %(cod_doc)s'
             params['cod_doc'] = cod_doc
+        excluir_nc = str(args.get('excluir_nc') or '').strip().lower() in ('true', '1', 'yes', 'si', 'sí')
+        if excluir_nc:
+            sql += " AND CodigoDocumento != '07'"
 
         row = _q1(self._conn, sql, params) or {}
         q = {'fecha_desde': d1, 'fecha_hasta': d2}
