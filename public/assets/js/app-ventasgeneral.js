@@ -429,10 +429,26 @@
         });
     }
 
+    function loadSelectOpciones() {
+        $.getJSON('/api/tipos_documento_vg', function (lista) {
+            var $sel = $('#vgTipoDoc');
+            $.each(lista, function (_, v) {
+                $sel.append($('<option>', { value: v, text: v }));
+            });
+        });
+        $.getJSON('/api/provincias_vg', function (lista) {
+            var $sel = $('#vgProvincia');
+            $.each(lista, function (_, v) {
+                $sel.append($('<option>', { value: v, text: v }));
+            });
+        });
+    }
+
     $(function () {
         if (!$('#tablaVentasGeneral').length) {
             return;
         }
+        loadSelectOpciones();
         var r = defaultRange();
         $('#vgDesde').val(r.desde);
         $('#vgHasta').val(r.hasta);

@@ -54,9 +54,20 @@ def ventas_tool_definitions():
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_buscar',
-            'description': f'Filas individuales ventasgeneral (paginado). Usar para buscar líneas concretas, no para totales. Usa pagina/por_pagina para navegar el resultado. reporte_url={REPORT_VENTASGENERAL_BUSCAR_TABLA}?…',
+            'description': (
+                f'Filas individuales ventasgeneral (paginado). Usar para buscar líneas concretas, '
+                f'no para totales. También usar para "busca la factura X", "busca el documento X", '
+                f'"muéstrame el número X". '
+                f'numero_doc = número de factura/boleta (ej. "3750004023") → usa SIEMPRE para buscar por número de documento. '
+                f'tdoc = código de 2 chars ("01"=Factura,"03"=Boleta,"07"=NC) — NUNCA pongas aquí un número largo. '
+                f'tipo_documento = texto "Boleta de Venta","Factura","Nota de Crédito". '
+                f'Usa pagina/por_pagina para navegar el resultado. reporte_url={REPORT_VENTASGENERAL_BUSCAR_TABLA}?…'
+            ),
             'parameters': {'type': 'object', 'properties': {
-                'nombre_cliente': d, 'numero_doc': d, 'cod_item': d, 'tdoc': d,
+                'nombre_cliente': d,
+                'numero_doc': {'type': 'string', 'description': 'Número de factura/boleta (NumeroFactura). Ej: "3750004023". Usar para "busca la factura X", "documento número X".'},
+                'cod_item': d,
+                'tdoc': {'type': 'string', 'description': 'Código de documento de 2 chars: "01"=Factura, "03"=Boleta de Venta, "07"=Nota de Crédito. NUNCA poner un número de factura aquí.'},
                 'prefijo_descri_zona_precio': pref, 'fecha_desde': d_opt, 'fecha_hasta': d_opt,
                 'provincia': prov, 'tipo_documento': tdoc,
                 'pagina': pagina, 'por_pagina': por_pagina,

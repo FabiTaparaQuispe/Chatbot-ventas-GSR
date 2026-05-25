@@ -70,6 +70,40 @@ def api_lineas():
         return jsonify({'results': [], 'pagination': {'more': False}, 'error': str(e)}), 500
 
 
+@bp.route('/api/tipos_documento_vg')
+def api_tipos_documento_vg():
+    try:
+        conn = get_connection()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT DISTINCT TRIM(TipoDocumento) AS tdoc FROM ventasgeneral2"
+                " WHERE TipoDocumento IS NOT NULL AND TRIM(TipoDocumento) != ''"
+                " ORDER BY tdoc"
+            )
+            rows = cur.fetchall()
+        return jsonify([r['tdoc'] for r in rows])
+    except Exception as e:
+        logger.exception('api_tipos_documento_vg')
+        return jsonify([]), 500
+
+
+@bp.route('/api/provincias_vg')
+def api_provincias_vg():
+    try:
+        conn = get_connection()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT DISTINCT TRIM(Provincia) AS prov FROM ventasgeneral2"
+                " WHERE Provincia IS NOT NULL AND TRIM(Provincia) != ''"
+                " ORDER BY prov"
+            )
+            rows = cur.fetchall()
+        return jsonify([r['prov'] for r in rows])
+    except Exception as e:
+        logger.exception('api_provincias_vg')
+        return jsonify([]), 500
+
+
 @bp.route('/api/ventasgeneral', methods=['GET'])
 @bp.route('/api/ventasgeneral_dt.php', methods=['GET'])
 def ventas_dt():
