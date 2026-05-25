@@ -777,6 +777,14 @@
             .replace(/`([^`\n]*\/modules\/[^\s`?]+\?[^`\n]*)`/gi, '$1');
     }
 
+    function unwrapMarkdownLinks(text) {
+        // [texto](url) → url  (el LLM a veces envuelve URLs en sintaxis Markdown)
+        return String(text).replace(
+            /\[([^\]\n]*)\]\((https?:\/\/[^\s)]+|\/modules\/[^\s)]+)\)/g,
+            '$2'
+        );
+    }
+
     function collapseMultilineQueryUrls(text) {
         let t = String(text);
         let prev;
@@ -910,6 +918,7 @@
     function linkifyAssistant(text) {
         let t = normalizeTextForLinkify(text);
         t = unwrapBackticksAroundPhpUrls(t);
+        t = unwrapMarkdownLinks(t);
         t = collapseDateLineBreaks(t);
         t = collapseMultilineQueryUrls(t);
         /** reporte_url: … → enlace "ver reporte" (href resuelto; sin mostrar URL larga). */

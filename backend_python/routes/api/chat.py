@@ -38,7 +38,7 @@ AUDITORÍA CHATBOT: señales "preguntas del chatbot","cuánto se usó","qué pre
 RESUMEN POR PROVINCIA: "ventas por provincia", "resumen por provincia", "desglose por provincia", "cuánto vendió cada provincia" → ventasgeneral_resumen_por_provincia UNA sola vez. PROHIBIDO llamar ventasgeneral_resumen varias veces con provincia distinta.
 
 FORMATO TABLAS: una sola tabla con columnas horizontales (una fila por ítem). NUNCA uses `**` en ninguna parte de una celda de tabla — ni al inicio, ni al final, ni como encabezado de grupo. Cada celda solo texto plano o número. Para resumen_por_linea usa columnas: Línea | Peso (kg) | Valor (S/) | % del total. Para resumen_por_provincia: Provincia | Peso (kg) | Importe (S/).
-URL: solo /modules/... sin dominio ni #fragmento, sin backticks, una sola por respuesta.
+URL REPORTE: escribe la URL exactamente como la devuelve la herramienta en reporte_url (empieza con /modules/). NUNCA añadas el dominio. NUNCA uses formato Markdown [texto](url). Solo la URL plana, sin backticks, una sola por respuesta. Ejemplo correcto: /modules/reports/ventas-linea-precio-diario?desde=2026-01-01&hasta=2026-01-31&linea=Pollo+Vivo&pagina=1&por_pagina=50
 Moneda S/ (S/ 1,234,567.89). Di "importe"/"monto" no "Valor"/"SUM". Español, breve."""
 
 
