@@ -1109,7 +1109,7 @@ class ToolExecutor:
             "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
             "      ELSE NULL END AS precio_kg"
             + where_sql + group_by
-            + f" ORDER BY fecha ASC, suma_peso DESC LIMIT {por_pagina} OFFSET {offset}"
+            + f" ORDER BY precio_kg DESC, fecha ASC, suma_peso DESC LIMIT {por_pagina} OFFSET {offset}"
         )
         rows = _q(self._conn, sql_select, params)
         q = _qs({'desde': d1, 'hasta': d2, 'linea': linea,
@@ -1157,7 +1157,7 @@ class ToolExecutor:
         if mercado:
             sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(prefzo)s"
             params['prefzo'] = mercado + '%'
-        sql += " GROUP BY provincia ORDER BY suma_peso DESC"
+        sql += " GROUP BY provincia ORDER BY precio_kg DESC"
         rows = _q(self._conn, sql, params)
         filas = []
         total_peso = 0.0
