@@ -1,5 +1,9 @@
 /* SIP-like UI (portado del proyecto de referencia) */
 
+/* Normalización: el atributo HTML [hidden] debe ocultar siempre,
+   aunque un selector de clase tenga display diferente. */
+[hidden] { display: none !important; }
+
 :root {
     --font: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     --radius-sm: 8px;
