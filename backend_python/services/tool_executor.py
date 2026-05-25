@@ -244,6 +244,7 @@ class ToolExecutor:
                 'ventasgeneral_barras_corporativo': self._barras_corporativo,
                 'ventasgeneral_serie_mensual_valor': self._serie_mensual,
                 'ventasgeneral_resumen_semanal': self._resumen_semanal,
+                'ventasgeneral_resumen_diario': self._resumen_diario,
                 'ventasgeneral_proyeccion_ventas': self._proyeccion,
                 'ventasgeneral_linea_resumen_provincia': self._linea_resumen_provincia,
                 'ventasgeneral_linea_diario_provincia': self._linea_diario_provincia,
@@ -948,6 +949,41 @@ class ToolExecutor:
             'periodo': {'desde': d1, 'hasta': d2},
             'filas': [dict(r) for r in rows],
             'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_SERIE_MENSUAL, q),
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
+    def _resumen_diario(self, args):
+        d1, d2 = _parse_date_range(args)
+        orden = str(args.get('orden') or 'valor').strip().lower()
+        order_col = 'suma_valor' if orden != 'cantidad' and orden != 'peso' else f'suma_{orden}'
+        linea = str(args.get('linea_comercial') or '').strip()
+        params = {'d1': d1, 'd2': d2}
+        extra_where = ''
+        if linea:
+            _linea_where, _linea_bind = linea_where_fragment(self._conn, linea, style='pyformat')
+            extra_where += _linea_where
+            params.update(_linea_bind)
+        prov = str(args.get('provincia') or '').strip()
+        if prov:
+            extra_where += ' AND Provincia LIKE %(prov)s'
+            params['prov'] = f'%{prov}%'
+        sql = (
+            "SELECT FechaContable AS fecha,"
+            " COUNT(*) AS registros,"
+            " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
+            " COALESCE(SUM(Peso),0) AS suma_peso,"
+            " COALESCE(SUM(Valor),0) AS suma_valor"
+            " FROM ventasgeneral2"
+            " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+            + extra_where +
+            f" GROUP BY FechaContable ORDER BY {order_col} DESC"
+        )
+        rows = _q(self._conn, sql, params)
+        return {
+            'tabla': 'ventasgeneral2',
+            'tipo': 'resumen_diario',
+            'periodo': {'desde': d1, 'hasta': d2},
+            'filas': [dict(r) for r in rows],
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 

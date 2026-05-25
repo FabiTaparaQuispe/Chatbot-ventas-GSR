@@ -179,6 +179,23 @@ def ventas_tool_definitions():
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
+            'name': 'ventasgeneral_resumen_diario',
+            'description': (
+                'Totales de ventas agrupados por día: registros, suma_cantidad, suma_peso, suma_valor. '
+                'Ordenados de mayor a menor por valor por defecto. '
+                'Usar para "qué día se vendió más/menos", "día con más ventas", "desglose diario", '
+                '"ventas día a día", "cuánto se vendió cada día". '
+                'Filtros opcionales: linea_comercial, provincia. '
+                'orden: "valor" (defecto), "cantidad" o "peso".'
+            ),
+            'parameters': {'type': 'object', 'properties': {
+                'fecha_desde': d_opt, 'fecha_hasta': d_opt,
+                'linea_comercial': {'type': 'string', 'description': "Filtra por línea comercial, ej. 'Pollo Vivo'"},
+                'provincia': prov,
+                'orden': {'type': 'string', 'description': '"valor" (defecto), "cantidad" o "peso"'},
+            }, 'required': ['fecha_desde', 'fecha_hasta']},
+        }},
+        {'type': 'function', 'function': {
             'name': 'ventasgeneral_resumen_semanal',
             'description': (
                 'Totales de ventas agrupados por semana (lunes–domingo): registros, suma_cantidad, suma_peso, suma_valor. '
