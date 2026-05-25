@@ -179,6 +179,19 @@ def ventas_tool_definitions():
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
+            'name': 'ventasgeneral_resumen_semanal',
+            'description': (
+                'Totales de ventas agrupados por semana (lunes–domingo): registros, suma_cantidad, suma_peso, suma_valor. '
+                'Usar para "por semana", "semana a semana", "cada semana", "desglose semanal". '
+                'Filtros opcionales: linea_comercial, provincia.'
+            ),
+            'parameters': {'type': 'object', 'properties': {
+                'fecha_desde': d_opt, 'fecha_hasta': d_opt,
+                'linea_comercial': {'type': 'string', 'description': "Filtra por línea comercial, ej. 'Pollo Vivo'"},
+                'provincia': prov,
+            }, 'required': ['fecha_desde', 'fecha_hasta']},
+        }},
+        {'type': 'function', 'function': {
             'name': 'ventasgeneral_proyeccion_ventas',
             'description': 'Proyección de ventas futuras con regresión lineal sobre la serie mensual histórica. Requiere ≥2 meses de historial.',
             'parameters': {'type': 'object', 'properties': {
