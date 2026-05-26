@@ -551,9 +551,10 @@
                 }
                 append(m.role, m.content);
             }
-            // Scroll al último mensaje tras renderizar todos (incluyendo tablas)
+            // Scroll al último mensaje: primer intento rápido + segundo para tablas lentas
             if (log) {
                 window.setTimeout(function () { log.scrollTop = log.scrollHeight; }, 80);
+                window.setTimeout(function () { log.scrollTop = log.scrollHeight; }, 400);
             }
             renderThreadsList();
         })();
@@ -1744,7 +1745,10 @@
         if (input) input.focus();
         syncOpenFullHref();
         // Al abrir el panel, posicionar en el último mensaje
-        if (log) window.setTimeout(function () { log.scrollTop = log.scrollHeight; }, 60);
+        if (log) {
+            window.setTimeout(function () { log.scrollTop = log.scrollHeight; }, 80);
+            window.setTimeout(function () { log.scrollTop = log.scrollHeight; }, 400);
+        }
     }
 
     function closePanel() {
