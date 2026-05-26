@@ -156,9 +156,9 @@ def _append_url(text: str, url: str) -> str:
     return text
 
 
-def enrich_reply(reply: str, groq_messages: list) -> str:
+def enrich_reply(reply: str, groq_messages: list, last_tool_json: str | None = None) -> str:
     reply = _format_display_numbers(_clean_table_asterisks(_normalize_minus_signs(_sanitize_urls(reply.strip()))))
-    payload = _last_tool_payload(groq_messages)
+    payload = _payload_from_json(last_tool_json) if last_tool_json else _last_tool_payload(groq_messages)
     if payload is None:
         if _uses_generic_labels(reply):
             url = _extract_reporte_url(reply)
@@ -186,6 +186,17 @@ def enrich_reply(reply: str, groq_messages: list) -> str:
 
     result = _format_display_numbers((summary + ('\n\n' + reply if reply else '')).strip())
     return _append_url(result, report_url)
+
+
+def _payload_from_json(tool_json: str):
+    """Parse a raw tool JSON string into a payload dict (returns None on error or if contains error key)."""
+    try:
+        decoded = json.loads(tool_json)
+    except Exception:
+        return None
+    if not isinstance(decoded, dict) or decoded.get('error'):
+        return None
+    return decoded
 
 
 def _last_tool_payload(messages: list):

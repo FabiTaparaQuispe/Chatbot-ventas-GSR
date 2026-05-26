@@ -349,7 +349,8 @@ def chat():
             try_fast_format=try_fast_format,
         )
 
-        reply = enrich_reply(str(result.get('reply') or ''), result.get('messages') or [])
+        last_tool_json = executor.pull_last_tool_json()
+        reply = enrich_reply(str(result.get('reply') or ''), result.get('messages') or [], last_tool_json=last_tool_json)
 
         sql_traces = executor.pull_sql_traces()
         suffix = ''
@@ -562,7 +563,8 @@ def chat_stream():
                 try_fast_format=try_fast_format,
             )
 
-            reply = enrich_reply(str(reply or ''), working)
+            last_tool_json = executor.pull_last_tool_json()
+            reply = enrich_reply(str(reply or ''), working, last_tool_json=last_tool_json)
             reply = _unify_pareto_links(reply)
 
             sql_traces = executor.pull_sql_traces()

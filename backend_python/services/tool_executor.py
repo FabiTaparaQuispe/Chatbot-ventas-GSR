@@ -220,12 +220,18 @@ class ToolExecutor:
     def __init__(self, conn, prev_result=None):
         self._conn = conn
         self._sql_traces = []
+        self._last_tool_json: str | None = None
         self._prev_result = prev_result  # dict or None
 
     def pull_sql_traces(self):
         t = self._sql_traces[:]
         self._sql_traces.clear()
         return t
+
+    def pull_last_tool_json(self) -> str | None:
+        j = self._last_tool_json
+        self._last_tool_json = None
+        return j
 
     def execute(self, name, args):
         try:
@@ -292,7 +298,10 @@ class ToolExecutor:
             elif isinstance(t, str):
                 self._sql_traces.append(t)
 
-        return json.dumps(result, ensure_ascii=False, default=str)
+        result_json = json.dumps(result, ensure_ascii=False, default=str)
+        if not result.get('error'):
+            self._last_tool_json = result_json
+        return result_json
 
     def _resumen(self, args):
         d1, d2 = _parse_date_range(args)
