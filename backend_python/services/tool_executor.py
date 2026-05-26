@@ -22,6 +22,7 @@ from services.urlmap import (
     REPORT_SLUG_VENTAS_MIX_TDOC,
     REPORT_SLUG_VENTAS_RESUMEN_POR_LINEA,
     REPORT_SLUG_VENTAS_RESUMEN_POR_PROVINCIA,
+    REPORT_SLUG_VENTAS_CLIENTES_CORPORATIVO,
     REPORT_SLUG_VENTAS_SERIE_MENSUAL,
     REPORT_SLUG_VENTAS_TOP_CLIENTES_GLOBAL,
     REPORT_SLUG_VENTAS_TOP_CLIENTES_NC,
@@ -1620,12 +1621,18 @@ class ToolExecutor:
             'ultima_venta': str(r.get('ultima_venta') or ''),
         } for r in rows]
 
+        q_params = {'corporativo': nom_corp}
+        if d1:
+            q_params['desde'] = d1
+        if d2:
+            q_params['hasta'] = d2
         return {
             'tabla': 'ventasgeneral2',
             'tipo': 'clientes_corporativo',
             'nombre_corporativo': nom_corp,
             'total_clientes': len(filas),
             'filas': filas,
+            'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_CLIENTES_CORPORATIVO, _qs(q_params)),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 

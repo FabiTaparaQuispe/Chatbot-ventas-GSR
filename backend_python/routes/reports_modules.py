@@ -16,6 +16,7 @@ from services.urlmap import (
     REPORT_VENTASGENERAL_BUSCAR_TABLA,
     REPORT_VENTASGENERAL_RESUMEN_TABLA,
     REPORT_SLUG_VENTAS_RESUMEN_POR_PROVINCIA,
+    REPORT_SLUG_VENTAS_CLIENTES_CORPORATIVO,
     REPORTS_PREFIX,
     chat_assistant_config_dict,
 )
@@ -2682,6 +2683,83 @@ def ventas_resumen_por_provincia():
         'chart_data': {'labels': chart_labels, 'valores': chart_valores, 'pct_acum': chart_pct_acum},
     })
     return render_template('pages/reporte_resumen_por_provincia.html', **ctx)
+
+
+@bp.route(REPORTS_PREFIX + REPORT_SLUG_VENTAS_CLIENTES_CORPORATIVO)
+@require_login
+def ventas_clientes_corporativo():
+    from services.db import get_connection
+
+    nom_corp = (request.args.get('corporativo') or '').strip()
+    if not nom_corp:
+        return _bad('Parámetro requerido: corporativo.')
+
+    d1 = _parse_date_string(request.args.get('desde') or request.args.get('fecha_desde'))
+    d2 = _parse_date_string(request.args.get('hasta') or request.args.get('fecha_hasta'))
+
+    where = ' WHERE NombreCoorporativo LIKE :nom_corp'
+    bind: dict = {'nom_corp': f'%{nom_corp}%'}
+    if d1 and d2:
+        where += ' AND FechaContable BETWEEN :d1 AND :d2'
+        bind.update({'d1': d1, 'd2': d2})
+    elif d1:
+        where += ' AND FechaContable >= :d1'
+        bind['d1'] = d1
+    elif d2:
+        where += ' AND FechaContable <= :d2'
+        bind['d2'] = d2
+
+    sql = (
+        'SELECT CodigoCliente AS codigo_cliente,'
+        ' MAX(NombreCliente) AS nombre_cliente,'
+        ' COUNT(*) AS lineas,'
+        ' COALESCE(SUM(Peso),0) AS suma_peso,'
+        ' COALESCE(SUM(Valor),0) AS suma_valor,'
+        ' MIN(FechaContable) AS primera_venta,'
+        ' MAX(FechaContable) AS ultima_venta'
+        ' FROM ventasgeneral2' + where +
+        ' GROUP BY CodigoCliente ORDER BY nombre_cliente'
+    )
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql), bind)
+        raw = cur.fetchall() or []
+
+    total_lineas = sum(int(r.get('lineas') or 0) for r in raw)
+    total_peso = sum(float(r.get('suma_peso') or 0) for r in raw)
+    total_valor = sum(float(r.get('suma_valor') or 0) for r in raw)
+
+    filas = [{
+        'codigo_cliente': str(r.get('codigo_cliente') or ''),
+        'nombre_cliente': str(r.get('nombre_cliente') or ''),
+        'lineas': int(r.get('lineas') or 0),
+        'suma_peso': f'{float(r.get("suma_peso") or 0):,.2f}',
+        'suma_valor': f'{float(r.get("suma_valor") or 0):,.2f}',
+        'primera_venta': str(r.get('primera_venta') or ''),
+        'ultima_venta': str(r.get('ultima_venta') or ''),
+    } for r in raw]
+
+    periodo_str = ''
+    if d1 and d2:
+        periodo_str = f'{d1} al {d2}'
+    elif d1:
+        periodo_str = f'desde {d1}'
+    elif d2:
+        periodo_str = f'hasta {d2}'
+
+    titulo = f'Clientes del corporativo: {nom_corp}'
+    ctx = _report_shell_context(titulo)
+    ctx.update({
+        'titulo': titulo,
+        'nom_corp': nom_corp,
+        'periodo_str': periodo_str,
+        'filas': filas,
+        'total_lineas': f'{total_lineas:,}',
+        'total_peso': f'{total_peso:,.2f}',
+        'total_valor': f'{total_valor:,.2f}',
+        'pdf_filename': f'clientes_corporativo_{nom_corp[:30]}.pdf',
+    })
+    return render_template('pages/reporte_clientes_corporativo.html', **ctx)
 
 
 @bp.route('/modules/reports/<slug>')
