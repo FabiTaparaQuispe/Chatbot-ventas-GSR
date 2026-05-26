@@ -15,6 +15,8 @@ from services.linea_codigo import index_hint_ventasgeneral2, linea_where_fragmen
 from services.urlmap import (
     REPORT_VENTASGENERAL_BUSCAR_TABLA,
     REPORT_VENTASGENERAL_RESUMEN_TABLA,
+    REPORT_SLUG_VENTAS_RESUMEN_POR_PROVINCIA,
+    REPORTS_PREFIX,
     chat_assistant_config_dict,
 )
 
@@ -2560,6 +2562,95 @@ def ventas_resumen_por_linea():
         'chart_data': {'labels': chart_labels, 'valores': chart_valores, 'pct_acum': chart_pct_acum},
     })
     return render_template('pages/reporte_resumen_por_linea.html', **ctx)
+
+
+@bp.route(REPORTS_PREFIX + REPORT_SLUG_VENTAS_RESUMEN_POR_PROVINCIA)
+@require_login
+def ventas_resumen_por_provincia():
+    from services.db import get_connection
+
+    d1 = _parse_date_string(request.args.get('desde') or request.args.get('fecha_desde'))
+    d2 = _parse_date_string(request.args.get('hasta') or request.args.get('fecha_hasta'))
+    if not d1 or not d2 or d1 > d2:
+        return _bad('Parámetros requeridos: desde y hasta (YYYY-MM-DD).')
+
+    linea    = (request.args.get('linea_comercial') or '').strip()
+    cod_doc  = (request.args.get('codigo_documento') or '').strip()
+    tdoc     = (request.args.get('tipo_documento') or '').strip()
+    prefijo  = (request.args.get('prefijo_descri_zona_precio') or '').strip().upper()
+
+    where = ' WHERE FechaContable BETWEEN :d1 AND :d2'
+    bind: dict = {'d1': d1, 'd2': d2}
+
+    if linea:
+        where += ' AND LineaComercial = :linea'
+        bind['linea'] = linea
+    if cod_doc:
+        where += ' AND CodigoDocumento = :cod_doc'
+        bind['cod_doc'] = cod_doc
+    if tdoc:
+        where += ' AND TipoDocumento LIKE :tdoc'
+        bind['tdoc'] = f'%{tdoc}%'
+    if prefijo:
+        where += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzo"
+        bind['prefzo'] = prefijo + '%'
+
+    sql = (
+        "SELECT COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS provincia,"
+        " COUNT(*) AS lineas,"
+        " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
+        " COALESCE(SUM(Peso),0) AS suma_peso,"
+        " COALESCE(SUM(Valor),0) AS suma_valor"
+        " FROM ventasgeneral2" + where +
+        " GROUP BY COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)')"
+        " ORDER BY suma_valor DESC"
+    )
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql), bind)
+        raw = cur.fetchall() or []
+
+    total = sum(float(r.get('suma_valor') or 0) for r in raw)
+    cum = 0.0
+    filas = []
+    chart_labels: list = []
+    chart_valores: list = []
+    chart_pct_acum: list = []
+    for i, r in enumerate(raw, 1):
+        sv  = float(r.get('suma_valor') or 0)
+        sp  = float(r.get('suma_peso') or 0)
+        sc  = float(r.get('suma_cantidad') or 0)
+        pct = sv / total * 100 if total else 0.0
+        cum += pct
+        lbl = str(r.get('provincia') or '')
+        chart_labels.append(lbl[:30])
+        chart_valores.append(round(sv, 2))
+        chart_pct_acum.append(round(cum, 1))
+        filas.append({
+            'rank': i,
+            'provincia': lbl,
+            'lineas': int(r.get('lineas') or 0),
+            'suma_cantidad': f'{sc:,.2f}',
+            'suma_peso': f'{sp:,.2f}',
+            'suma_valor': f'{sv:,.2f}',
+            'pct_del_total': f'{pct:.1f}',
+            'pct_acumulado': f'{cum:.1f}',
+        })
+
+    titulo = 'Ventas por provincia'
+    if linea:
+        titulo += f' · {linea}'
+
+    ctx = _report_shell_context(titulo)
+    ctx.update({
+        'd1': d1, 'd2': d2,
+        'titulo': titulo,
+        'filas': filas,
+        'total_valor': f'{total:,.2f}',
+        'pdf_filename': f'resumen_provincia_{d1}_{d2}.pdf',
+        'chart_data': {'labels': chart_labels, 'valores': chart_valores, 'pct_acum': chart_pct_acum},
+    })
+    return render_template('pages/reporte_resumen_por_provincia.html', **ctx)
 
 
 @bp.route('/modules/reports/<slug>')

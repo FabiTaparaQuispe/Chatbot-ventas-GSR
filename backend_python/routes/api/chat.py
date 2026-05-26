@@ -185,7 +185,11 @@ _CHAT_KW  = ('chatbot', 'chat', 'bot', 'preguntas que', 'preguntó', 'pregunto',
              'quién preguntó', 'quien pregunto', 'threads', 'hilos', 'usuarios del',
              'últimas preguntas', 'ultimas preguntas', 'preguntas de ', 'pregunta de ',
              'gerente', 'gerencia', 'operativo', 'analista', 'estrategico', 'estratégico',
-             'tactico', 'táctico')
+             'tactico', 'táctico',
+             'más preguntas', 'mas preguntas', 'preguntas ha', 'preguntas se ',
+             'usuario que', 'administrador', 'conversaciones', 'uso del asistente',
+             'más usó', 'mas uso', 'más usaron', 'mas usaron',
+             'quién usa', 'quien usa', 'quién usó', 'quien uso')
 _NC_KW    = ('nota', ' nc ', 'nc,', 'nc.', 'devolución', 'devolucion',
              'anulación', 'anulacion', 'crédito', 'credito', 'nota de crédito',
              'nota de credito')

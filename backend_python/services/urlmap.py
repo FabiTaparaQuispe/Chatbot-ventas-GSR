@@ -34,6 +34,7 @@ REPORT_SLUG_VENTAS_LINEA_PRECIO_DIARIO = 'ventas-linea-precio-diario'
 REPORT_SLUG_VENTAS_LINEA_PRECIO_RESUMEN_PROV = 'ventas-linea-precio-resumen-provincia'
 REPORT_SLUG_VENTAS_LINEA_MIX_PRODUCTOS = 'ventas-linea-mix-productos'
 REPORT_SLUG_VENTAS_RESUMEN_POR_LINEA = 'ventas-resumen-por-linea'
+REPORT_SLUG_VENTAS_RESUMEN_POR_PROVINCIA = 'ventas-resumen-por-provincia'
 
 REPORTS_PREFIX = '/modules/reports/'
 

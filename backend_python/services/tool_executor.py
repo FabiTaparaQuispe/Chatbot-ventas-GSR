@@ -21,6 +21,7 @@ from services.urlmap import (
     REPORT_SLUG_VENTAS_LINEA_RESUMEN_PROVINCIA,
     REPORT_SLUG_VENTAS_MIX_TDOC,
     REPORT_SLUG_VENTAS_RESUMEN_POR_LINEA,
+    REPORT_SLUG_VENTAS_RESUMEN_POR_PROVINCIA,
     REPORT_SLUG_VENTAS_SERIE_MENSUAL,
     REPORT_SLUG_VENTAS_TOP_CLIENTES_GLOBAL,
     REPORT_SLUG_VENTAS_TOP_CLIENTES_NC,
@@ -1491,7 +1492,7 @@ class ToolExecutor:
             'total_valor': total_valor,
             'filas': filas,
             'paginacion': _pagination_meta(len(filas_all), pagina, por_pagina),
-            'reporte_url': _report_canonical(REPORT_VENTASGENERAL_RESUMEN_TABLA, q),
+            'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_RESUMEN_POR_PROVINCIA, _qs(q)),
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
