@@ -133,11 +133,12 @@ def ventas_tool_definitions():
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_top_clientes_globales',
-            'description': f'Top clientes global por SUM(Valor). Soporta filtros opcionales: provincia (ej. AREQUIPA, TACNA) y linea_comercial. Usar cuando el usuario pide top clientes por provincia o sin especificar zona de precio. top_n acota el universo; pagina/por_pagina lo navegan. reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_TOP_CLIENTES_GLOBAL}?…',
+            'description': f'Top clientes global. Por defecto ordena por SUM(Valor); usar orden="peso" para ordenar por SUM(Peso) en kg. Soporta filtros opcionales: provincia (ej. AREQUIPA, TACNA) y linea_comercial. Usar cuando el usuario pide top clientes por provincia o sin especificar zona de precio. top_n acota el universo; pagina/por_pagina lo navegan. reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_TOP_CLIENTES_GLOBAL}?…',
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'top_n': dn,
                 'provincia': prov,
                 'linea_comercial': {'type': 'string', 'description': "Filtra por línea comercial, ej. 'Pollo Vivo'"},
+                'orden': {'type': 'string', 'enum': ['valor', 'peso'], 'description': '"peso" para ordenar por kg (mayor volumen en kg); "valor" para ordenar por importe S/ (default).'},
                 'pagina': pagina, 'por_pagina': por_pagina,
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
@@ -414,9 +415,16 @@ def chat_history_tool_definitions():
         }},
         {'type': 'function', 'function': {
             'name': 'chat_actividad_por_dia',
-            'description': 'Serie diaria de uso del chatbot: preguntas y usuarios activos por día. Filtra por username si se da.',
+            'description': (
+                'Serie diaria de uso del chatbot: preguntas y usuarios activos por día. '
+                'Para "día con más actividad" usar orden="desc" y top_n=1. '
+                'Para "día con menos actividad" usar orden="desc" y top_n=0 (tomar el último). '
+                'Filtra por username si se da.'
+            ),
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt, 'username': user_opt,
+                'orden': {'type': 'string', 'enum': ['asc', 'desc'], 'description': '"desc" ordena por más preguntas primero; "asc" por fecha. Default: "asc".'},
+                'top_n': {'type': 'integer', 'description': 'Limitar a los N días con más actividad. Ej: 1 para el día más activo, 5 para el top 5.'},
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {

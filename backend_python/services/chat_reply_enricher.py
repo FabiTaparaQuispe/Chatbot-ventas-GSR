@@ -246,6 +246,10 @@ def _format_payload(payload: dict) -> str:
     if str(payload.get('tipo') or '').startswith('chat_'):
         return ''
 
+    # Búsqueda de filas individuales: el LLM ya formatea bien la tabla, solo añadir URL.
+    if str(payload.get('tipo') or '') == 'buscar':
+        return ''
+
     if 'agregados' in payload and isinstance(payload['agregados'], dict) and 'filas' not in payload:
         a = payload['agregados']
         p = payload.get('periodo') or {}

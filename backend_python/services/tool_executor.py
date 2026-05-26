@@ -454,6 +454,7 @@ class ToolExecutor:
 
         return {
             'tabla': 'ventasgeneral2',
+            'tipo': 'buscar',
             'count_devuelto': len(rows),
             'paginacion': _pagination_meta(total_rows, pagina, por_pagina),
             'filas': [dict(r) for r in rows],
@@ -696,6 +697,8 @@ class ToolExecutor:
         por_pagina = _parse_por_pagina(args)
         prov = str(args.get('provincia') or '').strip()
         linea = str(args.get('linea_comercial') or '').strip()
+        orden = str(args.get('orden') or 'valor').strip().lower()
+        order_col = 'suma_peso' if orden == 'peso' else 'suma_valor'
 
         where_extra = ''
         params = {'d1': d1, 'd2': d2}
@@ -715,7 +718,7 @@ class ToolExecutor:
                " COALESCE(SUM(Valor),0) AS suma_valor"
                " FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
                + where_extra +
-               f" GROUP BY CodigoCliente ORDER BY suma_valor DESC LIMIT {top}")
+               f" GROUP BY CodigoCliente ORDER BY {order_col} DESC LIMIT {top}")
         raw = _q(self._conn, sql, params)
         total_row = _q1(self._conn,
             'SELECT COALESCE(SUM(Valor),0) AS t FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s' + where_extra,
@@ -1772,7 +1775,12 @@ class ToolExecutor:
         if username:
             sql += ' AND t.username = %(username)s'
             params['username'] = username
-        sql += ' GROUP BY DATE(m.created_at) ORDER BY dia ASC'
+        orden = str(args.get('orden') or 'asc').strip().lower()
+        order_col = 'total_preguntas DESC' if orden == 'desc' else 'dia ASC'
+        top_n = _int_arg(args.get('top_n'), 0, 0, 100)
+        sql += f' GROUP BY DATE(m.created_at) ORDER BY {order_col}'
+        if top_n:
+            sql += f' LIMIT {top_n}'
 
         rows = _q(self._conn, sql, params)
         filas = [{
