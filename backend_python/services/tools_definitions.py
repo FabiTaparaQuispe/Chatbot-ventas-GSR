@@ -47,6 +47,7 @@ def ventas_tool_definitions():
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt,
                 'zona_comercial': d, 'cod_cliente': d,
                 'nombre_cliente': {'type': 'string', 'description': 'Filtro parcial por NombreCliente (LIKE). Ej: "QUISPE VARGAS VICTOR"'},
+                'nombre_corporativo': {'type': 'string', 'description': 'Filtro parcial por NombreCoorporativo (LIKE). Usar cuando el usuario menciona el corporativo, ej: "corporativo Huaypuna".'},
                 'prefijo_descri_zona_precio': pref, 'provincia': prov, 'tipo_documento': tdoc,
                 'codigo_documento': {'type': 'string', 'description': 'Código de tipo de documento: "07"=Nota de Crédito. Usar en vez de tipo_documento para filtrar NCs.'},
                 'linea_comercial': {'type': 'string', 'description': "Filtra por línea comercial exacta, ej. 'Pollo Vivo', 'Embutidos'. Usar cuando el usuario pide totales de UNA línea específica sin desglose."},
@@ -66,6 +67,7 @@ def ventas_tool_definitions():
             ),
             'parameters': {'type': 'object', 'properties': {
                 'nombre_cliente': d,
+                'nombre_corporativo': {'type': 'string', 'description': 'Filtro parcial por NombreCoorporativo (LIKE). Usar cuando el usuario dice "corporativo X".'},
                 'numero_doc': {'type': 'string', 'description': 'Número de factura/boleta (NumeroFactura). Ej: "3750004023". Usar para "busca la factura X", "documento número X".'},
                 'cod_item': d,
                 'tdoc': {'type': 'string', 'description': 'Código de documento de 2 chars: "01"=Factura, "03"=Boleta de Venta, "07"=Nota de Crédito. NUNCA poner un número de factura aquí.'},
@@ -313,6 +315,21 @@ def ventas_tool_definitions():
                 'codigo_documento': {'type': 'string', 'description': 'Código TDoc, ej. 07 para notas de crédito'},
                 'pagina': pagina, 'por_pagina': por_pagina,
             }, 'required': ['fecha_desde', 'fecha_hasta']},
+        }},
+        {'type': 'function', 'function': {
+            'name': 'ventasgeneral_clientes_corporativo',
+            'description': (
+                'Lista los clientes (NombreCliente) que pertenecen a un corporativo (NombreCoorporativo). '
+                'Usar para "¿qué clientes pertenecen al corporativo X?", "clientes del corporativo X", '
+                '"¿cuántos clientes tiene el corporativo X?". '
+                'Devuelve por cliente: codigo, nombre, lineas, suma_peso, suma_valor, primera y última venta. '
+                'nombre_corporativo es obligatorio. Las fechas son opcionales (sin fechas devuelve todos los registros históricos).'
+            ),
+            'parameters': {'type': 'object', 'properties': {
+                'nombre_corporativo': {'type': 'string', 'description': 'Nombre parcial del corporativo (LIKE). Ej: "HUAYPUNA MAMANI".'},
+                'fecha_desde': d_opt,
+                'fecha_hasta': d_opt,
+            }, 'required': ['nombre_corporativo']},
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_catalogo',

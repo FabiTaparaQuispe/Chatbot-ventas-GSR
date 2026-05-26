@@ -254,6 +254,7 @@ class ToolExecutor:
                 'ventasgeneral_linea_mix_productos': self._linea_mix_productos,
                 'ventasgeneral_resumen_por_linea': self._resumen_por_linea,
                 'ventasgeneral_resumen_por_provincia': self._resumen_por_provincia,
+                'ventasgeneral_clientes_corporativo': self._clientes_corporativo,
                 'ventasgeneral_catalogo': self._catalogo,
                 'chat_usuario_estadisticas': self._chat_usuario_estadisticas,
                 'chat_top_usuarios': self._chat_top_usuarios,
@@ -318,6 +319,10 @@ class ToolExecutor:
         if nom_cli:
             sql += ' AND NombreCliente LIKE %(nom_cli)s'
             params['nom_cli'] = f'%{nom_cli}%'
+        nom_corp = str(args.get('nombre_corporativo') or '').strip()
+        if nom_corp:
+            sql += ' AND NombreCoorporativo LIKE %(nom_corp)s'
+            params['nom_corp'] = f'%{nom_corp}%'
         pref_z = str(args.get('prefijo_descri_zona_precio') or '').strip().upper()
         if pref_z:
             sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(prefzp)s"
@@ -348,6 +353,8 @@ class ToolExecutor:
             q['cod_cliente'] = cod
         if nom_cli:
             q['nombre_cliente'] = nom_cli
+        if nom_corp:
+            q['nombre_corporativo'] = nom_corp
         if pref_z:
             q['prefijo_descri_zona_precio'] = pref_z
         if prov:
@@ -392,6 +399,10 @@ class ToolExecutor:
         if nom:
             where_sql += ' AND NombreCliente LIKE %(nom)s'
             params['nom'] = f'%{nom}%'
+        nom_corp = str(args.get('nombre_corporativo') or '').strip()
+        if nom_corp:
+            where_sql += ' AND NombreCoorporativo LIKE %(nom_corp)s'
+            params['nom_corp'] = f'%{nom_corp}%'
         ndoc = str(args.get('numero_doc') or '').strip()
         if ndoc:
             where_sql += ' AND NumeroFactura LIKE %(ndoc)s'
@@ -434,6 +445,7 @@ class ToolExecutor:
 
         tab_args = {k: str(v) for k, v in {
             'fecha_desde': fd, 'fecha_hasta': fh, 'nombre_cliente': nom,
+            'nombre_corporativo': nom_corp,
             'numero_doc': ndoc, 'cod_item': item, 'tdoc': tdoc,
             'prefijo_descri_zona_precio': pref_z, 'provincia': prov,
             'tipo_documento': tdoctipo,
@@ -1553,6 +1565,57 @@ class ToolExecutor:
         'tipo_documento':  'TipoDocumento',
         'cliente':         'NombreCliente',
     }
+
+    def _clientes_corporativo(self, args):
+        nom_corp = str(args.get('nombre_corporativo') or '').strip()
+        if not nom_corp:
+            raise ValueError('nombre_corporativo es obligatorio')
+
+        d1 = _parse_date(args.get('fecha_desde'), 'fecha_desde', required=False)
+        d2 = _parse_date(args.get('fecha_hasta'), 'fecha_hasta', required=False)
+
+        where = ' WHERE NombreCoorporativo LIKE %(nom_corp)s'
+        params: dict = {'nom_corp': f'%{nom_corp}%'}
+        if d1 and d2:
+            where += ' AND FechaContable BETWEEN %(d1)s AND %(d2)s'
+            params.update({'d1': d1, 'd2': d2})
+        elif d1:
+            where += ' AND FechaContable >= %(d1)s'
+            params['d1'] = d1
+        elif d2:
+            where += ' AND FechaContable <= %(d2)s'
+            params['d2'] = d2
+
+        sql = (
+            'SELECT CodigoCliente AS codigo_cliente,'
+            ' MAX(NombreCliente) AS nombre_cliente,'
+            ' COUNT(*) AS lineas,'
+            ' COALESCE(SUM(Peso),0) AS suma_peso,'
+            ' COALESCE(SUM(Valor),0) AS suma_valor,'
+            ' MIN(FechaContable) AS primera_venta,'
+            ' MAX(FechaContable) AS ultima_venta'
+            ' FROM ventasgeneral2' + where +
+            ' GROUP BY CodigoCliente ORDER BY nombre_cliente'
+        )
+        rows = _q(self._conn, sql, params)
+        filas = [{
+            'codigo_cliente': str(r.get('codigo_cliente') or ''),
+            'nombre_cliente': str(r.get('nombre_cliente') or ''),
+            'lineas': int(r.get('lineas') or 0),
+            'suma_peso': float(r.get('suma_peso') or 0),
+            'suma_valor': float(r.get('suma_valor') or 0),
+            'primera_venta': str(r.get('primera_venta') or ''),
+            'ultima_venta': str(r.get('ultima_venta') or ''),
+        } for r in rows]
+
+        return {
+            'tabla': 'ventasgeneral2',
+            'tipo': 'clientes_corporativo',
+            'nombre_corporativo': nom_corp,
+            'total_clientes': len(filas),
+            'filas': filas,
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
 
     def _catalogo(self, args):
         campo = str(args.get('campo') or '').strip().lower()
