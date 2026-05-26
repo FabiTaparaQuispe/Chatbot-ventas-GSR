@@ -63,12 +63,21 @@ def _report_shell_context(page_title: str) -> dict[str, Any]:
 
 def _filtros_resumen_caption() -> str:
     bits: list[str] = []
+    nom_cli = (request.args.get('nombre_cliente') or '').strip()
+    if nom_cli:
+        bits.append(f'Cliente: {nom_cli}')
+    nom_corp = (request.args.get('nombre_corporativo') or '').strip()
+    if nom_corp:
+        bits.append(f'Corporativo: {nom_corp}')
+    linea = (request.args.get('linea_comercial') or '').strip()
+    if linea:
+        bits.append(f'Línea: {linea}')
     z = (request.args.get('zona_comercial') or '').strip()
     if z:
         bits.append(f'Zona comercial: {z}')
     cod = (request.args.get('cod_cliente') or '').strip()
     if cod:
-        bits.append(f'Cliente: {cod}')
+        bits.append(f'Cód. cliente: {cod}')
     pref = (request.args.get('prefijo_descri_zona_precio') or '').strip()
     if pref:
         bits.append(f'Pref. zona precio: {pref}')
@@ -570,6 +579,18 @@ def ventasgeneral_resumen_tabla():
         COALESCE(SUM(Cantidad),0) AS suma_cantidad, COALESCE(SUM(Peso),0) AS suma_peso
         FROM ventasgeneral2 WHERE FechaContable BETWEEN :d1 AND :d2"""
     bind: dict = {'d1': d1, 'd2': d2}
+    nom_cli = (request.args.get('nombre_cliente') or '').strip()
+    if nom_cli:
+        sql += ' AND NombreCliente LIKE :nom_cli'
+        bind['nom_cli'] = f'%{nom_cli}%'
+    nom_corp = (request.args.get('nombre_corporativo') or '').strip()
+    if nom_corp:
+        sql += ' AND NombreCoorporativo LIKE :nom_corp'
+        bind['nom_corp'] = f'%{nom_corp}%'
+    linea = (request.args.get('linea_comercial') or '').strip()
+    if linea:
+        sql += ' AND LineaComercial = :linea'
+        bind['linea'] = linea
     zona = (request.args.get('zona_comercial') or '').strip()
     if zona:
         sql += ' AND ZonaComercial LIKE :zona'
@@ -649,6 +670,7 @@ def ventasgeneral_buscar_tabla():
         'fecha_desde': fd,
         'fecha_hasta': fh,
         'nombre_cliente': (request.args.get('nombre_cliente') or '').strip(),
+        'nombre_corporativo': (request.args.get('nombre_corporativo') or '').strip(),
         'numero_doc': (request.args.get('numero_doc') or '').strip(),
         'cod_item': (request.args.get('cod_item') or '').strip(),
         'tdoc': (request.args.get('tdoc') or '').strip(),
@@ -686,9 +708,15 @@ def ventasgeneral_buscar_tabla():
         'CodigoItem',
         'GlosaDetalle',
         'Cantidad',
+        'Peso',
         'Valor',
         'ZonaComercial',
     ]
+
+    total_cantidad = sum(float(r.get('Cantidad') or 0) for r in filas)
+    total_peso = sum(float(r.get('Peso') or 0) for r in filas)
+    total_valor = sum(float(r.get('Valor') or 0) for r in filas)
+
     ctx = _report_shell_context('Buscar ventasgeneral')
     ctx.update(
         {
@@ -697,6 +725,9 @@ def ventasgeneral_buscar_tabla():
             'total_filas': len(raw_filas),
             'limit': out.get('limit'),
             'offset': out.get('offset') or 0,
+            'total_cantidad': f'{total_cantidad:,.2f}',
+            'total_peso': f'{total_peso:,.2f}',
+            'total_valor': f'{total_valor:,.2f}',
         }
     )
     return render_template('pages/reporte_buscar_tabla.html', **ctx)

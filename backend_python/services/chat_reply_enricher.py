@@ -277,6 +277,9 @@ def _format_payload(payload: dict) -> str:
     if str(payload.get('tipo') or '') == 'resumen_por_provincia':
         return _lines_resumen_por_provincia(filas)
 
+    if str(payload.get('tipo') or '') == 'clientes_corporativo':
+        return _lines_clientes_corporativo(filas, payload)
+
     if str(payload.get('tipo') or '') == 'linea_resumen_provincia_cliente':
         return _lines_linea_resumen_provincia(filas)
 
@@ -335,6 +338,20 @@ def _lines_top_nc(filas):
         v = _fmt_num(r.get('suma_valor') or 0)
         out.append(f'{i}. {nom}: {ln} notas de crédito por valor de {v}')
     return '\n'.join(out)
+
+
+def _lines_clientes_corporativo(filas, payload):
+    corp = str(payload.get('nombre_corporativo') or '')
+    total = len(filas)
+    header = f'Corporativo: **{corp}** — {total} cliente(s)\n' if corp else f'{total} cliente(s)\n'
+    lines = [header, '| # | Cliente | Líneas | Peso (kg) | Importe (S/) |', '| --- | --- | ---: | ---: | ---: |']
+    for i, r in enumerate(filas, 1):
+        nom = str(r.get('nombre_cliente') or '')
+        ln = _fmt_int(r.get('lineas') or 0)
+        peso = _fmt_num(r.get('suma_peso') or 0)
+        val = _fmt_num(r.get('suma_valor') or 0)
+        lines.append(f'| {i} | {nom} | {ln} | {peso} | {val} |')
+    return '\n'.join(lines)
 
 
 def _lines_resumen_por_provincia(filas):

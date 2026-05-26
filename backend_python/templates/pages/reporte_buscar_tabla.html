@@ -24,6 +24,23 @@
                 </tr>
                 {% endfor %}
             </tbody>
+            <tfoot>
+                <tr style="font-weight:bold; background:var(--surface-alt, #f1f5f9);">
+                    {% for h in headers %}
+                        {% if h == 'GlosaDetalle' %}
+                        <td style="text-align:right;">Total</td>
+                        {% elif h == 'Cantidad' %}
+                        <td style="text-align:right;">{{ total_cantidad }}</td>
+                        {% elif h == 'Peso' %}
+                        <td style="text-align:right;">{{ total_peso }}</td>
+                        {% elif h == 'Valor' %}
+                        <td style="text-align:right;">S/ {{ total_valor }}</td>
+                        {% else %}
+                        <td></td>
+                        {% endif %}
+                    {% endfor %}
+                </tr>
+            </tfoot>
         </table>
     </div>
 </div>
