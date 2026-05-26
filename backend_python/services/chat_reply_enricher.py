@@ -62,6 +62,11 @@ def _sanitize_urls(text: str) -> str:
     return text
 
 
+def _normalize_minus_signs(text: str) -> str:
+    """Reemplaza signos menos tipográficos (U+2212, en-dash U+2013) con ASCII '-' antes de dígitos."""
+    return re.sub(r'[−–](\d)', r'-\1', text)
+
+
 def _clean_table_asterisks(text: str) -> str:
     """Elimina marcadores ** sueltos dentro de celdas de tabla markdown."""
     # | ** | → quitar fila completa si la celda es solo asteriscos
@@ -152,7 +157,7 @@ def _append_url(text: str, url: str) -> str:
 
 
 def enrich_reply(reply: str, groq_messages: list) -> str:
-    reply = _format_display_numbers(_clean_table_asterisks(_sanitize_urls(reply.strip())))
+    reply = _format_display_numbers(_clean_table_asterisks(_normalize_minus_signs(_sanitize_urls(reply.strip()))))
     payload = _last_tool_payload(groq_messages)
     if payload is None:
         if _uses_generic_labels(reply):

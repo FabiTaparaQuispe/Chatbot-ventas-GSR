@@ -1776,6 +1776,7 @@
             const minimized = panel.classList.contains('chat-panel--minimized');
             minimizeBtn.setAttribute('aria-label', minimized ? 'Restaurar' : 'Minimizar');
             minimizeBtn.setAttribute('title', minimized ? 'Restaurar' : 'Minimizar');
+            minimizeBtn.innerHTML = minimized ? '+' : '&#8722;';
         });
     }
     if (closeBtn) {
