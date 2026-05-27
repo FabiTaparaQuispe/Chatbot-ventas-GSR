@@ -1521,28 +1521,56 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @staticmethod
+    def _regresion_lineal(series: list[float]) -> tuple[float, float]:
+        """Devuelve (pendiente m, intercepto b) para la serie dada."""
+        n = len(series)
+        sum_x = sum_y = sum_xy = sum_xx = 0.0
+        for i, y in enumerate(series):
+            x = float(i)
+            sum_x += x
+            sum_y += y
+            sum_xy += x * y
+            sum_xx += x * x
+        denom = n * sum_xx - sum_x * sum_x
+        if denom == 0:
+            return 0.0, sum_y / n
+        m = (n * sum_xy - sum_x * sum_y) / denom
+        b = (sum_y - m * sum_x) / n
+        return m, b
+
     def _proyeccion(self, args):
         d1, d2 = _parse_date_range(args)
         meses = _int_arg(args.get('meses_a_proyectar'), 3, 1, 12)
-        sql = ("SELECT DATE_FORMAT(FechaContable, '%%Y-%%m') AS mes, SUM(Valor) AS suma_valor"
-               " FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
-               " GROUP BY DATE_FORMAT(FechaContable, '%%Y-%%m') ORDER BY mes")
-        params = {'d1': d1, 'd2': d2}
+        linea = str(args.get('linea_comercial') or '').strip()
+
+        sql = ("SELECT DATE_FORMAT(FechaContable, '%%Y-%%m') AS mes,"
+               " COALESCE(SUM(Valor),0) AS suma_valor,"
+               " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
+               " COALESCE(SUM(Peso),0) AS suma_peso"
+               " FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s")
+        params: dict = {'d1': d1, 'd2': d2}
+        if linea:
+            sql += " AND LineaComercial = %(linea)s"
+            params['linea'] = linea
+        sql += " GROUP BY DATE_FORMAT(FechaContable, '%%Y-%%m') ORDER BY mes"
+
         filas = _q(self._conn, sql, params)
         if len(filas) < 2:
             raise ValueError('Se necesitan al menos 2 meses de datos históricos para proyectar')
 
         n = len(filas)
-        sum_x = sum_y = sum_xy = sum_xx = 0.0
-        for i, r in enumerate(filas):
-            x = float(i)
-            y = float(r.get('suma_valor') or 0)
-            sum_x += x
-            sum_y += y
-            sum_xy += x * y
-            sum_xx += x * x
-        m = (n * sum_xy - sum_x * sum_y) / (n * sum_xx - sum_x * sum_x)
-        b = (sum_y - m * sum_x) / n
+        serie_valor    = [float(r.get('suma_valor') or 0) for r in filas]
+        serie_cantidad = [float(r.get('suma_cantidad') or 0) for r in filas]
+        serie_peso     = [float(r.get('suma_peso') or 0) for r in filas]
+        serie_peso_prom = [
+            sp / sq if sq > 0 else 0.0
+            for sp, sq in zip(serie_peso, serie_cantidad)
+        ]
+
+        mv, bv = self._regresion_lineal(serie_valor)
+        mc, bc = self._regresion_lineal(serie_cantidad)
+        mp, bp = self._regresion_lineal(serie_peso_prom)
 
         last_mes = str(filas[-1]['mes'])
         y_base, mo_base = int(last_mes[:4]), int(last_mes[5:7])
@@ -1551,9 +1579,14 @@ class ToolExecutor:
             mo = mo_base + i
             yr = y_base + (mo - 1) // 12
             mo = ((mo - 1) % 12) + 1
+            cant_proj = max(0.0, mc * (n + i - 1) + bc)
+            peso_prom_proj = max(0.0, mp * (n + i - 1) + bp)
             proyecciones.append({
                 'mes': f'{yr:04d}-{mo:02d}',
-                'valor_proyectado': max(0.0, m * (n + i - 1) + b),
+                'valor_proyectado':    max(0.0, mv * (n + i - 1) + bv),
+                'cantidad_proyectada': cant_proj,
+                'peso_prom_proyectado': peso_prom_proj,
+                'peso_total_proyectado': cant_proj * peso_prom_proj,
             })
 
         return {
@@ -1561,8 +1594,8 @@ class ToolExecutor:
             'tipo': 'proyeccion_ventas',
             'periodo_historico': {'desde': d1, 'hasta': d2},
             'meses_historicos': n,
-            'pendiente_tendencia': m,
-            'intercepto': b,
+            'pendiente_tendencia': mv,
+            'intercepto': bv,
             'proyecciones': proyecciones,
             'nota': 'Proyección basada en regresión lineal simple. No considera estacionalidad ni factores externos.',
             '_sql_traces': [{'sql': sql, 'params': params}],
@@ -1577,6 +1610,7 @@ class ToolExecutor:
         'ruta':            'RutaComercial',
         'tipo_documento':  'TipoDocumento',
         'cliente':         'NombreCliente',
+        'glosa':           'GlosaDetalle',
     }
 
     def _clientes_corporativo(self, args):
@@ -1644,6 +1678,8 @@ class ToolExecutor:
 
         d1 = _parse_date(args.get('fecha_desde'), 'fecha_desde', required=False)
         d2 = _parse_date(args.get('fecha_hasta'), 'fecha_hasta', required=False)
+        linea = str(args.get('linea_comercial') or '').strip()
+        cod_doc = str(args.get('codigo_documento') or '').strip()
 
         sql = (f"SELECT DISTINCT TRIM(COALESCE({col},'')) AS valor"
                f" FROM ventasgeneral2"
@@ -1651,7 +1687,13 @@ class ToolExecutor:
         params: dict = {}
         if d1 and d2:
             sql += " AND FechaContable BETWEEN %(d1)s AND %(d2)s"
-            params = {'d1': d1, 'd2': d2}
+            params.update({'d1': d1, 'd2': d2})
+        if linea:
+            sql += " AND LineaComercial = %(linea)s"
+            params['linea'] = linea
+        if cod_doc:
+            sql += " AND CodigoDocumento = %(cod_doc)s"
+            params['cod_doc'] = cod_doc
         sql += " ORDER BY valor"
 
         rows = _q(self._conn, sql, params)
@@ -1662,6 +1704,10 @@ class ToolExecutor:
             'columna_bd': col,
             'total': len(valores),
             'valores': valores,
+            'filtros': {
+                'linea_comercial': linea or None,
+                'codigo_documento': cod_doc or None,
+            },
             'periodo': {'desde': d1, 'hasta': d2} if d1 and d2 else None,
             '_sql_traces': [{'sql': sql, 'params': params}],
         }

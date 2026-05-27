@@ -214,10 +214,15 @@ def ventas_tool_definitions():
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_proyeccion_ventas',
-            'description': 'Proyección de ventas futuras con regresión lineal sobre la serie mensual histórica. Requiere ≥2 meses de historial.',
+            'description': (
+                'Proyección de ventas futuras con regresión lineal sobre la serie mensual histórica. '
+                'Proyecta simultáneamente: valor (S/), cantidad (unidades) y peso promedio (kg/unidad). '
+                'Requiere ≥2 meses de historial. Filtro opcional: linea_comercial.'
+            ),
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt,
                 'meses_a_proyectar': {'type': 'integer', 'default': 3, 'description': 'Meses futuros a proyectar (1-12)'},
+                'linea_comercial': {'type': 'string', 'description': "Filtrar por línea comercial, ej. 'Pollo Vivo'"},
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
@@ -336,19 +341,23 @@ def ventas_tool_definitions():
             'name': 'ventasgeneral_catalogo',
             'description': (
                 'Devuelve los valores distintos (catálogo/maestro) de un campo de ventasgeneral2. '
-                'Usar para preguntas como "¿qué provincias hay?", "¿qué líneas comerciales existen?", '
+                'Usar para: "¿qué provincias hay?", "¿qué líneas comerciales existen?", '
                 '"¿qué corporativos están registrados?", "¿qué zonas de precio hay?", '
-                '"¿qué rutas comerciales existen?", "¿qué tipos de documento hay?". '
-                'Las fechas son opcionales; si se dan, solo muestra valores presentes en ese período.'
+                '"¿qué rutas comerciales existen?", "¿qué tipos de documento hay?", '
+                '"descripciones de descuento/ítems/glosas para línea X" → campo="glosa" con linea_comercial, '
+                '"motivos de devolución para línea X" → campo="glosa" con linea_comercial y codigo_documento="07". '
+                'Las fechas y filtros son opcionales.'
             ),
             'parameters': {'type': 'object', 'properties': {
                 'campo': {
                     'type': 'string',
-                    'enum': ['provincia', 'linea_comercial', 'corporativo', 'zona_precio', 'zona_comercial', 'ruta', 'tipo_documento'],
-                    'description': 'Campo del que se quieren los valores distintos',
+                    'enum': ['provincia', 'linea_comercial', 'corporativo', 'zona_precio', 'zona_comercial', 'ruta', 'tipo_documento', 'glosa'],
+                    'description': 'Campo del que se quieren los valores distintos. "glosa" devuelve GlosaDetalle (descripciones de ítems, descuentos, motivos de devolución).',
                 },
                 'fecha_desde': d_opt,
                 'fecha_hasta': d_opt,
+                'linea_comercial': {'type': 'string', 'description': 'Filtrar por línea comercial exacta. Ej: "Pollo Vivo".'},
+                'codigo_documento': {'type': 'string', 'description': 'Filtrar por tipo de documento. Ej: "07" para notas de crédito/devoluciones.'},
             }, 'required': ['campo']},
         }},
     ]

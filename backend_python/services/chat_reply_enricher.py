@@ -505,13 +505,29 @@ def _lines_generic(filas):
 def _lines_proyecciones(proyecciones, payload):
     out = []
     meses_hist = int(payload.get('meses_historicos') or 0)
-    pendiente = _fmt_num(payload.get('pendiente_tendencia') or 0)
-    out.append(f'Proyección basada en {meses_hist} meses históricos (pendiente: {pendiente}).')
-    for r in proyecciones:
-        mes = str(r.get('mes') or '')
-        valor = _fmt_num(r.get('valor_proyectado') or 0)
-        out.append(f'{mes}: S/ {valor}')
+    out.append(f'Proyección basada en {meses_hist} meses históricos.')
+    tiene_cantidad = any(r.get('cantidad_proyectada') is not None for r in proyecciones)
+    tiene_peso_prom = any(r.get('peso_prom_proyectado') is not None for r in proyecciones)
+
+    if tiene_cantidad or tiene_peso_prom:
+        header = '| Mes | Valor (S/) | Unidades | Peso prom (kg/u) | Peso total (kg) |'
+        sep    = '| --- | ---: | ---: | ---: | ---: |'
+        out.append(header)
+        out.append(sep)
+        for r in proyecciones:
+            mes   = str(r.get('mes') or '')
+            valor = _fmt_num(r.get('valor_proyectado') or 0)
+            cant  = _fmt_num(r.get('cantidad_proyectada') or 0, 0)
+            pprom = _fmt_num(r.get('peso_prom_proyectado') or 0)
+            ptot  = _fmt_num(r.get('peso_total_proyectado') or 0)
+            out.append(f'| {mes} | {valor} | {cant} | {pprom} | {ptot} |')
+    else:
+        for r in proyecciones:
+            mes   = str(r.get('mes') or '')
+            valor = _fmt_num(r.get('valor_proyectado') or 0)
+            out.append(f'{mes}: S/ {valor}')
+
     nota = str(payload.get('nota') or '')
     if nota:
-        out.append(f'Nota: {nota}')
+        out.append(f'*{nota}*')
     return '\n'.join(out)
