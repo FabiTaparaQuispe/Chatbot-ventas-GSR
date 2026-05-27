@@ -177,6 +177,10 @@ def enrich_reply(reply: str, groq_messages: list, last_tool_json: str | None = N
     if _uses_generic_labels(reply):
         return _format_display_numbers(_summary_with_url(summary, reply, payload))
 
+    # Si el LLM ya generó una tabla markdown, no superponer el resumen del enriquecedor
+    if _reply_has_markdown_table(reply):
+        return _format_display_numbers(_dedup_module_url(_append_url(reply, report_url)))
+
     if _looks_like_ranking(reply):
         return _format_display_numbers(_dedup_module_url(_append_url(reply, report_url)))
 
@@ -217,6 +221,11 @@ def _last_tool_payload(messages: list):
             continue
         last = decoded
     return last
+
+
+def _reply_has_markdown_table(reply: str) -> bool:
+    """True si el LLM ya incluyó al menos una tabla markdown (línea separadora |---|)."""
+    return bool(reply and re.search(r'^\|[\s\-:]+\|', reply, re.MULTILINE))
 
 
 def _looks_like_ranking(reply: str) -> bool:
