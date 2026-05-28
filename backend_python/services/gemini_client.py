@@ -49,6 +49,35 @@ def _clamp_tool_json(json_str: str) -> str:
     )
 
 
+def _sanitize_gemini_schema(schema: Any) -> Any:
+    """Convierte JSON Schema OpenAI a subset soportado por el SDK de Gemini.
+
+    Gemini no acepta anyOf/oneOf/allOf. Los reemplaza eligiendo el tipo
+    más específico (integer > number > boolean > string).
+    """
+    if not isinstance(schema, dict):
+        return schema
+    if 'anyOf' in schema or 'oneOf' in schema:
+        variants = schema.get('anyOf') or schema.get('oneOf') or []
+        chosen = 'string'
+        for v in variants:
+            if isinstance(v, dict) and v.get('type') in ('integer', 'number', 'boolean'):
+                chosen = v['type']
+                break
+        out = {k: v for k, v in schema.items() if k not in ('anyOf', 'oneOf')}
+        out['type'] = chosen
+        return _sanitize_gemini_schema(out)
+    result: dict[str, Any] = {}
+    for key, val in schema.items():
+        if key == 'properties' and isinstance(val, dict):
+            result[key] = {k: _sanitize_gemini_schema(v) for k, v in val.items()}
+        elif key == 'items' and isinstance(val, dict):
+            result[key] = _sanitize_gemini_schema(val)
+        else:
+            result[key] = val
+    return result
+
+
 def _openai_tools_to_gemini_function_declarations(openai_tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
     decls: list[dict[str, Any]] = []
     for t in openai_tools or []:
@@ -66,7 +95,7 @@ def _openai_tools_to_gemini_function_declarations(openai_tools: list[dict[str, A
         if isinstance(desc, str) and desc.strip():
             d["description"] = desc.strip()
         if isinstance(params, dict):
-            d["parameters"] = params
+            d["parameters"] = _sanitize_gemini_schema(params)
         decls.append(d)
     return decls
 
