@@ -1,10 +1,14 @@
 import os
 import re
+from contextvars import ContextVar
 from typing import Any
 
 import pymysql
 import pymysql.cursors
 from dotenv import load_dotenv
+
+# Conexión por request para contextos sin Flask (FastAPI, scripts, workers)
+_ctx_conn: ContextVar = ContextVar('_db_conn', default=None)
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'), override=False)
 
@@ -97,30 +101,53 @@ def get_connection() -> pymysql.connections.Connection:
             return conn
     except ImportError:
         pass
-    # Scripts / contexto sin Flask: nueva conexión cada llamada.
-    return _create_connection()
+
+    # FastAPI / scripts: conexión por contexto de ejecución (ContextVar)
+    conn = _ctx_conn.get()
+    if conn is not None:
+        try:
+            conn.ping(reconnect=True)
+            return conn
+        except Exception:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            _ctx_conn.set(None)
+    conn = _create_connection()
+    _ctx_conn.set(conn)
+    return conn
 
 
 def close_request_connection() -> None:
-    """Cerrar la conexión de esta petición (registrar en teardown_appcontext)."""
+    """Cerrar la conexión de esta petición."""
     try:
         from flask import g, has_request_context
 
-        if not has_request_context():
+        if has_request_context():
+            conn = getattr(g, _G_CONN_KEY, None)
+            if conn is None:
+                return
+            try:
+                conn.close()
+            except Exception:
+                pass
+            try:
+                delattr(g, _G_CONN_KEY)
+            except Exception:
+                setattr(g, _G_CONN_KEY, None)
             return
-        conn = getattr(g, _G_CONN_KEY, None)
-        if conn is None:
-            return
+    except ImportError:
+        pass
+
+    # FastAPI / scripts
+    conn = _ctx_conn.get()
+    if conn is not None:
         try:
             conn.close()
         except Exception:
             pass
-        try:
-            delattr(g, _G_CONN_KEY)
-        except Exception:
-            setattr(g, _G_CONN_KEY, None)
-    except ImportError:
-        pass
+        _ctx_conn.set(None)
 
 
 def db_label() -> str:
