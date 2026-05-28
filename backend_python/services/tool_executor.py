@@ -1542,7 +1542,10 @@ class ToolExecutor:
     def _proyeccion(self, args):
         d1, d2 = _parse_date_range(args)
         meses = _int_arg(args.get('meses_a_proyectar'), 3, 1, 12)
-        linea = str(args.get('linea_comercial') or '').strip()
+        linea    = str(args.get('linea_comercial') or '').strip()
+        provincia = str(args.get('provincia') or '').strip()
+        zona     = str(args.get('zona_comercial') or '').strip()
+        pref_z   = str(args.get('prefijo_descri_zona_precio') or '').strip().upper()
 
         sql = ("SELECT DATE_FORMAT(FechaContable, '%%Y-%%m') AS mes,"
                " COALESCE(SUM(Valor),0) AS suma_valor,"
@@ -1553,6 +1556,15 @@ class ToolExecutor:
         if linea:
             sql += " AND LineaComercial = %(linea)s"
             params['linea'] = linea
+        if provincia:
+            sql += " AND Provincia LIKE %(prov)s"
+            params['prov'] = f'%{provincia}%'
+        if zona:
+            sql += " AND ZonaComercial LIKE %(zona)s"
+            params['zona'] = f'%{zona}%'
+        if pref_z:
+            sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(pref_z)s"
+            params['pref_z'] = pref_z + '%'
         sql += " GROUP BY DATE_FORMAT(FechaContable, '%%Y-%%m') ORDER BY mes"
 
         filas = _q(self._conn, sql, params)
@@ -1589,11 +1601,17 @@ class ToolExecutor:
                 'peso_total_proyectado': cant_proj * peso_prom_proj,
             })
 
+        filtros = {}
+        if linea:    filtros['linea_comercial'] = linea
+        if provincia: filtros['provincia'] = provincia
+        if zona:     filtros['zona_comercial'] = zona
+        if pref_z:   filtros['prefijo_descri_zona_precio'] = pref_z
         return {
             'tabla': 'ventasgeneral2',
             'tipo': 'proyeccion_ventas',
             'periodo_historico': {'desde': d1, 'hasta': d2},
             'meses_historicos': n,
+            'filtros': filtros or None,
             'pendiente_tendencia': mv,
             'intercepto': bv,
             'proyecciones': proyecciones,

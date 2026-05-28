@@ -217,12 +217,15 @@ def ventas_tool_definitions():
             'description': (
                 'Proyección de ventas futuras con regresión lineal sobre la serie mensual histórica. '
                 'Proyecta simultáneamente: valor (S/), cantidad (unidades) y peso promedio (kg/unidad). '
-                'Requiere ≥2 meses de historial. Filtro opcional: linea_comercial.'
+                'Requiere ≥2 meses de historial. Filtros opcionales: linea_comercial, provincia, zona_comercial, prefijo_descri_zona_precio.'
             ),
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt,
                 'meses_a_proyectar': {'type': 'integer', 'default': 3, 'description': 'Meses futuros a proyectar (1-12)'},
                 'linea_comercial': {'type': 'string', 'description': "Filtrar por línea comercial, ej. 'Pollo Vivo'"},
+                'provincia': prov,
+                'zona_comercial': {'type': 'string', 'description': 'Filtrar por zona comercial'},
+                'prefijo_descri_zona_precio': pref,
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
