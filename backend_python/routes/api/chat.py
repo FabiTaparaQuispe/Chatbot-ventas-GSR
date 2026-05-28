@@ -116,26 +116,28 @@ def _parse_retry_after_seconds(msg: str) -> int | None:
     return max(1, min(3600, n))
 
 
-def _get_llm_client():
-    """
-    Crea el cliente LLM según LLM_PROVIDER (.env) o detección por claves API.
-    Soporta: groq, gemini.
-    """
-    provider = resolve_llm_provider()
+_llm_client_singleton: tuple | None = None
 
+
+def _get_llm_client():
+    """Retorna el cliente LLM (singleton por proceso — evita recrearlo en cada request)."""
+    global _llm_client_singleton
+    if _llm_client_singleton is not None:
+        return _llm_client_singleton
+    provider = resolve_llm_provider()
     if provider == 'gemini':
         api_key = os.getenv('GEMINI_API_KEY', '')
         if not api_key:
             raise RuntimeError('Configure GEMINI_API_KEY en .env')
         model = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash')
-        return GeminiClient(api_key, model), provider
-
-    # Default: groq
-    api_key = os.getenv('GROQ_API_KEY', '')
-    if not api_key:
-        raise RuntimeError('Configure GROQ_API_KEY en .env')
-    model = os.getenv('GROQ_MODEL', 'llama-3.1-8b-instant')
-    return GroqClient(api_key, model), provider
+        _llm_client_singleton = (GeminiClient(api_key, model), provider)
+    else:
+        api_key = os.getenv('GROQ_API_KEY', '')
+        if not api_key:
+            raise RuntimeError('Configure GROQ_API_KEY en .env')
+        model = os.getenv('GROQ_MODEL', 'llama-3.1-8b-instant')
+        _llm_client_singleton = (GroqClient(api_key, model), provider)
+    return _llm_client_singleton
 
 
 def _is_rate_limit_error(msg: str) -> bool:

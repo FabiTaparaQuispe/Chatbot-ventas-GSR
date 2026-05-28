@@ -138,6 +138,24 @@ class GeminiClient:
         if not self._api_key:
             raise RuntimeError("Configure GEMINI_API_KEY en .env")
         genai.configure(api_key=self._api_key)
+        self._decls_cache: list[dict] | None = None
+        self._decls_cache_len: int = -1
+        self._model_cache: dict[tuple, Any] = {}
+
+    # ── Caché de schemas y modelos ────────────────────────────────────────────
+
+    def _get_function_decls(self, tools: list[dict]) -> list[dict]:
+        n = len(tools)
+        if self._decls_cache is None or self._decls_cache_len != n:
+            self._decls_cache = _openai_tools_to_gemini_function_declarations(tools)
+            self._decls_cache_len = n
+        return self._decls_cache
+
+    def _get_model(self, system_text: str | None, function_decls: list[dict]) -> genai.GenerativeModel:
+        key = (system_text, bool(function_decls))
+        if key not in self._model_cache:
+            self._model_cache[key] = self._make_model(system_text, function_decls)
+        return self._model_cache[key]
 
     # ── Construcción del modelo ───────────────────────────────────────────────
 
@@ -243,9 +261,9 @@ class GeminiClient:
     ) -> tuple:
         """Ejecuta la conversación con tools; streaming para la respuesta final."""
         system_text, contents = _openai_messages_to_contents(messages)
-        function_decls = _openai_tools_to_gemini_function_declarations(tools)
-        model_with_tools = self._make_model(system_text, function_decls)
-        model_plain = self._make_model(system_text, [])
+        function_decls = self._get_function_decls(tools)
+        model_with_tools = self._get_model(system_text, function_decls)
+        model_plain = self._get_model(system_text, [])
 
         for _iteration in range(1, MAX_ITERATIONS + 1):
             current_model = model_with_tools if _iteration == 1 else model_plain
@@ -321,9 +339,9 @@ class GeminiClient:
     ) -> dict[str, Any]:
         """Versión sin streaming (fallback)."""
         system_text, contents = _openai_messages_to_contents(messages)
-        function_decls = _openai_tools_to_gemini_function_declarations(tools)
-        model_with_tools = self._make_model(system_text, function_decls)
-        model_plain = self._make_model(system_text, [])
+        function_decls = self._get_function_decls(tools)
+        model_with_tools = self._get_model(system_text, function_decls)
+        model_plain = self._get_model(system_text, [])
 
         for _iteration in range(1, MAX_ITERATIONS + 1):
             current_model = model_with_tools if _iteration == 1 else model_plain
