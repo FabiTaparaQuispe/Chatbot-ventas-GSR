@@ -1610,12 +1610,9 @@ class ToolExecutor:
             'tabla': 'ventasgeneral2',
             'tipo': 'proyeccion_ventas',
             'periodo_historico': {'desde': d1, 'hasta': d2},
-            'meses_historicos': n,
             'filtros': filtros or None,
-            'pendiente_tendencia': mv,
-            'intercepto': bv,
             'proyecciones': proyecciones,
-            'nota': 'Proyección basada en regresión lineal simple. No considera estacionalidad ni factores externos.',
+            'nota': 'Proyección basada en datos actuales.',
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
