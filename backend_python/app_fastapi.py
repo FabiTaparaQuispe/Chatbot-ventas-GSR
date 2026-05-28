@@ -70,11 +70,17 @@ from routes_fastapi.auth import router as auth_router
 from routes_fastapi.pages import router as pages_router
 from routes_fastapi.api.ventas_dt import router as ventas_dt_router
 from routes_fastapi.api.chat_threads import router as chat_threads_router
+from routes_fastapi.api.stats import router as stats_router
+from routes_fastapi.api.ventas_kpi import router as ventas_kpi_router
+from routes_fastapi.api.chat_script import router as chat_script_router
 
 app.include_router(auth_router)
 app.include_router(pages_router)
 app.include_router(ventas_dt_router)
 app.include_router(chat_threads_router)
+app.include_router(stats_router)
+app.include_router(ventas_kpi_router)
+app.include_router(chat_script_router)
 
 
 if __name__ == '__main__':
