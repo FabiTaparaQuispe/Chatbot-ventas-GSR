@@ -19,7 +19,6 @@ MAX_TOOL_JSON_BYTES = 14000
 
 _GENERATION_CONFIG = {
     "temperature": 0.2,
-    "thinking_config": {"thinking_budget": 0},
 }
 
 
