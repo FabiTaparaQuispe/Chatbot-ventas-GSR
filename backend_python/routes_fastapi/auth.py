@@ -22,8 +22,7 @@ APP_COMPANY = 'GRANJA RINCONADA DEL SUR S.A.'
 async def login_get(request: Request):
     if request.session.get('active'):
         return RedirectResponse('/', status_code=302)
-    return templates.TemplateResponse('login.html', {
-        'request': request,
+    return templates.TemplateResponse(request, 'login.html', {
         'error': '',
         'app_name': APP_NAME,
         'app_company': APP_COMPANY,
@@ -78,8 +77,7 @@ async def login_post(
         except Exception as e:
             error = f'No se pudo validar el acceso. Detalle: {e}'
 
-    return templates.TemplateResponse('login.html', {
-        'request': request,
+    return templates.TemplateResponse(request, 'login.html', {
         'error': error,
         'app_name': APP_NAME,
         'app_company': APP_COMPANY,

@@ -139,7 +139,6 @@ async def _render_index(request: Request, page: str) -> HTMLResponse:
     csrf_token = _ensure_csrf(request)
 
     ctx: dict[str, Any] = {
-        'request': request,
         'page': page,
         'page_title': page_titles.get(page, 'Ventas general'),
         'app_name': APP_NAME,
@@ -223,7 +222,7 @@ async def _render_index(request: Request, page: str) -> HTMLResponse:
                                     'tactico': 'Táctico', 'operativo': 'Operativo'}
         ctx['normalize_user_role'] = normalize_user_role
 
-    return templates.TemplateResponse(f'pages/{page}.html', ctx)
+    return templates.TemplateResponse(request, f'pages/{page}.html', ctx)
 
 
 @router.post('/api/change_password')
