@@ -1,17 +1,12 @@
-import os
-
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 
 from services.db import get_connection
 from services.passwords import verify_password
 from services.roles import normalize_user_role
+from routes_fastapi.templates import templates
 
 router = APIRouter()
-templates = Jinja2Templates(
-    directory=os.path.join(os.path.dirname(__file__), '..', 'templates')
-)
 
 APP_NAME = 'Ventas · cia2026'
 APP_COMPANY = 'GRANJA RINCONADA DEL SUR S.A.'

@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import os
 import secrets
 from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 
 from services.admin_actions import (
     process_gestion_post,
@@ -25,11 +23,9 @@ from services.historial_data import (
 )
 from services.roles import normalize_user_role
 from services.urlmap import API_CHAT, chat_assistant_config_dict
+from routes_fastapi.templates import templates
 
 router = APIRouter()
-templates = Jinja2Templates(
-    directory=os.path.join(os.path.dirname(__file__), '..', 'templates')
-)
 
 APP_NAME = 'Ventas · cia2026'
 APP_COMPANY = 'GRANJA RINCONADA DEL SUR S.A.'
