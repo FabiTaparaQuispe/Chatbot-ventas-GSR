@@ -49,14 +49,21 @@ def _clamp_tool_json(json_str: str) -> str:
     )
 
 
-def _sanitize_gemini_schema(schema: Any) -> Any:
-    """Convierte JSON Schema OpenAI a subset soportado por el SDK de Gemini.
+_GEMINI_SCHEMA_ALLOWED = frozenset({
+    'type', 'description', 'enum', 'items', 'properties', 'required', 'nullable', 'format',
+})
 
-    Gemini no acepta anyOf/oneOf/allOf. Los reemplaza eligiendo el tipo
-    más específico (integer > number > boolean > string).
+
+def _sanitize_gemini_schema(schema: Any) -> Any:
+    """Convierte JSON Schema OpenAI al subset soportado por el SDK de Gemini.
+
+    Gemini solo acepta: type, description, enum, items, properties, required,
+    nullable, format. Todo lo demás (anyOf, oneOf, default, $ref, minimum…)
+    se descarta o se convierte.
     """
     if not isinstance(schema, dict):
         return schema
+    # anyOf/oneOf → elegir el tipo más específico
     if 'anyOf' in schema or 'oneOf' in schema:
         variants = schema.get('anyOf') or schema.get('oneOf') or []
         chosen = 'string'
@@ -69,6 +76,8 @@ def _sanitize_gemini_schema(schema: Any) -> Any:
         return _sanitize_gemini_schema(out)
     result: dict[str, Any] = {}
     for key, val in schema.items():
+        if key not in _GEMINI_SCHEMA_ALLOWED:
+            continue  # descarta: default, $ref, minimum, maximum, additionalProperties, etc.
         if key == 'properties' and isinstance(val, dict):
             result[key] = {k: _sanitize_gemini_schema(v) for k, v in val.items()}
         elif key == 'items' and isinstance(val, dict):
