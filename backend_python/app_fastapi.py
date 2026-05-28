@@ -61,11 +61,7 @@ async def db_teardown(request: Request, call_next):
     return response
 
 
-# ── Archivos estáticos ────────────────────────────────────────────────────────
-app.mount('/assets', StaticFiles(directory=os.path.join(PUBLIC_DIR, 'assets')), name='assets')
-app.mount('/modules', StaticFiles(directory=os.path.join(PUBLIC_DIR, 'modules')), name='modules')
-
-# ── Routers ───────────────────────────────────────────────────────────────────
+# ── Routers (antes que los mounts para que tengan prioridad) ──────────────────
 from routes_fastapi.auth import router as auth_router
 from routes_fastapi.pages import router as pages_router
 from routes_fastapi.api.ventas_dt import router as ventas_dt_router
@@ -85,6 +81,10 @@ app.include_router(ventas_kpi_router)
 app.include_router(chat_script_router)
 app.include_router(chat_router)
 app.include_router(reports_router)
+
+# ── Archivos estáticos (al final — fallback para paths sin ruta registrada) ───
+app.mount('/assets', StaticFiles(directory=os.path.join(PUBLIC_DIR, 'assets')), name='assets')
+app.mount('/modules', StaticFiles(directory=os.path.join(PUBLIC_DIR, 'modules')), name='modules')
 
 
 if __name__ == '__main__':
