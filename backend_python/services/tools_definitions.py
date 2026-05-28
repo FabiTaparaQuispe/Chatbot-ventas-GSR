@@ -341,6 +341,33 @@ def ventas_tool_definitions():
             }, 'required': ['nombre_corporativo']},
         }},
         {'type': 'function', 'function': {
+            'name': 'consulta_libre',
+            'description': (
+                'Ejecuta una consulta SQL personalizada sobre ventasgeneral2 cuando NINGUNA otra '
+                'herramienta cubre la pregunta. Usar como ÚLTIMO RECURSO. '
+                'Columnas disponibles: FechaContable (DATE), CodigoCliente, NombreCliente, '
+                'CodigoCoorporativo, NombreCoorporativo, CodigoDocumento (07=NC), TipoDocumento, '
+                'SerieDocumento, NumeroDocumento, NumeroFactura, CodigoItem, GlosaDetalle, '
+                'Cantidad (DECIMAL), Peso (DECIMAL), Valor (DECIMAL), ZonaComercial, '
+                'DescripcionZonaPrecio, DescripcionZonaDistribucion, RutaComercial, '
+                'LineaComercial, Provincia. '
+                'OBLIGATORIO: incluir WHERE FechaContable BETWEEN \'YYYY-MM-DD\' AND \'YYYY-MM-DD\'. '
+                'NO incluir LIMIT ni OFFSET. Solo SELECT sobre ventasgeneral2.'
+            ),
+            'parameters': {'type': 'object', 'properties': {
+                'sql': {
+                    'type': 'string',
+                    'description': (
+                        'SELECT sobre ventasgeneral2. '
+                        'Debe incluir WHERE FechaContable BETWEEN \'YYYY-MM-DD\' AND \'YYYY-MM-DD\'. '
+                        'Sin LIMIT/OFFSET ni comentarios SQL.'
+                    ),
+                },
+                'pagina': {'anyOf': [{'type': 'integer'}, {'type': 'string'}], 'description': 'Página ≥1. Default 1.'},
+                'por_pagina': {'anyOf': [{'type': 'integer'}, {'type': 'string'}], 'description': 'Registros por página (10-100). Default 50.'},
+            }, 'required': ['sql']},
+        }},
+        {'type': 'function', 'function': {
             'name': 'ventasgeneral_catalogo',
             'description': (
                 'Devuelve los valores distintos (catálogo/maestro) de un campo de ventasgeneral2. '

@@ -1537,6 +1537,23 @@
             }
         } else {
             body.textContent = text;
+            const actions = document.createElement('div');
+            actions.className = 'ventas-chat-msg-actions';
+            const editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.className = 'ventas-chat-msg-edit';
+            editBtn.title = 'Usar como nueva pregunta';
+            editBtn.setAttribute('aria-label', 'Usar como nueva pregunta');
+            editBtn.innerHTML = '<i class="fas fa-pencil-alt" aria-hidden="true"></i>';
+            editBtn.addEventListener('click', function () {
+                if (input) {
+                    input.value = text;
+                    autosizeInput();
+                    input.focus();
+                }
+            });
+            actions.appendChild(editBtn);
+            div.appendChild(actions);
         }
         log.scrollTop = log.scrollHeight;
         syncFullPageHero();

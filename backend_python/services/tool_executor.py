@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 _log = logging.getLogger(__name__)
 
 from services.linea_codigo import index_hint_ventasgeneral2, linea_where_fragment
+from services.sql_guard import validate_select_sql, apply_pagination, build_count_sql, SqlGuardError
 from services.urlmap import (
     REPORT_SLUG_PARETO_CLIENTES_ZONA,
     REPORT_SLUG_PARETO_NC_ZONA,
@@ -38,6 +39,16 @@ DEFAULT_LIMIT = 50
 DEFAULT_POR_PAGINA = 50
 MIN_POR_PAGINA = 10
 MAX_POR_PAGINA = 100
+
+_TOOL_REGISTRY: dict[str, str] = {}
+
+
+def tool(name: str):
+    """Registra un método de ToolExecutor como handler del tool dado."""
+    def decorator(fn):
+        _TOOL_REGISTRY[name] = fn.__name__
+        return fn
+    return decorator
 
 
 def _parse_date(val, key='fecha', required=True):
@@ -236,46 +247,11 @@ class ToolExecutor:
 
     def execute(self, name, args):
         try:
-            dispatch = {
-                'ventasgeneral_resumen': self._resumen,
-                'ventasgeneral_buscar': self._buscar,
-                'ventasgeneral_pareto_nc_zonaprecio': self._pareto_nc,
-                'ventasgeneral_top_clientes_zona_precio': self._top_clientes_zona,
-                'ventasgeneral_barras_ventas_dimension': self._barras_dimension,
-                'ventasgeneral_comparativo_periodos': self._comparativo,
-                'ventasgeneral_top_productos': self._top_productos,
-                'ventasgeneral_top_clientes_globales': self._top_clientes_global,
-                'ventasgeneral_top_clientes_nota_credito': self._top_clientes_nc,
-                'ventasgeneral_nc_por_corporativo': self._nc_por_corporativo,
-                'ventasgeneral_mix_tdoc': self._mix_tdoc,
-                'ventasgeneral_barras_ruta_comercial': self._barras_ruta,
-                'ventasgeneral_barras_corporativo': self._barras_corporativo,
-                'ventasgeneral_serie_mensual_valor': self._serie_mensual,
-                'ventasgeneral_resumen_semanal': self._resumen_semanal,
-                'ventasgeneral_resumen_diario': self._resumen_diario,
-                'ventasgeneral_proyeccion_ventas': self._proyeccion,
-                'ventasgeneral_linea_resumen_provincia': self._linea_resumen_provincia,
-                'ventasgeneral_linea_diario_provincia': self._linea_diario_provincia,
-                'ventasgeneral_linea_precio_diario': self._linea_precio_diario,
-                'ventasgeneral_linea_precio_resumen_provincia': self._linea_precio_resumen_provincia,
-                'ventasgeneral_linea_mix_productos': self._linea_mix_productos,
-                'ventasgeneral_resumen_por_linea': self._resumen_por_linea,
-                'ventasgeneral_resumen_por_provincia': self._resumen_por_provincia,
-                'ventasgeneral_clientes_corporativo': self._clientes_corporativo,
-                'ventasgeneral_catalogo': self._catalogo,
-                'chat_usuario_estadisticas': self._chat_usuario_estadisticas,
-                'chat_top_usuarios': self._chat_top_usuarios,
-                'chat_actividad_por_dia': self._chat_actividad_por_dia,
-                'chat_listar_preguntas': self._chat_listar_preguntas,
-                'chat_buscar_pregunta': self._chat_buscar_pregunta,
-                'chat_resumen_threads': self._chat_resumen_threads,
-                'filtrar_previo': self._filtrar_previo,
-            }
-            fn = dispatch.get(name)
-            if fn is None:
+            method_name = _TOOL_REGISTRY.get(name)
+            if method_name is None:
                 result = {'error': f'Función no reconocida: {name}'}
             else:
-                result = fn(args)
+                result = getattr(self, method_name)(args)
         except ValueError as e:
             result = {
                 'error': str(e),
@@ -304,6 +280,7 @@ class ToolExecutor:
             self._last_tool_json = result_json
         return result_json
 
+    @tool('ventasgeneral_resumen')
     def _resumen(self, args):
         d1, d2 = _parse_date_range(args)
         sql = ('SELECT COUNT(*) AS filas, COALESCE(SUM(Valor),0) AS suma_valor,'
@@ -382,6 +359,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('ventasgeneral_buscar')
     def _buscar(self, args):
         pagina = _parse_pagina(args)
         por_pagina = _parse_por_pagina(args)
@@ -475,6 +453,7 @@ class ToolExecutor:
             ],
         }
 
+    @tool('ventasgeneral_pareto_nc_zonaprecio')
     def _pareto_nc(self, args):
         d1, d2 = _parse_date_range(args)
         max_z = _int_arg(args.get('max_zonas'), 100, 1, 200)
@@ -523,6 +502,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('ventasgeneral_top_clientes_zona_precio')
     def _top_clientes_zona(self, args):
         d1, d2 = _parse_date_range(args)
         pref = str(args.get('prefijo_descri_zona_precio') or '').strip().upper()
@@ -590,6 +570,7 @@ class ToolExecutor:
             ],
         }
 
+    @tool('ventasgeneral_barras_ventas_dimension')
     def _barras_dimension(self, args):
         d1, d2 = _parse_date_range(args)
         dim = _dimension(args.get('dimension', 'precio'))
@@ -632,6 +613,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('ventasgeneral_comparativo_periodos')
     def _comparativo(self, args):
         a1, a2 = _parse_date_range(args, 'fecha_desde_a', 'fecha_hasta_a')
         b1, b2 = _parse_date_range(args, 'fecha_desde_b', 'fecha_hasta_b')
@@ -674,6 +656,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('ventasgeneral_top_productos')
     def _top_productos(self, args):
         d1, d2 = _parse_date_range(args)
         top = _int_arg(args.get('top_n'), 15, 1, 100)
@@ -700,6 +683,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('ventasgeneral_top_clientes_globales')
     def _top_clientes_global(self, args):
         d1, d2 = _parse_date_range(args)
         top = _int_arg(args.get('top_n'), 10, 1, 100)
@@ -763,6 +747,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('ventasgeneral_top_clientes_nota_credito')
     def _top_clientes_nc(self, args):
         d1, d2 = _parse_date_range(args)
         top = _int_arg(args.get('top_n'), 10, 1, 100)
@@ -814,6 +799,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('ventasgeneral_nc_por_corporativo')
     def _nc_por_corporativo(self, args):
         d1, d2 = _parse_date_range(args)
         top = _int_arg(args.get('top_n'), 50, 1, 200)
@@ -864,6 +850,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('ventasgeneral_mix_tdoc')
     def _mix_tdoc(self, args):
         d1, d2 = _parse_date_range(args)
         sql = ("SELECT COALESCE(NULLIF(TRIM(CodigoDocumento),''),'(sin TDoc)') AS tdoc,"
@@ -894,6 +881,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('ventasgeneral_barras_ruta_comercial')
     def _barras_ruta(self, args):
         d1, d2 = _parse_date_range(args)
         top = _int_arg(args.get('top_n'), 15, 1, 100)
@@ -918,6 +906,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('ventasgeneral_barras_corporativo')
     def _barras_corporativo(self, args):
         d1, d2 = _parse_date_range(args)
         top = _int_arg(args.get('top_n'), 15, 1, 100)
@@ -963,6 +952,7 @@ class ToolExecutor:
             result['filtro_nombre_corporativo'] = nom_corp
         return result
 
+    @tool('ventasgeneral_serie_mensual_valor')
     def _serie_mensual(self, args):
         d1, d2 = _parse_date_range(args)
         sql = ("SELECT DATE_FORMAT(FechaContable, '%%Y-%%m') AS mes,"
@@ -981,6 +971,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('ventasgeneral_resumen_diario')
     def _resumen_diario(self, args):
         d1, d2 = _parse_date_range(args)
         orden = str(args.get('orden') or 'valor').strip().lower()
@@ -1016,6 +1007,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('ventasgeneral_resumen_semanal')
     def _resumen_semanal(self, args):
         d1, d2 = _parse_date_range(args)
         linea = str(args.get('linea_comercial') or '').strip()
@@ -1055,6 +1047,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('ventasgeneral_linea_resumen_provincia')
     def _linea_resumen_provincia(self, args):
         d1, d2 = _parse_date_range(args)
         linea = str(args.get('linea_comercial') or '').strip()
@@ -1116,6 +1109,7 @@ class ToolExecutor:
             ],
         }
 
+    @tool('ventasgeneral_linea_diario_provincia')
     def _linea_diario_provincia(self, args):
         d1, d2 = _parse_date_range(args)
         linea = str(args.get('linea_comercial') or '').strip()
@@ -1177,6 +1171,7 @@ class ToolExecutor:
             ],
         }
 
+    @tool('ventasgeneral_linea_precio_diario')
     def _linea_precio_diario(self, args):
         d1, d2 = _parse_date_range(args)
         linea = str(args.get('linea_comercial') or '').strip()
@@ -1240,6 +1235,7 @@ class ToolExecutor:
             ],
         }
 
+    @tool('ventasgeneral_linea_precio_resumen_provincia')
     def _linea_precio_resumen_provincia(self, args):
         d1, d2 = _parse_date_range(args)
         linea = str(args.get('linea_comercial') or '').strip()
@@ -1303,6 +1299,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('ventasgeneral_linea_mix_productos')
     def _linea_mix_productos(self, args):
         d1, d2 = _parse_date_range(args)
         linea = str(args.get('linea_comercial') or '').strip()
@@ -1359,6 +1356,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('ventasgeneral_resumen_por_linea')
     def _resumen_por_linea(self, args):
         d1, d2 = _parse_date_range(args)
         pagina = _parse_pagina(args)
@@ -1431,6 +1429,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('ventasgeneral_resumen_por_provincia')
     def _resumen_por_provincia(self, args):
         d1, d2 = _parse_date_range(args)
         pagina = _parse_pagina(args)
@@ -1539,6 +1538,7 @@ class ToolExecutor:
         b = (sum_y - m * sum_x) / n
         return m, b
 
+    @tool('ventasgeneral_proyeccion_ventas')
     def _proyeccion(self, args):
         d1, d2 = _parse_date_range(args)
         meses = _int_arg(args.get('meses_a_proyectar'), 3, 1, 12)
@@ -1631,6 +1631,7 @@ class ToolExecutor:
         'glosa':           'GlosaDetalle',
     }
 
+    @tool('ventasgeneral_clientes_corporativo')
     def _clientes_corporativo(self, args):
         nom_corp = str(args.get('nombre_corporativo') or '').strip()
         if not nom_corp:
@@ -1688,6 +1689,34 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('consulta_libre')
+    def _consulta_libre(self, args):
+        raw_sql = str(args.get('sql') or '').strip()
+        if not raw_sql:
+            raise ValueError('Falta el parámetro sql.')
+        clean_sql = validate_select_sql(raw_sql)  # SqlGuardError extiende ValueError
+
+        pagina = _parse_pagina(args)
+        por_pagina = _parse_por_pagina(args)
+
+        sql_count = build_count_sql(clean_sql)
+        total_rows = _count_query(self._conn, sql_count, None)
+
+        sql_data = apply_pagination(clean_sql, pagina, por_pagina)
+        rows = _q(self._conn, sql_data, None)
+
+        return {
+            'tipo': 'consulta_libre',
+            'total_filas': total_rows,
+            'paginacion': _pagination_meta(total_rows, pagina, por_pagina),
+            'filas': [dict(r) for r in rows],
+            '_sql_traces': [
+                {'sql': sql_count, 'params': {}},
+                {'sql': sql_data, 'params': {}},
+            ],
+        }
+
+    @tool('ventasgeneral_catalogo')
     def _catalogo(self, args):
         campo = str(args.get('campo') or '').strip().lower()
         col = self._CATALOGO_CAMPOS.get(campo)
@@ -1756,6 +1785,7 @@ class ToolExecutor:
             params['d2'] = d2
         return where, params, d1, d2
 
+    @tool('chat_usuario_estadisticas')
     def _chat_usuario_estadisticas(self, args):
         where, params, d1, d2 = self._chat_periodo_where(args, required=True)
         username = str(args.get('username') or '').strip()
@@ -1791,6 +1821,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('chat_top_usuarios')
     def _chat_top_usuarios(self, args):
         where, params, d1, d2 = self._chat_periodo_where(args, required=True)
         top = _int_arg(args.get('top_n'), 10, 1, 100)
@@ -1837,6 +1868,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('chat_actividad_por_dia')
     def _chat_actividad_por_dia(self, args):
         where, params, d1, d2 = self._chat_periodo_where(args, required=True)
         username = str(args.get('username') or '').strip()
@@ -1878,6 +1910,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('chat_listar_preguntas')
     def _chat_listar_preguntas(self, args):
         where, params, d1, d2 = self._chat_periodo_where(args, required=False)
         username = str(args.get('username') or '').strip()
@@ -1938,6 +1971,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('chat_buscar_pregunta')
     def _chat_buscar_pregunta(self, args):
         texto = str(args.get('texto') or '').strip()
         if not texto:
@@ -1999,6 +2033,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('chat_resumen_threads')
     def _chat_resumen_threads(self, args):
         where, params, d1, d2 = self._chat_periodo_where(args, required=True)
         username = str(args.get('username') or '').strip()
@@ -2049,6 +2084,7 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('filtrar_previo')
     def _filtrar_previo(self, args):
         """Filtra/ordena el resultado de la consulta anterior sin tocar la BD."""
         if not self._prev_result:

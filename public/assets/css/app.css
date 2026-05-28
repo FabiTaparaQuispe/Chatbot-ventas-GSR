@@ -594,6 +594,38 @@ html[data-theme="dark"] .ventas-chat-msg.user .ventas-chat-msg-body {
     border-color: rgba(96, 165, 250, 0.38);
 }
 
+.ventas-chat-msg-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.2rem;
+    margin-top: 0.2rem;
+    opacity: 0;
+    transition: opacity 0.15s;
+    min-height: 1.4rem;
+}
+.ventas-chat-msg.user:hover .ventas-chat-msg-actions {
+    opacity: 1;
+}
+.ventas-chat-msg-edit {
+    border: none;
+    background: transparent;
+    color: var(--muted, #94a3b8);
+    cursor: pointer;
+    padding: 0.18rem 0.38rem;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    line-height: 1;
+    font: inherit;
+}
+.ventas-chat-msg-edit:hover {
+    background: rgba(148, 163, 184, 0.18);
+    color: var(--text, #0f172a);
+}
+html[data-theme="dark"] .ventas-chat-msg-edit:hover {
+    background: rgba(148, 163, 184, 0.15);
+    color: var(--text, #f4f4f5);
+}
+
 .ventas-chat-msg.assistant .ventas-chat-msg-body {
     color: var(--text);
     background: var(--surface);
