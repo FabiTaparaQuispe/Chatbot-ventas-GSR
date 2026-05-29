@@ -3,8 +3,8 @@ import json
 import logging
 from typing import Any, Callable
 
-import google.generativeai as genai
-from google.generativeai import protos
+from google import genai
+from google.genai import types
 
 try:
     from google.api_core import exceptions as _google_exc
@@ -17,10 +17,8 @@ logger = logging.getLogger(__name__)
 MAX_ITERATIONS = 10
 MAX_TOOL_JSON_BYTES = 14000
 
-_GENERATION_CONFIG = {
-    "temperature": 0.2,
-}
 
+# ── Helpers de JSON ───────────────────────────────────────────────────────────
 
 def _clamp_tool_json(json_str: str) -> str:
     if len(json_str) <= MAX_TOOL_JSON_BYTES:
@@ -43,10 +41,13 @@ def _clamp_tool_json(json_str: str) -> str:
                 return out
         data[key] = all_rows
     return json.dumps(
-        {"error": "respuesta_herramienta_muy_grande", "mensaje": "La consulta devolvió demasiados datos. Acote fechas o filtros."},
+        {"error": "respuesta_herramienta_muy_grande",
+         "mensaje": "La consulta devolvió demasiados datos. Acote fechas o filtros."},
         ensure_ascii=False,
     )
 
+
+# ── Conversión de schemas OpenAI → Gemini ────────────────────────────────────
 
 _GEMINI_SCHEMA_ALLOWED = frozenset({
     'type', 'description', 'enum', 'items', 'properties', 'required', 'nullable', 'format',
@@ -117,25 +118,26 @@ def _openai_messages_to_contents(messages: list[dict[str, Any]]) -> tuple[str | 
             continue
         if not isinstance(content, str) or not content.strip():
             continue
-        contents.append({
-            "role": "user" if role == "user" else "model",
-            "parts": [content.strip()],
-        })
+        contents.append(types.Content(
+            role="user" if role == "user" else "model",
+            parts=[types.Part(text=content.strip())],
+        ))
     return system_text, contents
 
 
+# ── Cliente Gemini (google-genai SDK) ─────────────────────────────────────────
+
 class GeminiClient:
-    def __init__(self, api_key: str, model: str = "gemini-2.5-flash") -> None:
+    def __init__(self, api_key: str, model: str = "gemini-2.0-flash") -> None:
         self._api_key = (api_key or "").strip()
-        self._model = (model or "gemini-2.5-flash").strip()
+        self._model = (model or "gemini-2.0-flash").strip()
         if not self._api_key:
             raise RuntimeError("Configure GEMINI_API_KEY en .env")
-        genai.configure(api_key=self._api_key)
+        self._client = genai.Client(api_key=self._api_key)
         self._decls_cache: list[dict] | None = None
         self._decls_cache_len: int = -1
-        self._model_cache: dict[tuple, Any] = {}
 
-    # ── Caché de schemas y modelos ────────────────────────────────────────────
+    # ── Helpers de configuración ──────────────────────────────────────────────
 
     def _get_function_decls(self, tools: list[dict]) -> list[dict]:
         n = len(tools)
@@ -144,36 +146,37 @@ class GeminiClient:
             self._decls_cache_len = n
         return self._decls_cache
 
-    def _get_model(self, system_text: str | None, function_decls: list[dict]) -> genai.GenerativeModel:
-        key = (system_text, bool(function_decls))
-        if key not in self._model_cache:
-            self._model_cache[key] = self._make_model(system_text, function_decls)
-        return self._model_cache[key]
-
-    def _make_model(self, system_text: str | None, function_decls: list[dict]) -> genai.GenerativeModel:
-        tools = [{"function_declarations": function_decls}] if function_decls else None
-        tool_config = {"function_calling_config": {"mode": "AUTO"}} if function_decls else None
-        return genai.GenerativeModel(
-            model_name=self._model,
-            system_instruction=system_text or None,
-            tools=tools,
-            tool_config=tool_config,
-            generation_config=_GENERATION_CONFIG,
-        )
+    def _make_config(self, system_text: str | None, function_decls: list[dict],
+                     mode: str = 'AUTO') -> types.GenerateContentConfig:
+        kwargs: dict[str, Any] = {
+            'system_instruction': system_text or None,
+            'temperature': 0.2,
+        }
+        if function_decls:
+            kwargs['tools'] = [types.Tool(function_declarations=function_decls)]
+            kwargs['tool_config'] = types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(mode=mode)
+            )
+        return types.GenerateContentConfig(**kwargs)
 
     # ── Llamada async con reintentos ──────────────────────────────────────────
 
-    async def _generate(self, model: genai.GenerativeModel, contents: list) -> Any:
+    async def _generate(self, contents: list, config: types.GenerateContentConfig) -> Any:
         _max_retries = 3
         last_exc: Exception = RuntimeError("Error desconocido")
         for attempt in range(_max_retries + 1):
             try:
-                return await model.generate_content_async(contents)
+                return await self._client.aio.models.generate_content(
+                    model=self._model,
+                    contents=contents,
+                    config=config,
+                )
             except Exception as e:
                 last_exc = e
                 if self._is_retryable(e) and attempt < _max_retries:
                     wait = 30
-                    logger.info("Gemini retryable error → reintentando en %ss (intento %d/%d)", wait, attempt + 1, _max_retries)
+                    logger.info("Gemini retryable error → reintentando en %ss (intento %d/%d)",
+                                wait, attempt + 1, _max_retries)
                     await asyncio.sleep(wait)
                     continue
                 break
@@ -198,9 +201,8 @@ class GeminiClient:
             raise RuntimeError("Intentá de nuevo en unos segundos.") from e
         if is_503:
             raise RuntimeError(
-                "Gemini API no disponible temporalmente (503). Suele ser saturación del servicio de Google; "
-                "reintentá en 1–5 minutos. Si persiste, probá otro modelo (GEMINI_MODEL en .env) o "
-                "cambiá a Groq: LLM_PROVIDER=groq y GROQ_API_KEY."
+                "Gemini API no disponible temporalmente (503). "
+                "Reintentá en 1–5 minutos o cambiá a Groq: LLM_PROVIDER=groq."
             ) from e
         if is_auth:
             raise RuntimeError("Gemini rechazó la API key (403). Verificá GEMINI_API_KEY en .env.") from e
@@ -212,29 +214,32 @@ class GeminiClient:
     def _extract_parts(response: Any) -> tuple[str, list[dict]]:
         text_out = ""
         tool_calls: list[dict] = []
-        candidate = response.candidates[0] if response.candidates else None
-        if not candidate or not candidate.content:
-            return text_out, tool_calls
-        for part in candidate.content.parts:
-            if hasattr(part, "text") and part.text:
-                text_out += part.text
-            if hasattr(part, "function_call") and part.function_call and part.function_call.name:
-                tool_calls.append({
-                    "name": part.function_call.name,
-                    "args": dict(part.function_call.args),
-                })
+        try:
+            candidate = response.candidates[0] if response.candidates else None
+            if not candidate or not candidate.content:
+                return text_out, tool_calls
+            for part in candidate.content.parts:
+                if hasattr(part, "text") and part.text:
+                    text_out += part.text
+                if hasattr(part, "function_call") and part.function_call and part.function_call.name:
+                    tool_calls.append({
+                        "name": part.function_call.name,
+                        "args": dict(part.function_call.args),
+                    })
+        except Exception as e:
+            logger.error("[Gemini] Error extrayendo partes de la respuesta: %s", e)
         return text_out, tool_calls
 
     @staticmethod
-    def _fn_response_content(results: list[tuple[str, Any]]) -> protos.Content:
+    def _fn_response_content(results: list[tuple[str, Any]]) -> types.Content:
         parts = [
-            protos.Part(function_response=protos.FunctionResponse(
+            types.Part(function_response=types.FunctionResponse(
                 name=name,
                 response={"result": result},
             ))
             for name, result in results
         ]
-        return protos.Content(role="user", parts=parts)
+        return types.Content(role="user", parts=parts)
 
     # ── API pública async ─────────────────────────────────────────────────────
 
@@ -248,13 +253,20 @@ class GeminiClient:
     ) -> tuple:
         system_text, contents = _openai_messages_to_contents(messages)
         function_decls = self._get_function_decls(tools)
-        model_with_tools = self._get_model(system_text, function_decls)
-        model_plain = self._get_model(system_text, [])
+        config_with_tools = self._make_config(system_text, function_decls, mode='AUTO')
+        config_plain = self._make_config(system_text, [], mode='AUTO')
+
+        last_user = next((m.get('content', '')[:80] for m in reversed(messages) if m.get('role') == 'user'), '')
+        logger.info("[Gemini.stream] INICIO | model=%s | user='%s'", self._model, last_user)
 
         for _iteration in range(1, MAX_ITERATIONS + 1):
-            current_model = model_with_tools if _iteration == 1 else model_plain
-            response = await self._generate(current_model, contents)
+            config = config_with_tools if _iteration == 1 else config_plain
+            logger.info("[Gemini.stream] iter=%d → llamada LLM", _iteration)
+
+            response = await self._generate(contents, config)
             text_out, tool_calls = self._extract_parts(response)
+            logger.info("[Gemini.stream] iter=%d → tools=%d | text_len=%d",
+                        _iteration, len(tool_calls), len(text_out))
 
             if tool_calls:
                 contents.append(response.candidates[0].content)
@@ -291,79 +303,87 @@ class GeminiClient:
                         await on_event({"type": "reply", "text": fast_reply.strip()})
                         return fast_reply.strip(), messages
 
-                # Respuesta final en streaming nativo async
+                # Respuesta final en streaming — nuevo SDK: chunk.text devuelve None en lugar de lanzar excepción
                 await on_event({"type": "status", "text": "Generando respuesta..."})
                 full_text = ""
                 chunks_total = 0
-                chunks_con_texto = 0
                 exc_stream = None
                 try:
-                    response_stream = await model_plain.generate_content_async(contents, stream=True)
-                    async for chunk in response_stream:
+                    async for chunk in await self._client.aio.models.generate_content_stream(
+                        model=self._model,
+                        contents=contents,
+                        config=config_plain,
+                    ):
                         chunks_total += 1
-                        try:
-                            token = chunk.text
-                        except Exception as e:
-                            # thinking tokens u otras partes no-texto
-                            logger.debug("[Gemini.stream] chunk.text lanzó %s (thinking token?)", type(e).__name__)
-                            token = ""
+                        token = chunk.text or ""  # None para thinking/no-text, sin excepción
                         if token:
-                            chunks_con_texto += 1
                             full_text += token
                             await on_event({"type": "token", "text": token})
                 except Exception as e:
                     exc_stream = e
                     logger.warning("[Gemini.stream] EXCEPCIÓN durante stream: %s", e)
-                    fb = await self._generate(model_plain, contents)
-                    full_text, _ = self._extract_parts(fb)
-                    if full_text:
-                        await on_event({"type": "reply", "text": full_text})
+                    try:
+                        fb = await self._generate(contents, config_plain)
+                        full_text, _ = self._extract_parts(fb)
+                        if full_text:
+                            await on_event({"type": "reply", "text": full_text})
+                    except Exception as e2:
+                        logger.error("[Gemini.stream] Fallback también falló: %s", e2)
 
-                logger.info(
-                    "[Gemini.stream] Stream terminado | chunks=%d | con_texto=%d | full_text_len=%d | exc=%s",
-                    chunks_total, chunks_con_texto, len(full_text), exc_stream
-                )
+                logger.info("[Gemini.stream] Stream terminado | chunks=%d | full_text_len=%d | exc=%s",
+                            chunks_total, len(full_text), exc_stream)
 
                 # Fallback si el stream completó sin emitir texto
                 if not full_text:
                     logger.warning("[Gemini.stream] full_text VACÍO → fallback sin streaming")
-                    fb = await self._generate(model_plain, contents)
-                    full_text, _ = self._extract_parts(fb)
-                    logger.info("[Gemini.stream] Fallback → full_text_len=%d", len(full_text))
-                    if full_text:
-                        await on_event({"type": "reply", "text": full_text})
+                    try:
+                        fb = await self._generate(contents, config_plain)
+                        full_text, _ = self._extract_parts(fb)
+                        logger.info("[Gemini.stream] Fallback → full_text_len=%d", len(full_text))
+                        if full_text:
+                            await on_event({"type": "reply", "text": full_text})
+                    except Exception as e:
+                        logger.error("[Gemini.stream] Fallback sin streaming falló: %s", e)
 
                 logger.info("[Gemini.stream] RETORNO | full_text_len=%d | vacío=%s",
                             len(full_text), not full_text)
-                contents.append({"role": "model", "parts": [full_text]})
+                contents.append(types.Content(
+                    role="model",
+                    parts=[types.Part(text=full_text or " ")]
+                ))
                 return full_text.strip(), messages
 
+            # Sin tool calls — respuesta directa de texto
             reply = text_out.strip()
             logger.info("[Gemini.stream] Sin tools → reply directo | len=%d", len(reply))
 
             # Retry si Gemini devolvió texto vacío sin tools (candidato bloqueado/vacío)
             if not reply:
-                logger.warning("[Gemini.stream] reply VACÍO sin tools → reintentando con model_with_tools")
+                logger.warning("[Gemini.stream] reply VACÍO sin tools → reintentando con tools")
                 try:
-                    fb = await self._generate(model_with_tools, contents)
+                    fb = await self._generate(contents, config_with_tools)
                     fb_text, fb_tools = self._extract_parts(fb)
                     if fb_text:
                         reply = fb_text.strip()
                         logger.info("[Gemini.stream] Retry → reply_len=%d", len(reply))
                     elif fb_tools:
-                        # El retry SÍ quiso llamar tools — forzar una respuesta de texto
-                        logger.info("[Gemini.stream] Retry devolvió tools=%d, generando texto final", len(fb_tools))
-                        contents_retry = list(contents)
-                        contents_retry.append(fb.candidates[0].content)
-                        contents_retry.append(protos.Content(role="user", parts=[
-                            protos.Part(function_response=protos.FunctionResponse(
-                                name=fb_tools[0]["name"],
-                                response={"result": {"error": "No se pudo ejecutar en este momento. Intenta reformular la consulta."}},
-                            ))
-                        ]))
-                        fb2 = await self._generate(model_plain, contents_retry)
-                        fb2_text, _ = self._extract_parts(fb2)
-                        reply = fb2_text.strip()
+                        # El retry quiso llamar tools — procesarlos
+                        logger.info("[Gemini.stream] Retry devolvió tools=%d, procesando", len(fb_tools))
+                        contents.append(fb.candidates[0].content)
+                        retry_results = []
+                        for tc in fb_tools:
+                            await on_event({"type": "status", "text": "Consultando base de datos..."})
+                            tool_json = _clamp_tool_json(await run_tool(tc["name"], tc["args"]))
+                            try:
+                                tool_obj = json.loads(tool_json)
+                            except Exception:
+                                tool_obj = {"raw": tool_json}
+                            retry_results.append((tc["name"], tool_obj))
+                        contents.append(self._fn_response_content(retry_results))
+                        await on_event({"type": "status", "text": "Generando respuesta..."})
+                        fb2 = await self._generate(contents, config_plain)
+                        reply = self._extract_parts(fb2)[0].strip()
+                        logger.info("[Gemini.stream] Retry con tools → reply_len=%d", len(reply))
                 except Exception as e:
                     logger.error("[Gemini.stream] Retry falló: %s", e)
 
@@ -371,6 +391,7 @@ class GeminiClient:
             return reply, messages
 
         reply = "Se alcanzó el límite de iteraciones con herramientas."
+        logger.warning("[Gemini.stream] Límite de iteraciones alcanzado")
         await on_event({"type": "reply", "text": reply})
         return reply, messages
 
@@ -383,12 +404,12 @@ class GeminiClient:
     ) -> dict[str, Any]:
         system_text, contents = _openai_messages_to_contents(messages)
         function_decls = self._get_function_decls(tools)
-        model_with_tools = self._get_model(system_text, function_decls)
-        model_plain = self._get_model(system_text, [])
+        config_with_tools = self._make_config(system_text, function_decls, mode='AUTO')
+        config_plain = self._make_config(system_text, [], mode='AUTO')
 
         for _iteration in range(1, MAX_ITERATIONS + 1):
-            current_model = model_with_tools if _iteration == 1 else model_plain
-            response = await self._generate(current_model, contents)
+            config = config_with_tools if _iteration == 1 else config_plain
+            response = await self._generate(contents, config)
             text_out, tool_calls = self._extract_parts(response)
 
             if tool_calls:
@@ -415,6 +436,32 @@ class GeminiClient:
                         return {"reply": fast_reply.strip(), "messages": messages}
                 continue
 
-            return {"reply": text_out.strip(), "messages": messages}
+            reply = text_out.strip()
+            if not reply and _iteration == 1:
+                # Retry si la primera respuesta fue vacía
+                logger.warning("[Gemini] chat_with_tools: reply vacío en iter=1, reintentando")
+                try:
+                    fb = await self._generate(contents, config_with_tools)
+                    fb_text, fb_tools = self._extract_parts(fb)
+                    if fb_text:
+                        reply = fb_text.strip()
+                    elif fb_tools:
+                        # Procesar tools del retry
+                        contents.append(fb.candidates[0].content)
+                        retry_results = []
+                        for tc in fb_tools:
+                            tool_json = _clamp_tool_json(await run_tool(tc["name"], tc["args"]))
+                            try:
+                                tool_obj = json.loads(tool_json)
+                            except Exception:
+                                tool_obj = {"raw": tool_json}
+                            retry_results.append((tc["name"], tool_obj))
+                        contents.append(self._fn_response_content(retry_results))
+                        fb2 = await self._generate(contents, config_plain)
+                        reply = self._extract_parts(fb2)[0].strip()
+                except Exception as e:
+                    logger.error("[Gemini] chat_with_tools retry falló: %s", e)
+
+            return {"reply": reply, "messages": messages}
 
         return {"reply": "Se alcanzó el límite de iteraciones con herramientas.", "messages": messages}

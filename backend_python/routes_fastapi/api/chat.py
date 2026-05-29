@@ -216,6 +216,10 @@ async def chat(request: Request):
                     pass
                 break
 
+        if not reply:
+            reply = 'No pude generar una respuesta. Por favor intentá de nuevo o reformulá la consulta.'
+            _log.warning("/api/chat reply vacío → usando mensaje de fallback")
+
         return {'reply': _unify_pareto_links(reply), 'ok': True, 'last_result': last_result}
 
     except RuntimeError as e:
@@ -287,6 +291,11 @@ async def chat_stream(request: Request):
                 sql_text = format_sql_traces_for_display(executor.pull_sql_traces())
                 if sql_text:
                     reply = reply + '\n\n' + sql_text
+
+                # Seguridad final: si el reply llegó vacío, evitar burbuja en blanco
+                if not reply:
+                    reply = 'No pude generar una respuesta. Por favor intentá de nuevo o reformulá la consulta.'
+                    _log.warning("[chat/stream] reply vacío → usando mensaje de fallback")
 
                 _log.info("[chat/stream] done | reply_final_len=%d", len(reply))
                 await q.put({
