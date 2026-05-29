@@ -182,6 +182,8 @@ def enrich_reply(reply: str, groq_messages: list, last_tool_json: str | None = N
         return _format_display_numbers(_dedup_module_url(_append_url(reply, report_url)))
 
     if _looks_like_ranking(reply):
+        if summary and (_reply_has_markdown_table(summary) or _looks_like_kv_dump(reply)):
+            return _format_display_numbers(_summary_with_url(summary, reply, payload))
         return _format_display_numbers(_dedup_module_url(_append_url(reply, report_url)))
 
     head = summary[:120]
@@ -230,6 +232,11 @@ def _reply_has_markdown_table(reply: str) -> bool:
 
 def _looks_like_ranking(reply: str) -> bool:
     return bool(reply and len(re.findall(r'^\d+\.\s+', reply, re.MULTILINE)) >= 2)
+
+
+def _looks_like_kv_dump(reply: str) -> bool:
+    """Lista numerada con pares clave=valor (formato genérico roto del enriquecedor)."""
+    return bool(re.search(r'^\d+\.\s+\w+=', reply, re.MULTILINE))
 
 
 def _uses_generic_labels(reply: str) -> bool:
@@ -309,6 +316,12 @@ def _format_payload(payload: dict) -> str:
 
     if str(payload.get('tipo') or '') == 'linea_precio_resumen_provincia':
         return _lines_linea_precio_resumen_provincia(filas, payload)
+
+    if str(payload.get('tipo') or '') == 'linea_precio_top_clientes':
+        return _lines_linea_precio_top_clientes(filas, payload)
+
+    if str(payload.get('tipo') or '') == 'linea_precio_diario_provincia_cliente':
+        return _lines_linea_precio_diario(filas, payload)
 
     if 'zona' in first and 'lineas_nc' in first and 'impacto_abs_valor' in first:
         return _lines_pareto_nc(filas)
@@ -415,6 +428,71 @@ def _lines_linea_precio_resumen_provincia(filas, payload):
     if total_pk is not None:
         out.append(f'Total ponderado del período: S/ {_fmt_num(total_pk, 2)}')
     return '\n'.join(out)
+
+
+def _lines_linea_precio_top_clientes(filas, payload):
+    linea = str(payload.get('linea_comercial') or '')
+    mercado = str(payload.get('mercado') or '').strip()
+    p = payload.get('periodo') or {}
+    d1 = str(p.get('desde') or '') if isinstance(p, dict) else ''
+    d2 = str(p.get('hasta') or '') if isinstance(p, dict) else ''
+    title = f'Precio/kg por cliente — {linea}' if linea else 'Precio/kg por cliente'
+    if mercado:
+        title += f' (mercado {mercado})'
+    if d1 and d2:
+        title += f' ({d1} – {d2})'
+    lines = [
+        title,
+        '',
+        '| # | Cliente | Provincia | Precio/kg (S/) | Peso (kg) | Importe (S/) |',
+        '| --- | --- | --- | ---: | ---: | ---: |',
+    ]
+    for i, r in enumerate(filas, 1):
+        nom = str(r.get('nombre_cliente') or '')
+        prov = str(r.get('provincia') or '')
+        pk = r.get('precio_kg')
+        precio_s = _fmt_num(pk, 2) if pk is not None else '—'
+        peso = _fmt_num(r.get('suma_peso') or 0)
+        val = _fmt_num(r.get('suma_valor') or 0)
+        lines.append(f'| {i} | {nom} | {prov} | {precio_s} | {peso} | {val} |')
+    total = payload.get('total_clientes')
+    if total is not None and int(total) > len(filas):
+        lines.append(f'\n({int(total)} clientes en total; mostrando top {len(filas)}.)')
+    return '\n'.join(lines)
+
+
+def _lines_linea_precio_diario(filas, payload):
+    linea = str(payload.get('linea_comercial') or '')
+    mercado = str(payload.get('mercado') or '').strip()
+    p = payload.get('periodo') or {}
+    d1 = str(p.get('desde') or '') if isinstance(p, dict) else ''
+    d2 = str(p.get('hasta') or '') if isinstance(p, dict) else ''
+    title = f'Precio/kg diario — {linea}' if linea else 'Precio/kg diario'
+    if mercado:
+        title += f' (mercado {mercado})'
+    if d1 and d2:
+        title += f' ({d1} – {d2})'
+    lines = [
+        title,
+        '',
+        '| # | Fecha | Cliente | Precio/kg (S/) | Peso (kg) | Importe (S/) |',
+        '| --- | --- | --- | ---: | ---: | ---: |',
+    ]
+    for i, r in enumerate(filas[:25], 1):
+        fecha = str(r.get('fecha') or '')
+        nom = str(r.get('nombre_cliente') or '')
+        pk = r.get('precio_kg')
+        precio_s = _fmt_num(pk, 2) if pk is not None else '—'
+        peso = _fmt_num(r.get('suma_peso') or 0)
+        val = _fmt_num(r.get('suma_valor') or 0)
+        lines.append(f'| {i} | {fecha} | {nom} | {precio_s} | {peso} | {val} |')
+    pag = payload.get('paginacion') or {}
+    total = int(pag.get('total_filas') or 0) if isinstance(pag, dict) else 0
+    if total > 25:
+        lines.append(f'\n(+{total - 25} filas más en el reporte.)')
+    elif len(filas) > 25:
+        lines.append(f'\n(+{len(filas) - 25} filas más en el reporte.)')
+    return '\n'.join(lines)
 
 
 def _lines_top_global(filas):

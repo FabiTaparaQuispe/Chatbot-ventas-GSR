@@ -1240,6 +1240,68 @@ class ToolExecutor:
             ],
         }
 
+    @tool('ventasgeneral_linea_top_clientes_precio_kg')
+    def _linea_top_clientes_precio_kg(self, args):
+        d1, d2 = _parse_date_range(args)
+        linea = str(args.get('linea_comercial') or '').strip()
+        if not linea:
+            raise ValueError("Falta linea_comercial (ej. 'Pollo Vivo')")
+        top = _int_arg(args.get('top_n'), 10, 1, 100)
+        cod_item = str(args.get('cod_item') or '').strip()
+        mercado = str(args.get('mercado') or '').strip().upper()
+        _linea_where, _linea_bind = linea_where_fragment(self._conn, linea, style='pyformat')
+        _from_v2 = ' FROM ventasgeneral2' + index_hint_ventasgeneral2(self._conn, linea, 'contable')
+
+        where_sql = (_from_v2
+                     + " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+                     + _linea_where)
+        params = {'d1': d1, 'd2': d2, **_linea_bind}
+        if cod_item:
+            where_sql += " AND CodigoItem = %(cod_item)s"
+            params['cod_item'] = cod_item
+        if mercado:
+            where_sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(prefzo)s"
+            params['prefzo'] = mercado + '%'
+
+        group_by = " GROUP BY CodigoCliente"
+        having_sql = " HAVING COALESCE(SUM(Peso),0) > 0"
+        sql_count = (
+            "SELECT COUNT(*) AS total FROM (SELECT 1"
+            + where_sql + group_by + having_sql + ") AS sub"
+        )
+        total_rows = _count_query(self._conn, sql_count, params)
+
+        sql_select = (
+            "SELECT CodigoCliente AS cod_cliente,"
+            " MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
+            " MAX(COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)')) AS provincia,"
+            " COUNT(*) AS lineas,"
+            " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
+            " COALESCE(SUM(Peso),0) AS suma_peso,"
+            " COALESCE(SUM(Valor),0) AS suma_valor,"
+            " ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4) AS precio_kg"
+            + where_sql + group_by + having_sql
+            + f" ORDER BY precio_kg DESC LIMIT {top}"
+        )
+        rows = _q(self._conn, sql_select, params)
+        q = _qs({'desde': d1, 'hasta': d2, 'linea': linea,
+                 'cod_item': cod_item or None, 'mercado': mercado or None})
+        return {
+            'tabla': 'ventasgeneral2',
+            'tipo': 'linea_precio_top_clientes',
+            'linea_comercial': linea,
+            'mercado': mercado or None,
+            'periodo': {'desde': d1, 'hasta': d2},
+            'top_n': top,
+            'total_clientes': total_rows,
+            'filas': [dict(r) for r in rows],
+            'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_LINEA_PRECIO_DIARIO, q),
+            '_sql_traces': [
+                {'sql': sql_count, 'params': params},
+                {'sql': sql_select, 'params': params},
+            ],
+        }
+
     @tool('ventasgeneral_linea_precio_resumen_provincia')
     def _linea_precio_resumen_provincia(self, args):
         d1, d2 = _parse_date_range(args)

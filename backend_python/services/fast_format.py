@@ -374,6 +374,31 @@ def _fmt_serie_mensual(result):
     return '\n'.join(lines)
 
 
+def _fmt_linea_precio_top_clientes(result):
+    filas = result.get('filas', [])
+    if not filas:
+        return None
+    linea = result.get('linea_comercial', '')
+    mercado = result.get('mercado') or ''
+    per = _periodo(result)
+    header = f"Clientes por precio/kg: {linea}" if linea else "Clientes por precio/kg"
+    if mercado:
+        header += f" — mercado {mercado}"
+    if per:
+        header += f" ({per})"
+    lines = [header + ":\n"]
+    for i, r in enumerate(filas, 1):
+        nom = r.get('nombre_cliente') or '?'
+        pk = r.get('precio_kg')
+        precio_s = f"S/ {float(pk):,.2f}/kg" if pk is not None else "S/ —/kg"
+        peso = float(r.get('suma_peso') or 0)
+        lines.append(f"{i}. {nom}: {precio_s} ({peso:,.2f} kg)")
+    url = _url(result)
+    if url:
+        lines.append(f"\n{url}")
+    return '\n'.join(lines)
+
+
 def _fmt_linea_resumen(result):
     filas = result.get('filas', [])
     if not filas:
@@ -423,6 +448,7 @@ _FORMATTERS = {
     'ventasgeneral_mix_tdoc':                 _fmt_mix_tdoc,
     'ventasgeneral_serie_mensual_valor':      _fmt_serie_mensual,
     'ventasgeneral_linea_resumen_provincia':  _fmt_linea_resumen,
+    'ventasgeneral_linea_top_clientes_precio_kg': _fmt_linea_precio_top_clientes,
     'ventasgeneral_resumen_por_provincia':    _fmt_resumen_por_provincia,
 }
 

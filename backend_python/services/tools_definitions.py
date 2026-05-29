@@ -252,13 +252,34 @@ def ventas_tool_definitions():
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_linea_precio_diario',
-            'description': f'Precio/kg diario (Valor/Peso) de una línea por fecha, provincia y cliente. reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_LINEA_PRECIO_DIARIO}?…',
+            'description': (
+                f'Precio/kg diario (Valor/Peso) de una línea por fecha, provincia y cliente. '
+                f'Usar SOLO cuando el usuario pide desglose por día o un día concreto. '
+                f'NO usar para "cliente que pagó más caro por kg en el mes" (usar ventasgeneral_linea_top_clientes_precio_kg). '
+                f'reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_LINEA_PRECIO_DIARIO}?…'
+            ),
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt,
                 'linea_comercial': {'type': 'string', 'description': "Texto de LineaComercial, ej. 'Pollo Vivo'"},
                 'cod_item': {'type': 'string', 'description': 'Código de producto, ej. 100 (carne), 103 (brasa)'},
                 'mercado': pref,
                 'pagina': pagina, 'por_pagina': por_pagina,
+            }, 'required': ['fecha_desde', 'fecha_hasta', 'linea_comercial']},
+        }},
+        {'type': 'function', 'function': {
+            'name': 'ventasgeneral_linea_top_clientes_precio_kg',
+            'description': (
+                f'Ranking de clientes por precio/kg (SUM(Valor)/SUM(Peso)) en un período, agregado por cliente '
+                f'(no por día). Responde "¿qué cliente pagó más caro por kg?", "top clientes por precio en LAJOYA". '
+                f'Usar top_n=1 si piden un solo cliente. Filtro opcional mercado (prefijo DescripcionZonaPrecio, ej. LAJOYA). '
+                f'reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_LINEA_PRECIO_DIARIO}?…'
+            ),
+            'parameters': {'type': 'object', 'properties': {
+                'fecha_desde': d_opt, 'fecha_hasta': d_opt,
+                'linea_comercial': {'type': 'string', 'description': "Texto de LineaComercial, ej. 'Pollo Vivo'"},
+                'cod_item': {'type': 'string', 'description': 'Código de producto, ej. 100 (carne), 103 (brasa)'},
+                'mercado': pref,
+                'top_n': dn,
             }, 'required': ['fecha_desde', 'fecha_hasta', 'linea_comercial']},
         }},
         {'type': 'function', 'function': {
