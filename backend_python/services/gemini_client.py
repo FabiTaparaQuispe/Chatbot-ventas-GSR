@@ -361,7 +361,7 @@ class GeminiClient:
             # Reintento 1: AUTO (igual que el primero, por si fue transitorio)
             # Reintentos 2-3: REQUIRED (fuerza al modelo a llamar una herramienta)
             if not reply:
-                config_required = self._make_config(system_text, function_decls, mode='REQUIRED')
+                config_required = self._make_config(system_text, function_decls, mode='ANY')
                 for _retry_n in range(1, 4):
                     modo = 'AUTO' if _retry_n == 1 else 'REQUIRED'
                     cfg_retry = config_with_tools if _retry_n == 1 else config_required
