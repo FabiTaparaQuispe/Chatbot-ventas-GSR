@@ -1591,7 +1591,7 @@ class ToolExecutor:
 
     @staticmethod
     def _regresion_lineal(series: list[float]) -> tuple[float, float]:
-        """Devuelve (pendiente m, intercepto b) para la serie dada."""
+        """Devuelve (pendiente m, intercepto b) para y = mx + b."""
         n = len(series)
         sum_x = sum_y = sum_xy = sum_xx = 0.0
         for i, y in enumerate(series):
@@ -1607,24 +1607,117 @@ class ToolExecutor:
         b = (sum_y - m * sum_x) / n
         return m, b
 
+    @staticmethod
+    def _proyectar_lineal(series: list[float], n_hist: int, meses: int) -> list[float]:
+        m, b = ToolExecutor._regresion_lineal(series)
+        return [max(0.0, m * (n_hist + i - 1) + b) for i in range(1, meses + 1)]
+
+    @staticmethod
+    def _parse_mes_yyyy_mm(mes: str) -> tuple[int, int]:
+        s = str(mes or '').strip()
+        return int(s[:4]), int(s[5:7])
+
+    @staticmethod
+    def _siguiente_mes(yr: int, mo: int, delta: int = 1) -> tuple[int, int]:
+        mo += delta
+        yr += (mo - 1) // 12
+        mo = ((mo - 1) % 12) + 1
+        return yr, mo
+
+    @staticmethod
+    def _proyectar_media_movil_estacional(filas: list, meses: int) -> tuple[list[dict], dict]:
+        """Opción A: promedio del mismo mes calendario en años anteriores; fallback lineal."""
+        from collections import defaultdict
+
+        by_mes_cal: dict[int, list[dict]] = defaultdict(list)
+        for r in filas:
+            yr, mo = ToolExecutor._parse_mes_yyyy_mm(r.get('mes'))
+            cant = float(r.get('suma_cantidad') or 0)
+            peso = float(r.get('suma_peso') or 0)
+            by_mes_cal[mo].append({
+                'year': yr,
+                'valor': float(r.get('suma_valor') or 0),
+                'cantidad': cant,
+                'peso_prom': peso / cant if cant > 0 else 0.0,
+            })
+
+        n = len(filas)
+        serie_valor = [float(r.get('suma_valor') or 0) for r in filas]
+        serie_cantidad = [float(r.get('suma_cantidad') or 0) for r in filas]
+        serie_peso_prom = [
+            (float(r.get('suma_peso') or 0) / float(r.get('suma_cantidad') or 1))
+            if float(r.get('suma_cantidad') or 0) > 0 else 0.0
+            for r in filas
+        ]
+        fallback_valor = ToolExecutor._proyectar_lineal(serie_valor, n, meses)
+        fallback_cant = ToolExecutor._proyectar_lineal(serie_cantidad, n, meses)
+        fallback_pprom = ToolExecutor._proyectar_lineal(serie_peso_prom, n, meses)
+
+        last_yr, last_mo = ToolExecutor._parse_mes_yyyy_mm(filas[-1]['mes'])
+        proyecciones: list[dict] = []
+        estacional_n = lineal_n = 0
+        anos_estacion = sorted({ToolExecutor._parse_mes_yyyy_mm(r.get('mes'))[0] for r in filas})
+
+        for i in range(1, meses + 1):
+            yr, mo = ToolExecutor._siguiente_mes(last_yr, last_mo, i)
+            hist = [h for h in by_mes_cal.get(mo, []) if h['year'] < yr]
+            if hist:
+                valor = sum(h['valor'] for h in hist) / len(hist)
+                cant = sum(h['cantidad'] for h in hist) / len(hist)
+                pprom = sum(h['peso_prom'] for h in hist) / len(hist)
+                metodo_mes = 'estacional'
+                estacional_n += 1
+            else:
+                valor = fallback_valor[i - 1]
+                cant = fallback_cant[i - 1]
+                pprom = fallback_pprom[i - 1]
+                metodo_mes = 'lineal'
+                lineal_n += 1
+            proyecciones.append({
+                'mes': f'{yr:04d}-{mo:02d}',
+                'valor_proyectado': max(0.0, valor),
+                'cantidad_proyectada': max(0.0, cant),
+                'peso_prom_proyectado': max(0.0, pprom),
+                'peso_total_proyectado': max(0.0, cant) * max(0.0, pprom),
+                'metodo_mes': metodo_mes,
+            })
+
+        if estacional_n == meses:
+            metodo = 'media_movil_estacional'
+        elif lineal_n == meses:
+            metodo = 'regresion_lineal'
+        else:
+            metodo = 'hibrido_estacional_lineal'
+
+        meta = {
+            'metodo': metodo,
+            'meses_estacional': estacional_n,
+            'meses_lineal': lineal_n,
+            'anos_historicos': anos_estacion,
+        }
+        return proyecciones, meta
+
     @tool('ventasgeneral_proyeccion_ventas')
     def _proyeccion(self, args):
         d1, d2 = _parse_date_range(args)
         meses = _int_arg(args.get('meses_a_proyectar'), 3, 1, 12)
-        linea    = str(args.get('linea_comercial') or '').strip()
+        linea = str(args.get('linea_comercial') or '').strip()
         provincia = str(args.get('provincia') or '').strip()
-        zona     = str(args.get('zona_comercial') or '').strip()
-        pref_z   = str(args.get('prefijo_descri_zona_precio') or '').strip().upper()
+        zona = str(args.get('zona_comercial') or '').strip()
+        pref_z = str(args.get('prefijo_descri_zona_precio') or '').strip().upper()
 
         sql = ("SELECT DATE_FORMAT(FechaContable, '%%Y-%%m') AS mes,"
                " COALESCE(SUM(Valor),0) AS suma_valor,"
                " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
                " COALESCE(SUM(Peso),0) AS suma_peso"
-               " FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s")
+               " FROM ventasgeneral2"
+               " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+               " AND CodigoDocumento IN ('01','03')")
         params: dict = {'d1': d1, 'd2': d2}
         if linea:
-            sql += " AND LineaComercial = %(linea)s"
-            params['linea'] = linea
+            _linea_where, _linea_bind = linea_where_fragment(self._conn, linea, style='pyformat')
+            sql += _linea_where
+            params.update(_linea_bind)
         if provincia:
             sql += " AND Provincia LIKE %(prov)s"
             params['prov'] = f'%{provincia}%'
@@ -1638,50 +1731,52 @@ class ToolExecutor:
 
         filas = _q(self._conn, sql, params)
         if len(filas) < 2:
-            raise ValueError('Se necesitan al menos 2 meses de datos históricos para proyectar')
+            raise ValueError(
+                'Se necesitan al menos 2 meses de datos históricos para proyectar. '
+                'Con un solo año de ventas, la estacionalidad es limitada; '
+                'cargue años anteriores en la misma tabla ventasgeneral2.'
+            )
 
+        proyecciones, meta = self._proyectar_media_movil_estacional(filas, meses)
         n = len(filas)
-        serie_valor    = [float(r.get('suma_valor') or 0) for r in filas]
-        serie_cantidad = [float(r.get('suma_cantidad') or 0) for r in filas]
-        serie_peso     = [float(r.get('suma_peso') or 0) for r in filas]
-        serie_peso_prom = [
-            sp / sq if sq > 0 else 0.0
-            for sp, sq in zip(serie_peso, serie_cantidad)
-        ]
+        anos = meta.get('anos_historicos') or []
+        metodo = meta.get('metodo') or 'media_movil_estacional'
 
-        mv, bv = self._regresion_lineal(serie_valor)
-        mc, bc = self._regresion_lineal(serie_cantidad)
-        mp, bp = self._regresion_lineal(serie_peso_prom)
-
-        last_mes = str(filas[-1]['mes'])
-        y_base, mo_base = int(last_mes[:4]), int(last_mes[5:7])
-        proyecciones = []
-        for i in range(1, meses + 1):
-            mo = mo_base + i
-            yr = y_base + (mo - 1) // 12
-            mo = ((mo - 1) % 12) + 1
-            cant_proj = max(0.0, mc * (n + i - 1) + bc)
-            peso_prom_proj = max(0.0, mp * (n + i - 1) + bp)
-            proyecciones.append({
-                'mes': f'{yr:04d}-{mo:02d}',
-                'valor_proyectado':    max(0.0, mv * (n + i - 1) + bv),
-                'cantidad_proyectada': cant_proj,
-                'peso_prom_proyectado': peso_prom_proj,
-                'peso_total_proyectado': cant_proj * peso_prom_proj,
-            })
+        if metodo == 'media_movil_estacional':
+            nota = (
+                f'Proyección por media móvil estacional (promedio del mismo mes en '
+                f'{len(anos)} año(s) histórico(s): {", ".join(str(a) for a in anos)}).'
+            )
+        elif metodo == 'regresion_lineal':
+            nota = (
+                'Proyección por regresión lineal (fallback): no hay el mismo mes calendario '
+                'en años anteriores. Cargue al menos 2 años en ventasgeneral2 para estacionalidad.'
+            )
+        else:
+            nota = (
+                f'Proyección híbrida: {meta.get("meses_estacional", 0)} mes(es) por estacionalidad '
+                f'y {meta.get("meses_lineal", 0)} por regresión lineal (sin historial del mismo mes).'
+            )
 
         filtros = {}
-        if linea:    filtros['linea_comercial'] = linea
-        if provincia: filtros['provincia'] = provincia
-        if zona:     filtros['zona_comercial'] = zona
-        if pref_z:   filtros['prefijo_descri_zona_precio'] = pref_z
+        if linea:
+            filtros['linea_comercial'] = linea
+        if provincia:
+            filtros['provincia'] = provincia
+        if zona:
+            filtros['zona_comercial'] = zona
+        if pref_z:
+            filtros['prefijo_descri_zona_precio'] = pref_z
         return {
             'tabla': 'ventasgeneral2',
             'tipo': 'proyeccion_ventas',
+            'metodo_proyeccion': metodo,
             'periodo_historico': {'desde': d1, 'hasta': d2},
+            'meses_historicos': n,
+            'anos_historicos': anos,
             'filtros': filtros or None,
             'proyecciones': proyecciones,
-            'nota': 'Proyección basada en datos actuales.',
+            'nota': nota,
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 

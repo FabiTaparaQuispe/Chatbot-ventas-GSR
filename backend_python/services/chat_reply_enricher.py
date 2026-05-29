@@ -583,7 +583,17 @@ def _lines_generic(filas):
 def _lines_proyecciones(proyecciones, payload):
     out = []
     meses_hist = int(payload.get('meses_historicos') or 0)
-    out.append(f'Proyección basada en {meses_hist} meses históricos.')
+    metodo = str(payload.get('metodo_proyeccion') or 'media_movil_estacional')
+    metodo_label = {
+        'media_movil_estacional': 'media móvil estacional',
+        'regresion_lineal': 'regresión lineal (fallback)',
+        'hibrido_estacional_lineal': 'híbrida estacional + lineal',
+    }.get(metodo, metodo)
+    anos = payload.get('anos_historicos') or []
+    anos_s = f', años {", ".join(str(a) for a in anos)}' if anos else ''
+    out.append(
+        f'Proyección ({metodo_label}) basada en {meses_hist} mes(es) histórico(s){anos_s}.'
+    )
     tiene_cantidad = any(r.get('cantidad_proyectada') is not None for r in proyecciones)
     tiene_peso_prom = any(r.get('peso_prom_proyectado') is not None for r in proyecciones)
 
