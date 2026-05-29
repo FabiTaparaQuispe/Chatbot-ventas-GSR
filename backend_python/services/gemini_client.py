@@ -357,35 +357,39 @@ class GeminiClient:
             reply = text_out.strip()
             logger.info("[Gemini.stream] Sin tools → reply directo | len=%d", len(reply))
 
-            # Retry si Gemini devolvió texto vacío sin tools (candidato bloqueado/vacío)
+            # Hasta 3 reintentos si Gemini devuelve vacío (comportamiento errático de 2.5-flash)
             if not reply:
-                logger.warning("[Gemini.stream] reply VACÍO sin tools → reintentando con tools")
-                try:
-                    fb = await self._generate(contents, config_with_tools)
-                    fb_text, fb_tools = self._extract_parts(fb)
-                    if fb_text:
-                        reply = fb_text.strip()
-                        logger.info("[Gemini.stream] Retry → reply_len=%d", len(reply))
-                    elif fb_tools:
-                        # El retry quiso llamar tools — procesarlos
-                        logger.info("[Gemini.stream] Retry devolvió tools=%d, procesando", len(fb_tools))
-                        contents.append(fb.candidates[0].content)
-                        retry_results = []
-                        for tc in fb_tools:
-                            await on_event({"type": "status", "text": "Consultando base de datos..."})
-                            tool_json = _clamp_tool_json(await run_tool(tc["name"], tc["args"]))
-                            try:
-                                tool_obj = json.loads(tool_json)
-                            except Exception:
-                                tool_obj = {"raw": tool_json}
-                            retry_results.append((tc["name"], tool_obj))
-                        contents.append(self._fn_response_content(retry_results))
-                        await on_event({"type": "status", "text": "Generando respuesta..."})
-                        fb2 = await self._generate(contents, config_plain)
-                        reply = self._extract_parts(fb2)[0].strip()
-                        logger.info("[Gemini.stream] Retry con tools → reply_len=%d", len(reply))
-                except Exception as e:
-                    logger.error("[Gemini.stream] Retry falló: %s", e)
+                for _retry_n in range(1, 4):
+                    logger.warning("[Gemini.stream] reply VACÍO → reintento %d/3 (pausa 1s)", _retry_n)
+                    await asyncio.sleep(1)
+                    try:
+                        fb = await self._generate(contents, config_with_tools)
+                        fb_text, fb_tools = self._extract_parts(fb)
+                        if fb_text:
+                            reply = fb_text.strip()
+                            logger.info("[Gemini.stream] Reintento %d → reply_len=%d", _retry_n, len(reply))
+                            break
+                        if fb_tools:
+                            logger.info("[Gemini.stream] Reintento %d → tools=%d, procesando", _retry_n, len(fb_tools))
+                            contents.append(fb.candidates[0].content)
+                            retry_results = []
+                            for tc in fb_tools:
+                                await on_event({"type": "status", "text": "Consultando base de datos..."})
+                                tool_json = _clamp_tool_json(await run_tool(tc["name"], tc["args"]))
+                                try:
+                                    tool_obj = json.loads(tool_json)
+                                except Exception:
+                                    tool_obj = {"raw": tool_json}
+                                retry_results.append((tc["name"], tool_obj))
+                            contents.append(self._fn_response_content(retry_results))
+                            await on_event({"type": "status", "text": "Generando respuesta..."})
+                            fb2 = await self._generate(contents, config_plain)
+                            reply = self._extract_parts(fb2)[0].strip()
+                            logger.info("[Gemini.stream] Reintento %d con tools → reply_len=%d", _retry_n, len(reply))
+                            break
+                        logger.warning("[Gemini.stream] Reintento %d también devolvió vacío", _retry_n)
+                    except Exception as e:
+                        logger.error("[Gemini.stream] Reintento %d falló: %s", _retry_n, e)
 
             await on_event({"type": "reply", "text": reply})
             return reply, messages
