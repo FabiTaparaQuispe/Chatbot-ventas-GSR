@@ -100,7 +100,7 @@ def _tmpl(request: Request, name: str, ctx: dict) -> HTMLResponse:
 
 @router.get(REPORT_VENTASGENERAL_RESUMEN_TABLA)
 @router.get('/modules/ventasgeneral_resumen_tabla.php')
-async def ventasgeneral_resumen_tabla(request: Request):
+def ventasgeneral_resumen_tabla(request: Request):
     if err := _require_login(request):
         return err
     d1 = _parse_date_string(_q(request, 'fecha_desde') or _q(request, 'desde'))
@@ -162,7 +162,7 @@ async def ventasgeneral_resumen_tabla(request: Request):
 
 @router.get(REPORT_VENTASGENERAL_BUSCAR_TABLA)
 @router.get('/modules/ventasgeneral_buscar_tabla.php')
-async def ventasgeneral_buscar_tabla(request: Request):
+def ventasgeneral_buscar_tabla(request: Request):
     if err := _require_login(request):
         return err
     q = request.query_params
@@ -209,7 +209,7 @@ async def ventasgeneral_buscar_tabla(request: Request):
 
 
 @router.get('/modules/reports/ventas-top-clientes-nc')
-async def ventas_top_clientes_nc(request: Request):
+def ventas_top_clientes_nc(request: Request):
     if err := _require_login(request):
         return err
     d1 = _parse_date_string(_q(request, 'desde') or _q(request, 'fecha_desde'))
@@ -273,7 +273,7 @@ async def ventas_top_clientes_nc(request: Request):
 
 
 @router.get('/modules/reports/ventas-linea-resumen-provincia')
-async def ventas_linea_resumen_provincia(request: Request):
+def ventas_linea_resumen_provincia(request: Request):
     if err := _require_login(request):
         return err
     d1 = _parse_date_string(_q(request, 'desde') or _q(request, 'fecha_desde'))
@@ -408,7 +408,7 @@ async def ventas_linea_resumen_provincia(request: Request):
 
 
 @router.get('/modules/reports/ventas-linea-mix-productos')
-async def ventas_linea_mix_productos(request: Request):
+def ventas_linea_mix_productos(request: Request):
     if err := _require_login(request):
         return err
     d1 = _parse_date_string(_q(request, 'desde') or _q(request, 'fecha_desde'))
@@ -466,7 +466,7 @@ async def ventas_linea_mix_productos(request: Request):
 
 
 @router.get('/modules/reports/ventas-top-clientes-global')
-async def ventas_top_clientes_global(request: Request):
+def ventas_top_clientes_global(request: Request):
     if err := _require_login(request):
         return err
     d1 = _parse_date_string(_q(request, 'desde') or _q(request, 'fecha_desde'))
@@ -517,7 +517,7 @@ async def ventas_top_clientes_global(request: Request):
 
 
 @router.get('/modules/reports/ventas-top-productos')
-async def ventas_top_productos(request: Request):
+def ventas_top_productos(request: Request):
     if err := _require_login(request):
         return err
     d1 = _parse_date_string(_q(request, 'desde') or _q(request, 'fecha_desde'))
@@ -569,7 +569,7 @@ async def ventas_top_productos(request: Request):
 
 
 @router.get('/modules/reports/ventas-serie-mensual')
-async def ventas_serie_mensual(request: Request):
+def ventas_serie_mensual(request: Request):
     if err := _require_login(request):
         return err
     d1 = _parse_date_string(_q(request, 'desde') or _q(request, 'fecha_desde'))
@@ -610,7 +610,7 @@ async def ventas_serie_mensual(request: Request):
 
 
 @router.get('/modules/reports/ventas-mix-tdoc')
-async def ventas_mix_tdoc(request: Request):
+def ventas_mix_tdoc(request: Request):
     if err := _require_login(request):
         return err
     d1 = _parse_date_string(_q(request, 'desde') or _q(request, 'fecha_desde'))
@@ -648,7 +648,7 @@ async def ventas_mix_tdoc(request: Request):
 
 
 @router.get('/modules/reports/pareto-nc-zona')
-async def pareto_nc_zona(request: Request):
+def pareto_nc_zona(request: Request):
     if err := _require_login(request):
         return err
     d1 = _parse_date_string(_q(request, 'desde') or _q(request, 'fecha_desde'))
@@ -694,7 +694,7 @@ async def pareto_nc_zona(request: Request):
 
 
 @router.get('/modules/reports/pareto-clientes-zona')
-async def pareto_clientes_zona(request: Request):
+def pareto_clientes_zona(request: Request):
     if err := _require_login(request):
         return err
     d1 = _parse_date_string(_q(request, 'desde') or _q(request, 'fecha_desde'))
@@ -752,7 +752,7 @@ async def pareto_clientes_zona(request: Request):
 
 
 @router.get('/modules/reports/ventas-barras-dimension')
-async def ventas_barras_dimension(request: Request):
+def ventas_barras_dimension(request: Request):
     if err := _require_login(request):
         return err
     d1 = _parse_date_string(_q(request, 'desde') or _q(request, 'fecha_desde'))
@@ -802,7 +802,7 @@ async def ventas_barras_dimension(request: Request):
 
 
 @router.get('/modules/reports/ventas-comparativo')
-async def ventas_comparativo(request: Request):
+def ventas_comparativo(request: Request):
     if err := _require_login(request):
         return err
     a1 = _parse_date_string(_q(request, 'a_desde') or _q(request, 'fecha_desde_a'))
@@ -858,7 +858,7 @@ async def ventas_comparativo(request: Request):
 
 
 @router.get('/modules/reports/ventas-barras-ruta')
-async def ventas_barras_ruta(request: Request):
+def ventas_barras_ruta(request: Request):
     if err := _require_login(request):
         return err
     d1 = _parse_date_string(_q(request, 'desde') or _q(request, 'fecha_desde'))
@@ -903,7 +903,7 @@ async def ventas_barras_ruta(request: Request):
 
 
 @router.get('/modules/reports/ventas-barras-corporativo')
-async def ventas_barras_corporativo(request: Request):
+def ventas_barras_corporativo(request: Request):
     if err := _require_login(request):
         return err
     d1 = _parse_date_string(_q(request, 'desde') or _q(request, 'fecha_desde'))
@@ -1005,7 +1005,7 @@ async def ventas_barras_corporativo(request: Request):
 
 
 @router.get('/modules/reports/ventas-resumen-por-linea')
-async def ventas_resumen_por_linea(request: Request):
+def ventas_resumen_por_linea(request: Request):
     if err := _require_login(request):
         return err
     d1 = _parse_date_string(_q(request, 'desde') or _q(request, 'fecha_desde'))
@@ -1075,7 +1075,7 @@ async def ventas_resumen_por_linea(request: Request):
 
 
 @router.get(REPORTS_PREFIX + REPORT_SLUG_VENTAS_RESUMEN_POR_PROVINCIA)
-async def ventas_resumen_por_provincia(request: Request):
+def ventas_resumen_por_provincia(request: Request):
     if err := _require_login(request):
         return err
     d1 = _parse_date_string(_q(request, 'desde') or _q(request, 'fecha_desde'))
@@ -1144,7 +1144,7 @@ async def ventas_resumen_por_provincia(request: Request):
 
 
 @router.get(REPORTS_PREFIX + REPORT_SLUG_VENTAS_CLIENTES_CORPORATIVO)
-async def ventas_clientes_corporativo(request: Request):
+def ventas_clientes_corporativo(request: Request):
     if err := _require_login(request):
         return err
     nom_corp = _q(request, 'corporativo')
@@ -1199,7 +1199,7 @@ async def ventas_clientes_corporativo(request: Request):
 
 
 @router.get('/modules/reports/ventas-linea-precio-resumen-provincia')
-async def ventas_linea_precio_resumen_provincia(request: Request):
+def ventas_linea_precio_resumen_provincia(request: Request):
     if err := _require_login(request):
         return err
     d1 = _parse_date_string(_q(request, 'desde') or _q(request, 'fecha_desde'))
@@ -1326,7 +1326,7 @@ async def ventas_linea_precio_resumen_provincia(request: Request):
 
 
 @router.get('/modules/reports/ventas-linea-diario-provincia')
-async def ventas_linea_diario_provincia(request: Request):
+def ventas_linea_diario_provincia(request: Request):
     if err := _require_login(request):
         return err
     d1 = _parse_date_string(_q(request, 'desde') or _q(request, 'fecha_desde'))
@@ -1443,7 +1443,7 @@ async def ventas_linea_diario_provincia(request: Request):
 
 
 @router.get('/modules/reports/ventas-linea-precio-diario')
-async def ventas_linea_precio_diario(request: Request):
+def ventas_linea_precio_diario(request: Request):
     if err := _require_login(request):
         return err
     d1 = _parse_date_string(_q(request, 'desde') or _q(request, 'fecha_desde'))
@@ -1567,7 +1567,7 @@ async def ventas_linea_precio_diario(request: Request):
 
 
 @router.get('/modules/reports/{slug}')
-async def report_placeholder(slug: str, request: Request):
+def report_placeholder(slug: str, request: Request):
     if err := _require_login(request):
         return err
     if slug not in REPORT_PLACEHOLDER_SLUGS:

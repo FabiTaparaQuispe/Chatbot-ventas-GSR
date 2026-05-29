@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import secrets
 from typing import Any
 
@@ -161,14 +162,19 @@ async def _render_index(request: Request, page: str) -> HTMLResponse:
     }
 
     if page == 'historial_preguntas':
-        conn = get_connection()
         f_desde = request.query_params.get('fecha_desde', '').strip()
         f_hasta = request.query_params.get('fecha_hasta', '').strip()
         f_user = request.query_params.get('usuario', '').strip()
         filtros_activos = bool(f_desde or f_hasta or f_user)
-        usernames, _ = fetch_historial_usernames(conn)
-        rows, db_err = fetch_historial_rows(conn, fecha_desde=f_desde or None,
-                                            fecha_hasta=f_hasta or None, username=f_user or None)
+
+        def _fetch_historial():
+            conn = get_connection()
+            usernames, _ = fetch_historial_usernames(conn)
+            rows, db_err = fetch_historial_rows(conn, fecha_desde=f_desde or None,
+                                                fecha_hasta=f_hasta or None, username=f_user or None)
+            return usernames, rows, db_err
+
+        usernames, rows, db_err = await asyncio.to_thread(_fetch_historial)
         historial_filter_msg = ''
         if db_err and is_historial_filter_validation_error(db_err):
             historial_filter_msg = db_err
@@ -189,28 +195,33 @@ async def _render_index(request: Request, page: str) -> HTMLResponse:
             'filtros_activos': filtros_activos, 'historial_filter_msg': historial_filter_msg,
         })
     elif page == 'usuarios':
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute('SELECT id, username, display_name, role, is_active, last_login_at, created_at '
-                        'FROM app_users ORDER BY created_at DESC, id DESC')
-            users = cur.fetchall() or []
-        ctx['users'] = [dict(u) for u in users]
+        def _fetch_users():
+            conn = get_connection()
+            with conn.cursor() as cur:
+                cur.execute('SELECT id, username, display_name, role, is_active, last_login_at, created_at '
+                            'FROM app_users ORDER BY created_at DESC, id DESC')
+                return [dict(u) for u in (cur.fetchall() or [])]
+
+        ctx['users'] = await asyncio.to_thread(_fetch_users)
         ctx['roles_disponibles'] = {'admin': 'Admin', 'gerencia': 'Gerencia', 'estrategico': 'Estratégico',
                                     'tactico': 'Táctico', 'analista': 'Analista', 'lector': 'Lector'}
         ctx['normalize_user_role'] = normalize_user_role
     elif page == 'gestion_usuarios':
-        conn = get_connection()
         gestion_es_admin = role in ROLES_GESTION_USUARIOS
-        with conn.cursor() as cur:
-            if gestion_es_admin:
-                cur.execute("SELECT id, username, display_name, role, is_active, last_login_at, created_at "
-                            "FROM app_users WHERE role IN ('administrador','estrategico','tactico','operativo') "
-                            "ORDER BY created_at DESC, id DESC")
-            else:
-                cur.execute('SELECT id, username, display_name, role, is_active, last_login_at, created_at '
-                            'FROM app_users WHERE username = %s', (usuario,))
-            users = cur.fetchall() or []
-        ctx['users'] = [dict(u) for u in users]
+
+        def _fetch_gestion_users():
+            conn = get_connection()
+            with conn.cursor() as cur:
+                if gestion_es_admin:
+                    cur.execute("SELECT id, username, display_name, role, is_active, last_login_at, created_at "
+                                "FROM app_users WHERE role IN ('administrador','estrategico','tactico','operativo') "
+                                "ORDER BY created_at DESC, id DESC")
+                else:
+                    cur.execute('SELECT id, username, display_name, role, is_active, last_login_at, created_at '
+                                'FROM app_users WHERE username = %s', (usuario,))
+                return [dict(u) for u in (cur.fetchall() or [])]
+
+        ctx['users'] = await asyncio.to_thread(_fetch_gestion_users)
         ctx['gestion_es_admin'] = gestion_es_admin
         if gestion_es_admin:
             ctx['roles_crear'] = {'estrategico': 'Estratégico', 'tactico': 'Táctico', 'operativo': 'Operativo'}
@@ -235,12 +246,15 @@ async def change_password(request: Request):
     username = str(request.session.get('usuario') or '')
     if not username:
         return JSONResponse({'ok': False, 'error': 'Sesión inválida.'}, status_code=401)
-    try:
+    def _update_pw():
         conn = get_connection()
         with conn.cursor() as cur:
             cur.execute('UPDATE app_users SET password_hash = %s WHERE username = %s',
                         (hash_password(new_pw), username))
         conn.commit()
+
+    try:
+        await asyncio.to_thread(_update_pw)
     except Exception as e:
         return JSONResponse({'ok': False, 'error': str(e)}, status_code=500)
     return JSONResponse({'ok': True})

@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 
@@ -10,6 +12,28 @@ router = APIRouter()
 
 APP_NAME = 'Ventas · cia2026'
 APP_COMPANY = 'GRANJA RINCONADA DEL SUR S.A.'
+
+
+def _check_login_db(u: str, clave: str) -> tuple[bool, str, str]:
+    """Verifica credenciales en BD. Corre en thread pool."""
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(
+            'SELECT password_hash, is_active, role, display_name '
+            'FROM app_users WHERE username = %s LIMIT 1',
+            (u,),
+        )
+        row = cur.fetchone()
+    if not row or int(row.get('is_active') or 0) != 1:
+        return False, '', ''
+    h = str(row.get('password_hash') or '')
+    if not h or not verify_password(clave, h):
+        return False, '', ''
+    with conn.cursor() as cur:
+        cur.execute('UPDATE app_users SET last_login_at = NOW() WHERE username = %s', (u,))
+    role = normalize_user_role(str(row.get('role') or '')) or 'lector'
+    display_name = str(row.get('display_name') or '').strip()
+    return True, role, display_name
 
 
 @router.get('/login', response_class=HTMLResponse)
@@ -40,27 +64,7 @@ async def login_post(
         error = 'Usuario y contraseña requeridos.'
     else:
         try:
-            conn = get_connection()
-            with conn.cursor() as cur:
-                cur.execute(
-                    'SELECT password_hash, is_active, role, display_name '
-                    'FROM app_users WHERE username = %s LIMIT 1',
-                    (u,),
-                )
-                row = cur.fetchone()
-            ok = False
-            role = ''
-            display_name = ''
-            if row and int(row.get('is_active') or 0) == 1:
-                h = str(row.get('password_hash') or '')
-                if h and verify_password(clave, h):
-                    ok = True
-                    with conn.cursor() as cur:
-                        cur.execute('UPDATE app_users SET last_login_at = NOW() WHERE username = %s', (u,))
-                    role = normalize_user_role(str(row.get('role') or ''))
-                    if not role:
-                        role = 'lector'
-                    display_name = str(row.get('display_name') or '').strip()
+            ok, role, display_name = await asyncio.to_thread(_check_login_db, u, clave)
             if ok:
                 request.session.clear()
                 request.session['active'] = True
