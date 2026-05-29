@@ -1,7 +1,10 @@
 import asyncio
 import json
+import logging
 import re
 from openai import AsyncOpenAI, APIStatusError
+
+_log = logging.getLogger(__name__)
 
 MAX_ITERATIONS = 10
 MAX_TOOL_JSON_BYTES = 14000
@@ -23,13 +26,19 @@ class GroqClient:
                                      on_event, try_fast_format=None) -> tuple:
         working = list(messages)
         has_tool_results = False
+        last_user = next((m.get('content', '')[:80] for m in reversed(messages) if m.get('role') == 'user'), '')
+        _log.info("[Groq.stream] INICIO | model=%s | user='%s'", self.model, last_user)
 
         for iteration in range(1, MAX_ITERATIONS + 1):
             available_tools = tools if iteration == 1 else []
 
             if has_tool_results:
+                _log.info("[Groq.stream] iter=%d → STREAMING respuesta final", iteration)
                 await on_event({'type': 'status', 'text': 'Generando respuesta...'})
                 full_text = ''
+                chunks_total = 0
+                chunks_con_texto = 0
+                exc_stream = None
                 try:
                     stream = await self._client.chat.completions.create(
                         model=self.model,
@@ -38,40 +47,56 @@ class GroqClient:
                         stream=True,
                     )
                     async for chunk in stream:
+                        chunks_total += 1
                         choice = chunk.choices[0] if chunk.choices else None
                         if not choice:
                             continue
                         delta = choice.delta
                         if delta and delta.content:
+                            chunks_con_texto += 1
                             full_text += delta.content
                             await on_event({'type': 'token', 'text': delta.content})
                         if choice.finish_reason:
+                            _log.debug("[Groq.stream] finish_reason=%s en chunk %d", choice.finish_reason, chunks_total)
                             break
-                except Exception:
-                    pass
+                except Exception as e:
+                    exc_stream = e
+                    _log.warning("[Groq.stream] EXCEPCIÓN durante stream: %s", e)
+
+                _log.info(
+                    "[Groq.stream] Stream terminado | chunks=%d | con_texto=%d | full_text_len=%d | exc=%s",
+                    chunks_total, chunks_con_texto, len(full_text), exc_stream
+                )
 
                 # Fallback no-streaming si el stream retornó vacío o falló
                 if not full_text:
+                    _log.warning("[Groq.stream] full_text VACÍO → activando fallback no-streaming")
                     try:
                         response = await self._request_completion(working, [])
                         choice = response.choices[0] if response.choices else None
                         full_text = str(choice.message.content or '') if choice else ''
-                    except Exception:
-                        pass
+                        _log.info("[Groq.stream] Fallback no-streaming → full_text_len=%d", len(full_text))
+                    except Exception as e:
+                        _log.error("[Groq.stream] Fallback no-streaming FALLÓ: %s", e)
                     if full_text:
                         await on_event({'type': 'reply', 'text': full_text})
 
+                _log.info("[Groq.stream] RETORNO | full_text_len=%d | vacío=%s", len(full_text), not full_text)
                 working.append({'role': 'assistant', 'content': full_text})
                 return full_text, working
 
+            _log.info("[Groq.stream] iter=%d → llamada LLM para detectar tools", iteration)
             response = await self._request_completion(working, available_tools)
             choice = response.choices[0] if response.choices else None
             if choice is None:
+                _log.warning("[Groq.stream] choice=None → respuesta vacía del modelo")
                 await on_event({'type': 'reply', 'text': 'Respuesta vacía del modelo.'})
                 return 'Respuesta vacía del modelo.', working
 
             msg = choice.message
             tool_calls = msg.tool_calls or []
+            _log.info("[Groq.stream] iter=%d → tools=%d | content_len=%d",
+                      iteration, len(tool_calls), len(msg.content or ''))
 
             assistant_payload = {'role': 'assistant', 'content': msg.content}
             if tool_calls:
@@ -86,13 +111,16 @@ class GroqClient:
                 full_text = str(msg.content or '')
                 # Fallback si el modelo respondió sin contenido y sin tools
                 if not full_text:
+                    _log.warning("[Groq.stream] Respuesta directa VACÍA (sin tools) → reintento")
                     try:
                         fallback = await self._request_completion(working[:-1], [])
                         fc = fallback.choices[0] if fallback.choices else None
                         full_text = str(fc.message.content or '') if fc else ''
-                    except Exception:
-                        pass
+                        _log.info("[Groq.stream] Reintento directo → full_text_len=%d", len(full_text))
+                    except Exception as e:
+                        _log.error("[Groq.stream] Reintento directo FALLÓ: %s", e)
                 await on_event({'type': 'reply', 'text': full_text})
+                _log.info("[Groq.stream] Sin tools → reply directo | len=%d", len(full_text))
                 return full_text, working
 
             has_tool_results = True
@@ -100,6 +128,8 @@ class GroqClient:
             last_tool_json = None
             for tc in tool_calls:
                 fn_name = tc.function.name
+                _log.info("[Groq.stream] Ejecutando tool: %s | args=%s",
+                          fn_name, tc.function.arguments[:120])
                 label = (
                     'Consultando historial...'   if fn_name.startswith('chat_') else
                     'Filtrando resultado anterior...' if fn_name == 'filtrar_previo' else
@@ -111,18 +141,22 @@ class GroqClient:
                 except Exception:
                     args = {}
                 tool_json = self._clamp_tool_json(await run_tool(fn_name, args))
+                _log.info("[Groq.stream] Tool %s → result_len=%d", fn_name, len(tool_json))
                 working.append({'role': 'tool', 'tool_call_id': tc.id, 'content': tool_json})
                 last_fn_name = fn_name
                 last_tool_json = tool_json
 
             if try_fast_format and len(tool_calls) == 1 and last_fn_name and last_tool_json:
                 fast_reply = try_fast_format(last_fn_name, last_tool_json)
+                _log.info("[Groq.stream] try_fast_format('%s') → %s",
+                          last_fn_name, f"OK len={len(fast_reply)}" if fast_reply else "None (usará LLM)")
                 if fast_reply:
                     working.append({'role': 'assistant', 'content': fast_reply})
                     await on_event({'type': 'reply', 'text': fast_reply})
                     return fast_reply, working
 
         reply = 'Se alcanzó el límite de iteraciones.'
+        _log.warning("[Groq.stream] Límite de iteraciones alcanzado")
         await on_event({'type': 'reply', 'text': reply})
         return reply, working
 

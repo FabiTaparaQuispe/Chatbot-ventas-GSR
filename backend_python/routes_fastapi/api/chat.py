@@ -263,6 +263,8 @@ async def chat_stream(request: Request):
                     (m['content'] for m in reversed(messages) if m.get('role') == 'user'), ''
                 )
                 tools = _filter_tools(_last_user, _all_tools)
+                _log.info("[chat/stream] tools disponibles=%d | user='%s'",
+                          len(tools), _last_user[:80])
 
                 reply, working = await llm_client.chat_with_tools_stream(
                     messages, tools,
@@ -271,13 +273,22 @@ async def chat_stream(request: Request):
                     try_fast_format=try_fast_format,
                 )
 
+                _log.info("[chat/stream] LLM reply_raw_len=%d | vacío=%s", len(reply), not reply)
+
                 last_tool_json = executor.pull_last_tool_json()
+                _log.info("[chat/stream] last_tool_json=%s",
+                          "presente" if last_tool_json else "None")
+
                 reply = enrich_reply(str(reply or ''), working, last_tool_json=last_tool_json)
+                _log.info("[chat/stream] enrich_reply → reply_len=%d | vacío=%s",
+                          len(reply), not reply)
+
                 reply = _unify_pareto_links(reply)
                 sql_text = format_sql_traces_for_display(executor.pull_sql_traces())
                 if sql_text:
                     reply = reply + '\n\n' + sql_text
 
+                _log.info("[chat/stream] done | reply_final_len=%d", len(reply))
                 await q.put({
                     'type': 'done',
                     'reply': reply,

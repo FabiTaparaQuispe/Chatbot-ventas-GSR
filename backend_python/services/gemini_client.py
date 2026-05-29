@@ -269,7 +269,10 @@ class GeminiClient:
                         "Consultando base de datos..."
                     )
                     await on_event({"type": "status", "text": label})
+                    logger.info("[Gemini.stream] Ejecutando tool: %s | args=%s",
+                                tc["name"], str(tc["args"])[:120])
                     tool_json = _clamp_tool_json(await run_tool(tc["name"], tc["args"]))
+                    logger.info("[Gemini.stream] Tool %s → result_len=%d", tc["name"], len(tool_json))
                     last_fn_name = tc["name"]
                     last_tool_json = tool_json
                     try:
@@ -282,6 +285,8 @@ class GeminiClient:
 
                 if try_fast_format and len(tool_calls) == 1 and last_fn_name and last_tool_json:
                     fast_reply = try_fast_format(last_fn_name, last_tool_json)
+                    logger.info("[Gemini.stream] try_fast_format('%s') → %s",
+                                last_fn_name, f"OK len={len(fast_reply)}" if fast_reply else "None (usará LLM)")
                     if fast_reply:
                         await on_event({"type": "reply", "text": fast_reply.strip()})
                         return fast_reply.strip(), messages
@@ -289,35 +294,52 @@ class GeminiClient:
                 # Respuesta final en streaming nativo async
                 await on_event({"type": "status", "text": "Generando respuesta..."})
                 full_text = ""
+                chunks_total = 0
+                chunks_con_texto = 0
+                exc_stream = None
                 try:
                     response_stream = await model_plain.generate_content_async(contents, stream=True)
                     async for chunk in response_stream:
+                        chunks_total += 1
                         try:
                             token = chunk.text
-                        except Exception:
+                        except Exception as e:
                             # thinking tokens u otras partes no-texto
+                            logger.debug("[Gemini.stream] chunk.text lanzó %s (thinking token?)", type(e).__name__)
                             token = ""
                         if token:
+                            chunks_con_texto += 1
                             full_text += token
                             await on_event({"type": "token", "text": token})
-                except Exception:
+                except Exception as e:
+                    exc_stream = e
+                    logger.warning("[Gemini.stream] EXCEPCIÓN durante stream: %s", e)
                     fb = await self._generate(model_plain, contents)
                     full_text, _ = self._extract_parts(fb)
                     if full_text:
                         await on_event({"type": "reply", "text": full_text})
+
+                logger.info(
+                    "[Gemini.stream] Stream terminado | chunks=%d | con_texto=%d | full_text_len=%d | exc=%s",
+                    chunks_total, chunks_con_texto, len(full_text), exc_stream
+                )
 
                 # Fallback si el stream completó sin emitir texto
                 if not full_text:
-                    logger.warning("Gemini streaming retornó vacío, reintentando sin streaming")
+                    logger.warning("[Gemini.stream] full_text VACÍO → fallback sin streaming")
                     fb = await self._generate(model_plain, contents)
                     full_text, _ = self._extract_parts(fb)
+                    logger.info("[Gemini.stream] Fallback → full_text_len=%d", len(full_text))
                     if full_text:
                         await on_event({"type": "reply", "text": full_text})
 
+                logger.info("[Gemini.stream] RETORNO | full_text_len=%d | vacío=%s",
+                            len(full_text), not full_text)
                 contents.append({"role": "model", "parts": [full_text]})
                 return full_text.strip(), messages
 
             reply = text_out.strip()
+            logger.info("[Gemini.stream] Sin tools → reply directo | len=%d", len(reply))
             await on_event({"type": "reply", "text": reply})
             return reply, messages
 
