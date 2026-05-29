@@ -4,13 +4,8 @@ import logging
 from typing import Any, Callable
 
 from google import genai
+from google.genai import errors as _genai_errors
 from google.genai import types
-
-try:
-    from google.api_core import exceptions as _google_exc
-    _HAS_GOOGLE_EXC = True
-except ImportError:
-    _HAS_GOOGLE_EXC = False
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +146,9 @@ class GeminiClient:
         kwargs: dict[str, Any] = {
             'system_instruction': system_text or None,
             'temperature': 0.2,
+            # Desactivar AFC: el nuevo SDK lo activa por defecto y entra en conflicto
+            # con nuestro loop manual de tool calling
+            'automatic_function_calling': types.AutomaticFunctionCallingConfig(disable=True),
         }
         if function_decls:
             kwargs['tools'] = [types.Tool(function_declarations=function_decls)]
@@ -185,18 +183,20 @@ class GeminiClient:
     @staticmethod
     def _is_retryable(e: Exception) -> bool:
         msg = str(e)
-        if '429' in msg or '503' in msg:
+        if '429' in msg or '503' in msg or 'RESOURCE_EXHAUSTED' in msg or 'UNAVAILABLE' in msg:
             return True
-        if _HAS_GOOGLE_EXC and isinstance(e, (_google_exc.ResourceExhausted, _google_exc.ServiceUnavailable)):
+        if isinstance(e, _genai_errors.ServerError):
             return True
         return False
 
     @staticmethod
     def _raise_friendly(e: Exception) -> None:
         msg = str(e)
-        is_429 = '429' in msg or (_HAS_GOOGLE_EXC and isinstance(e, _google_exc.ResourceExhausted))
-        is_503 = '503' in msg or (_HAS_GOOGLE_EXC and isinstance(e, _google_exc.ServiceUnavailable))
-        is_auth = '403' in msg or '401' in msg or (_HAS_GOOGLE_EXC and isinstance(e, _google_exc.PermissionDenied))
+        is_429 = '429' in msg or 'RESOURCE_EXHAUSTED' in msg or (
+            isinstance(e, _genai_errors.ClientError) and '429' in str(e.code or '')
+        )
+        is_503 = '503' in msg or 'UNAVAILABLE' in msg or isinstance(e, _genai_errors.ServerError)
+        is_auth = '403' in msg or '401' in msg or 'PERMISSION_DENIED' in msg
         if is_429:
             raise RuntimeError("Intentá de nuevo en unos segundos.") from e
         if is_503:
@@ -218,7 +218,7 @@ class GeminiClient:
             candidate = response.candidates[0] if response.candidates else None
             if not candidate or not candidate.content:
                 return text_out, tool_calls
-            for part in candidate.content.parts:
+            for part in (candidate.content.parts or []):  # parts puede ser None en el nuevo SDK
                 if hasattr(part, "text") and part.text:
                     text_out += part.text
                 if hasattr(part, "function_call") and part.function_call and part.function_call.name:
