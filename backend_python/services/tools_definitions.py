@@ -8,6 +8,7 @@ from services.urlmap import (
     REPORT_SLUG_VENTAS_LINEA_DIARIO_PROVINCIA,
     REPORT_SLUG_VENTAS_LINEA_MIX_PRODUCTOS,
     REPORT_SLUG_VENTAS_LINEA_PRECIO_DIARIO,
+    REPORT_SLUG_VENTAS_LINEA_PRECIO_TOP_CLIENTES,
     REPORT_SLUG_VENTAS_LINEA_PRECIO_RESUMEN_PROV,
     REPORT_SLUG_VENTAS_LINEA_RESUMEN_PROVINCIA,
     REPORT_SLUG_VENTAS_MIX_TDOC,
@@ -272,7 +273,7 @@ def ventas_tool_definitions():
                 f'Ranking de clientes por precio/kg (SUM(Valor)/SUM(Peso)) en un período, agregado por cliente '
                 f'(no por día). Responde "¿qué cliente pagó más caro por kg?", "top clientes por precio en LAJOYA". '
                 f'Usar top_n=1 si piden un solo cliente. Filtro opcional mercado (prefijo DescripcionZonaPrecio, ej. LAJOYA). '
-                f'reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_LINEA_PRECIO_DIARIO}?…'
+                f'reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_LINEA_PRECIO_TOP_CLIENTES}?…'
             ),
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt,

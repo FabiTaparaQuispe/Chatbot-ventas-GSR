@@ -1805,6 +1805,115 @@ def ventas_linea_precio_resumen_provincia():
     return render_template('pages/reporte_linea_precio_resumen_provincia.html', **ctx)
 
 
+@bp.route('/modules/reports/ventas-linea-precio-top-clientes')
+@require_login
+def ventas_linea_precio_top_clientes():
+    from services.db import get_connection
+
+    d1 = _parse_date_string(request.args.get('desde') or request.args.get('fecha_desde'))
+    d2 = _parse_date_string(request.args.get('hasta') or request.args.get('fecha_hasta'))
+    if not d1 or not d2 or d1 > d2:
+        return _bad('Parámetros requeridos: desde y hasta (YYYY-MM-DD).')
+
+    linea = (request.args.get('linea') or '').strip()
+    if not linea:
+        return _bad('Parámetro requerido: linea (ej. "Pollo Vivo").')
+
+    tipo_fecha = _tipo_fecha_param()
+    fe = _sql_fecha_dimension(tipo_fecha)
+    fecha_eje_leyenda = _fecha_eje_leyenda(tipo_fecha)
+
+    try:
+        top = max(1, min(500, int(request.args.get('top') or 50)))
+    except (TypeError, ValueError):
+        top = 50
+
+    cod_item = (request.args.get('cod_item') or '').strip()
+    mercado = (request.args.get('mercado') or '').strip().upper()
+    provincia_filtro = (request.args.get('provincia') or '').strip()
+
+    conn = get_connection()
+    where_linea_sql, where_linea_bind = linea_where_fragment(conn, linea)
+    _from_v2_suffix = index_hint_ventasgeneral2(conn, linea, tipo_fecha)
+
+    sql = (f"SELECT CodigoCliente AS cod_cliente,"
+           " MAX(COALESCE(NULLIF(TRIM(NombreCliente),''),'(sin nombre)')) AS nombre_cliente,"
+           " MAX(COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)')) AS provincia,"
+           " COUNT(*) AS lineas,"
+           " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
+           " COALESCE(SUM(Peso),0) AS suma_peso,"
+           " COALESCE(SUM(Valor),0) AS suma_valor,"
+           " CASE WHEN COALESCE(SUM(Peso),0) > 0"
+           "      THEN ROUND(COALESCE(SUM(Valor),0) / COALESCE(SUM(Peso),0), 4)"
+           "      ELSE NULL END AS precio_kg"
+           f" FROM ventasgeneral2{_from_v2_suffix}"
+           f" WHERE {fe} BETWEEN :d1 AND :d2"
+           + where_linea_sql
+           + " AND CodigoDocumento IN ('01','03')")
+    bind: dict = {'d1': d1, 'd2': d2, **where_linea_bind}
+    if cod_item:
+        sql += ' AND CodigoItem = :cod_item'
+        bind['cod_item'] = cod_item
+    if mercado:
+        sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE :prefzo"
+        bind['prefzo'] = mercado + '%'
+    if provincia_filtro:
+        sql += " AND COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') = :prov"
+        bind['prov'] = provincia_filtro
+    sql += " GROUP BY CodigoCliente HAVING COALESCE(SUM(Peso),0) > 0 ORDER BY precio_kg DESC"
+    sql += f" LIMIT {top}"
+
+    with conn.cursor() as cur:
+        cur.execute(_colon_params_to_pymysql(sql), bind)
+        raw = cur.fetchall() or []
+
+    total_lineas = 0
+    total_peso = 0.0
+    total_valor = 0.0
+    filas = []
+    chart_labels: list = []
+    chart_precios: list = []
+    for i, r in enumerate(raw, 1):
+        sp = float(r.get('suma_peso') or 0)
+        sv = float(r.get('suma_valor') or 0)
+        pk = r.get('precio_kg')
+        total_lineas += int(r.get('lineas') or 0)
+        total_peso += sp
+        total_valor += sv
+        nom = str(r.get('nombre_cliente') or '')
+        chart_labels.append((nom[:22] + '…') if len(nom) > 23 else nom)
+        chart_precios.append(round(float(pk), 4) if pk is not None else None)
+        filas.append({
+            'rank': i,
+            'cod_cliente': str(r.get('cod_cliente') or ''),
+            'nombre_cliente': nom,
+            'provincia': str(r.get('provincia') or ''),
+            'lineas': f"{int(r.get('lineas') or 0):,}",
+            'suma_cantidad': f"{float(r.get('suma_cantidad') or 0):,.2f}",
+            'suma_peso': f'{sp:,.2f}',
+            'suma_valor': f'S/ {sv:,.2f}',
+            'precio_kg': f'S/ {float(pk):,.2f}' if pk is not None else '—',
+        })
+
+    ctx = _report_shell_context(f'Ventas {linea} · Top clientes por precio/kg')
+    ctx.update({
+        'd1': d1, 'd2': d2, 'linea': linea, 'top': top,
+        'tipo_fecha': tipo_fecha,
+        'fecha_eje_leyenda': fecha_eje_leyenda,
+        'cod_item': cod_item or None,
+        'mercado': mercado or None,
+        'provincia_filtro': provincia_filtro,
+        'filas': filas,
+        'total_lineas': f'{total_lineas:,}',
+        'total_peso': f'{total_peso:,.2f}',
+        'total_valor': f'S/ {total_valor:,.2f}',
+        'pdf_filename': f'linea_precio_top_clientes_{d1}_{d2}.pdf',
+        'chart_data': {'labels': chart_labels, 'precios': chart_precios},
+        'body_class': 'app-page-reporte-wide',
+    })
+    return render_template('pages/reporte_linea_precio_top_clientes.html', **ctx)
+
+
 @bp.route('/modules/reports/ventas-top-clientes-global')
 @require_login
 def ventas_top_clientes_global():

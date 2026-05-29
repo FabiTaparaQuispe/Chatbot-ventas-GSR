@@ -18,6 +18,7 @@ from services.urlmap import (
     REPORT_SLUG_VENTAS_LINEA_DIARIO_PROVINCIA,
     REPORT_SLUG_VENTAS_LINEA_MIX_PRODUCTOS,
     REPORT_SLUG_VENTAS_LINEA_PRECIO_DIARIO,
+    REPORT_SLUG_VENTAS_LINEA_PRECIO_TOP_CLIENTES,
     REPORT_SLUG_VENTAS_LINEA_PRECIO_RESUMEN_PROV,
     REPORT_SLUG_VENTAS_LINEA_RESUMEN_PROVINCIA,
     REPORT_SLUG_VENTAS_MIX_TDOC,
@@ -1254,7 +1255,8 @@ class ToolExecutor:
 
         where_sql = (_from_v2
                      + " WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
-                     + _linea_where)
+                     + _linea_where
+                     + " AND CodigoDocumento IN ('01','03')")
         params = {'d1': d1, 'd2': d2, **_linea_bind}
         if cod_item:
             where_sql += " AND CodigoItem = %(cod_item)s"
@@ -1285,7 +1287,7 @@ class ToolExecutor:
         )
         rows = _q(self._conn, sql_select, params)
         q = _qs({'desde': d1, 'hasta': d2, 'linea': linea,
-                 'cod_item': cod_item or None, 'mercado': mercado or None})
+                 'cod_item': cod_item or None, 'mercado': mercado or None, 'top': top})
         return {
             'tabla': 'ventasgeneral2',
             'tipo': 'linea_precio_top_clientes',
@@ -1295,7 +1297,7 @@ class ToolExecutor:
             'top_n': top,
             'total_clientes': total_rows,
             'filas': [dict(r) for r in rows],
-            'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_LINEA_PRECIO_DIARIO, q),
+            'reporte_url': report_slug_url(REPORT_SLUG_VENTAS_LINEA_PRECIO_TOP_CLIENTES, q),
             '_sql_traces': [
                 {'sql': sql_count, 'params': params},
                 {'sql': sql_select, 'params': params},
