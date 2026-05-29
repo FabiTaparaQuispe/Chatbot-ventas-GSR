@@ -1469,11 +1469,11 @@
         const head = parts.head || '';
         const len = head.length;
         let pos = 0;
-        let charsPerStep = 1;
-        if (len > 1200) charsPerStep = 2;
-        if (len > 2800) charsPerStep = 3;
-        if (len > 5500) charsPerStep = 5;
-        const stepMs = 26;
+        let charsPerStep = 3;
+        if (len > 800)  charsPerStep = 5;
+        if (len > 2000) charsPerStep = 8;
+        if (len > 4500) charsPerStep = 12;
+        const stepMs = 18;
 
         function tick() {
             if (!bodyEl.isConnected || gen !== assistantStreamGen) return;
