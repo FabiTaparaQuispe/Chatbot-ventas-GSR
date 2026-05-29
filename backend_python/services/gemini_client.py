@@ -309,15 +309,24 @@ class GeminiClient:
                         try:
                             token = chunk.text
                         except Exception:
+                            # thinking tokens u otras partes no-texto: ignorar silenciosamente
                             token = ""
                         if token:
                             full_text += token
                             on_event({"type": "token", "text": token})
                 except Exception:
-                    # Fallback no-streaming
+                    # Fallback no-streaming ante error del stream
                     fb = self._generate(model_plain, contents)
                     full_text, _ = self._extract_parts(fb)
                     on_event({"type": "reply", "text": full_text})
+
+                # Fallback si el stream completó sin emitir texto (ej. todos thinking tokens)
+                if not full_text:
+                    logger.warning("Gemini streaming retornó vacío, reintentando sin streaming")
+                    fb = self._generate(model_plain, contents)
+                    full_text, _ = self._extract_parts(fb)
+                    if full_text:
+                        on_event({"type": "reply", "text": full_text})
 
                 contents.append({"role": "model", "parts": [full_text]})
                 return full_text.strip(), messages
