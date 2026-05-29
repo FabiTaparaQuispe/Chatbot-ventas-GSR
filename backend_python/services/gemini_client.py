@@ -357,13 +357,19 @@ class GeminiClient:
             reply = text_out.strip()
             logger.info("[Gemini.stream] Sin tools → reply directo | len=%d", len(reply))
 
-            # Hasta 3 reintentos si Gemini devuelve vacío (comportamiento errático de 2.5-flash)
+            # Hasta 3 reintentos si Gemini devuelve vacío
+            # Reintento 1: AUTO (igual que el primero, por si fue transitorio)
+            # Reintentos 2-3: REQUIRED (fuerza al modelo a llamar una herramienta)
             if not reply:
+                config_required = self._make_config(system_text, function_decls, mode='REQUIRED')
                 for _retry_n in range(1, 4):
-                    logger.warning("[Gemini.stream] reply VACÍO → reintento %d/3 (pausa 1s)", _retry_n)
+                    modo = 'AUTO' if _retry_n == 1 else 'REQUIRED'
+                    cfg_retry = config_with_tools if _retry_n == 1 else config_required
+                    logger.warning("[Gemini.stream] reply VACÍO → reintento %d/3 modo=%s (pausa 1s)",
+                                   _retry_n, modo)
                     await asyncio.sleep(1)
                     try:
-                        fb = await self._generate(contents, config_with_tools)
+                        fb = await self._generate(contents, cfg_retry)
                         fb_text, fb_tools = self._extract_parts(fb)
                         if fb_text:
                             reply = fb_text.strip()
