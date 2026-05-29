@@ -340,6 +340,33 @@ class GeminiClient:
 
             reply = text_out.strip()
             logger.info("[Gemini.stream] Sin tools → reply directo | len=%d", len(reply))
+
+            # Retry si Gemini devolvió texto vacío sin tools (candidato bloqueado/vacío)
+            if not reply:
+                logger.warning("[Gemini.stream] reply VACÍO sin tools → reintentando con model_with_tools")
+                try:
+                    fb = await self._generate(model_with_tools, contents)
+                    fb_text, fb_tools = self._extract_parts(fb)
+                    if fb_text:
+                        reply = fb_text.strip()
+                        logger.info("[Gemini.stream] Retry → reply_len=%d", len(reply))
+                    elif fb_tools:
+                        # El retry SÍ quiso llamar tools — forzar una respuesta de texto
+                        logger.info("[Gemini.stream] Retry devolvió tools=%d, generando texto final", len(fb_tools))
+                        contents_retry = list(contents)
+                        contents_retry.append(fb.candidates[0].content)
+                        contents_retry.append(protos.Content(role="user", parts=[
+                            protos.Part(function_response=protos.FunctionResponse(
+                                name=fb_tools[0]["name"],
+                                response={"result": {"error": "No se pudo ejecutar en este momento. Intenta reformular la consulta."}},
+                            ))
+                        ]))
+                        fb2 = await self._generate(model_plain, contents_retry)
+                        fb2_text, _ = self._extract_parts(fb2)
+                        reply = fb2_text.strip()
+                except Exception as e:
+                    logger.error("[Gemini.stream] Retry falló: %s", e)
+
             await on_event({"type": "reply", "text": reply})
             return reply, messages
 
