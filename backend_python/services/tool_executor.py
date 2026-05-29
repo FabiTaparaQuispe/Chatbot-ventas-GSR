@@ -1742,21 +1742,7 @@ class ToolExecutor:
         anos = meta.get('anos_historicos') or []
         metodo = meta.get('metodo') or 'media_movil_estacional'
 
-        if metodo == 'media_movil_estacional':
-            nota = (
-                f'Proyección por media móvil estacional (promedio del mismo mes en '
-                f'{len(anos)} año(s) histórico(s): {", ".join(str(a) for a in anos)}).'
-            )
-        elif metodo == 'regresion_lineal':
-            nota = (
-                'Proyección por regresión lineal (fallback): no hay el mismo mes calendario '
-                'en años anteriores. Cargue al menos 2 años en ventasgeneral2 para estacionalidad.'
-            )
-        else:
-            nota = (
-                f'Proyección híbrida: {meta.get("meses_estacional", 0)} mes(es) por estacionalidad '
-                f'y {meta.get("meses_lineal", 0)} por regresión lineal (sin historial del mismo mes).'
-            )
+        nota = 'Nota: Proyección basada en datos actuales.'
 
         filtros = {}
         if linea:

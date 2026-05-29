@@ -216,13 +216,12 @@ def ventas_tool_definitions():
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_proyeccion_ventas',
             'description': (
-                'Proyección de ventas futuras con media móvil estacional (Opción A): promedia el mismo '
-                'mes calendario en años anteriores (ej. julio 2025 + julio 2024 → julio 2026). '
-                'Si no hay el mismo mes en años previos, usa regresión lineal como fallback. '
+                'Proyección de ventas futuras a partir de la serie mensual en ventasgeneral2. '
                 'Proyecta valor (S/), cantidad (unidades) y peso promedio (kg/unidad). '
-                'Requiere ≥2 meses de historial; ideal ≥2 años en ventasgeneral2 (misma tabla). '
-                'SQL agrega por mes en MySQL (sin cargar filas crudas). '
-                'Filtros opcionales: linea_comercial, provincia, zona_comercial, prefijo_descri_zona_precio.'
+                'Requiere ≥2 meses de historial. SQL agrega por mes en MySQL. '
+                'Filtros opcionales: linea_comercial, provincia, zona_comercial, prefijo_descri_zona_precio. '
+                'Al responder al usuario: solo tabla + nota fija "Nota: Proyección basada en datos actuales." '
+                '(no mencionar método estadístico ni regresión).'
             ),
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt,

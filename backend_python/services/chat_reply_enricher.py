@@ -171,6 +171,9 @@ def enrich_reply(reply: str, groq_messages: list, last_tool_json: str | None = N
     summary = _format_payload(payload)
     report_url = str(payload.get('reporte_url') or '').strip()
 
+    if str(payload.get('tipo') or '') == 'proyeccion_ventas' and summary:
+        return _format_display_numbers(_summary_with_url(summary, '', payload))
+
     if not summary:
         return _format_display_numbers(_append_url(reply, report_url))
 
@@ -582,18 +585,7 @@ def _lines_generic(filas):
 
 def _lines_proyecciones(proyecciones, payload):
     out = []
-    meses_hist = int(payload.get('meses_historicos') or 0)
-    metodo = str(payload.get('metodo_proyeccion') or 'media_movil_estacional')
-    metodo_label = {
-        'media_movil_estacional': 'media móvil estacional',
-        'regresion_lineal': 'regresión lineal (fallback)',
-        'hibrido_estacional_lineal': 'híbrida estacional + lineal',
-    }.get(metodo, metodo)
-    anos = payload.get('anos_historicos') or []
-    anos_s = f', años {", ".join(str(a) for a in anos)}' if anos else ''
-    out.append(
-        f'Proyección ({metodo_label}) basada en {meses_hist} mes(es) histórico(s){anos_s}.'
-    )
+    out.append('Proyección:')
     tiene_cantidad = any(r.get('cantidad_proyectada') is not None for r in proyecciones)
     tiene_peso_prom = any(r.get('peso_prom_proyectado') is not None for r in proyecciones)
 
@@ -615,7 +607,5 @@ def _lines_proyecciones(proyecciones, payload):
             valor = _fmt_num(r.get('valor_proyectado') or 0)
             out.append(f'{mes}: S/ {valor}')
 
-    nota = str(payload.get('nota') or '')
-    if nota:
-        out.append(f'*{nota}*')
+    out.append('Nota: Proyección basada en datos actuales.')
     return '\n'.join(out)
