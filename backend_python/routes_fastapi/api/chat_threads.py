@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -21,8 +23,7 @@ async def chat_threads_get(request: Request, thread: str = '', q: str = ''):
     err, username = _require_login(request)
     if err:
         return err
-    conn = get_connection()
-    return _get(conn, username, thread.strip(), q.strip())
+    return await asyncio.to_thread(_get, username, thread.strip(), q.strip())
 
 
 @router.post('/api/chat_threads')
@@ -31,9 +32,8 @@ async def chat_threads_post(request: Request):
     err, username = _require_login(request)
     if err:
         return err
-    conn = get_connection()
     body = await request.json()
-    return _post(conn, username, body)
+    return await asyncio.to_thread(_post, username, body)
 
 
 @router.delete('/api/chat_threads')
@@ -42,12 +42,12 @@ async def chat_threads_delete(request: Request):
     err, username = _require_login(request)
     if err:
         return err
-    conn = get_connection()
     body = await request.json()
-    return _delete(conn, username, body)
+    return await asyncio.to_thread(_delete, username, body)
 
 
-def _get(conn, username, client_id, q):
+def _get(username: str, client_id: str, q: str):
+    conn = get_connection()
     if client_id:
         with conn.cursor() as cur:
             cur.execute(
@@ -63,8 +63,11 @@ def _get(conn, username, client_id, q):
                 'SELECT role, content, created_at FROM app_chat_messages WHERE thread_id = %s ORDER BY id ASC',
                 (int(t['id']),)
             )
-            msgs = [{'role': str(r['role'] or ''), 'content': str(r['content'] or ''), 'createdAt': str(r['created_at'] or '')}
-                    for r in cur.fetchall()]
+            msgs = [
+                {'role': str(r['role'] or ''), 'content': str(r['content'] or ''),
+                 'createdAt': str(r['created_at'] or '')}
+                for r in cur.fetchall()
+            ]
         return {'ok': True, 'thread': {
             'id': str(t['client_thread_id'] or ''), 'title': str(t['title'] or ''),
             'createdAt': str(t['created_at'] or ''), 'updatedAt': str(t['updated_at'] or ''),
@@ -83,13 +86,15 @@ def _get(conn, username, client_id, q):
 
     with conn.cursor() as cur:
         cur.execute(sql, params)
-        threads = [{'id': str(r['client_thread_id'] or ''), 'title': str(r['title'] or ''),
-                    'updatedAt': str(r['updated_at'] or ''), 'n': int(r['n'] or 0)}
-                   for r in cur.fetchall()]
+        threads = [
+            {'id': str(r['client_thread_id'] or ''), 'title': str(r['title'] or ''),
+             'updatedAt': str(r['updated_at'] or ''), 'n': int(r['n'] or 0)}
+            for r in cur.fetchall()
+        ]
     return {'ok': True, 'threads': threads}
 
 
-def _post(conn, username, body):
+def _post(username: str, body: dict):
     client_id = str(body.get('id') or '').strip()
     title = str(body.get('title') or '').strip() or 'Nuevo chat'
     messages = body.get('messages') if isinstance(body.get('messages'), list) else []
@@ -98,21 +103,29 @@ def _post(conn, username, body):
     if len(title) > 220:
         title = title[:220]
 
+    conn = get_connection()
     conn.begin()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM app_chat_threads WHERE username = %s AND client_thread_id = %s LIMIT 1',
-                        (username, client_id))
+            cur.execute(
+                'SELECT id FROM app_chat_threads WHERE username = %s AND client_thread_id = %s LIMIT 1',
+                (username, client_id)
+            )
             row = cur.fetchone()
         if row:
             thread_id = int(row['id'])
             with conn.cursor() as cur:
-                cur.execute('UPDATE app_chat_threads SET title = %s, updated_at = NOW() WHERE id = %s', (title, thread_id))
+                cur.execute(
+                    'UPDATE app_chat_threads SET title = %s, updated_at = NOW() WHERE id = %s',
+                    (title, thread_id)
+                )
                 cur.execute('DELETE FROM app_chat_messages WHERE thread_id = %s', (thread_id,))
         else:
             with conn.cursor() as cur:
-                cur.execute('INSERT INTO app_chat_threads (username, client_thread_id, title) VALUES (%s, %s, %s)',
-                            (username, client_id, title))
+                cur.execute(
+                    'INSERT INTO app_chat_threads (username, client_thread_id, title) VALUES (%s, %s, %s)',
+                    (username, client_id, title)
+                )
                 thread_id = cur.lastrowid
 
         with conn.cursor() as cur:
@@ -128,8 +141,10 @@ def _post(conn, username, body):
                     continue
                 if len(content) > 524288:
                     content = content[:524288]
-                cur.execute('INSERT INTO app_chat_messages (thread_id, role, content) VALUES (%s, %s, %s)',
-                            (thread_id, role, content))
+                cur.execute(
+                    'INSERT INTO app_chat_messages (thread_id, role, content) VALUES (%s, %s, %s)',
+                    (thread_id, role, content)
+                )
                 n += 1
                 if n >= 500:
                     break
@@ -143,7 +158,8 @@ def _post(conn, username, body):
         return JSONResponse({'ok': False, 'error': str(e)}, status_code=500)
 
 
-def _delete(conn, username, body):
+def _delete(username: str, body: dict):
+    conn = get_connection()
     if bool(body.get('purge_all')):
         with conn.cursor() as cur:
             cur.execute('DELETE FROM app_chat_threads WHERE username = %s', (username,))
@@ -152,5 +168,8 @@ def _delete(conn, username, body):
     if not client_id:
         return JSONResponse({'ok': False, 'error': 'Falta id'}, status_code=400)
     with conn.cursor() as cur:
-        cur.execute('DELETE FROM app_chat_threads WHERE username = %s AND client_thread_id = %s', (username, client_id))
+        cur.execute(
+            'DELETE FROM app_chat_threads WHERE username = %s AND client_thread_id = %s',
+            (username, client_id)
+        )
     return {'ok': True}

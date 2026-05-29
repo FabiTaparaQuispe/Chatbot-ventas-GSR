@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import re
-import threading
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Request
@@ -19,7 +18,6 @@ from services.chat_reply_enricher import enrich_reply
 from services.fast_format import try_fast_format
 from services.sql_trace_display import format_sql_traces_for_display
 
-# Import SYSTEM_TEMPLATE and helpers from the Flask module (no Flask-specific dependencies)
 from routes.api.chat import (
     SYSTEM_TEMPLATE,
     _unify_pareto_links,
@@ -32,7 +30,6 @@ from routes.api.chat import (
 router = APIRouter()
 _log = logging.getLogger(__name__)
 
-# Singleton del cliente LLM (independiente del de Flask)
 _llm_client_singleton: tuple | None = None
 
 
@@ -57,7 +54,6 @@ def _get_llm_client():
 
 
 def _build_messages(data: dict) -> tuple:
-    """Parsea y sanitiza el request. Retorna (messages, prev_result, llm_client, error|None)."""
     messages_in = data.get('messages')
     if not isinstance(messages_in, list):
         return None, None, None, JSONResponse({'error': 'Falta messages (array)'}, status_code=400)
@@ -152,7 +148,7 @@ def _build_messages(data: dict) -> tuple:
     return [system] + sanitized, prev_result_parsed, llm_client, None
 
 
-# ── Endpoints ─────────────────────────────────────────────────────────────────
+# ── Endpoints ──────────────────────────────────────────────────────────────────
 
 @router.get('/api/health_llm')
 async def health_llm():
@@ -185,15 +181,15 @@ async def chat(request: Request):
 
     provider = resolve_llm_provider()
     try:
-        conn = get_connection()
+        conn = await asyncio.to_thread(get_connection)
         executor = ToolExecutor(conn, prev_result=prev_result_parsed)
         _all_tools = ventas_tool_definitions() + chat_history_tool_definitions()
         _last_user = next((m['content'] for m in reversed(messages) if m.get('role') == 'user'), '')
         tools = _filter_tools(_last_user, _all_tools)
 
-        result = llm_client.chat_with_tools(
+        result = await llm_client.chat_with_tools(
             messages, tools,
-            lambda name, args: executor.execute(name, args),
+            executor.execute_async,
             try_fast_format=try_fast_format,
         )
 
@@ -252,57 +248,60 @@ async def chat_stream(request: Request):
     if err:
         return err
 
-    loop = asyncio.get_running_loop()
-    async_q: asyncio.Queue = asyncio.Queue()
-
-    def worker():
-        try:
-            conn = get_connection()
-            executor = ToolExecutor(conn, prev_result=prev_result_parsed)
-            _all_tools = ventas_tool_definitions() + chat_history_tool_definitions()
-            _last_user = next((m['content'] for m in reversed(messages) if m.get('role') == 'user'), '')
-            tools = _filter_tools(_last_user, _all_tools)
-
-            def on_event(event):
-                loop.call_soon_threadsafe(async_q.put_nowait, event)
-
-            reply, working = llm_client.chat_with_tools_stream(
-                messages, tools,
-                lambda name, args: executor.execute(name, args),
-                on_event,
-                try_fast_format=try_fast_format,
-            )
-
-            last_tool_json = executor.pull_last_tool_json()
-            reply = enrich_reply(str(reply or ''), working, last_tool_json=last_tool_json)
-            reply = _unify_pareto_links(reply)
-            sql_text = format_sql_traces_for_display(executor.pull_sql_traces())
-            if sql_text:
-                reply = reply + '\n\n' + sql_text
-
-            loop.call_soon_threadsafe(async_q.put_nowait, {
-                'type': 'done',
-                'reply': reply,
-                'last_result': _extract_last_result(working),
-            })
-        except Exception as e:
-            _log.exception("/api/chat/stream worker error")
-            loop.call_soon_threadsafe(async_q.put_nowait, {'type': 'error', 'text': str(e)})
-        finally:
-            loop.call_soon_threadsafe(async_q.put_nowait, None)
-
-    threading.Thread(target=worker, daemon=True).start()
-
     async def generate():
+        q: asyncio.Queue = asyncio.Queue()
+
+        async def on_event(event: dict) -> None:
+            await q.put(event)
+
+        async def run_llm() -> None:
+            try:
+                conn = await asyncio.to_thread(get_connection)
+                executor = ToolExecutor(conn, prev_result=prev_result_parsed)
+                _all_tools = ventas_tool_definitions() + chat_history_tool_definitions()
+                _last_user = next(
+                    (m['content'] for m in reversed(messages) if m.get('role') == 'user'), ''
+                )
+                tools = _filter_tools(_last_user, _all_tools)
+
+                reply, working = await llm_client.chat_with_tools_stream(
+                    messages, tools,
+                    executor.execute_async,
+                    on_event,
+                    try_fast_format=try_fast_format,
+                )
+
+                last_tool_json = executor.pull_last_tool_json()
+                reply = enrich_reply(str(reply or ''), working, last_tool_json=last_tool_json)
+                reply = _unify_pareto_links(reply)
+                sql_text = format_sql_traces_for_display(executor.pull_sql_traces())
+                if sql_text:
+                    reply = reply + '\n\n' + sql_text
+
+                await q.put({
+                    'type': 'done',
+                    'reply': reply,
+                    'last_result': _extract_last_result(working),
+                })
+            except Exception as e:
+                _log.exception("/api/chat/stream error")
+                await q.put({'type': 'error', 'text': str(e)})
+            finally:
+                await q.put(None)  # sentinel
+
+        llm_task = asyncio.create_task(run_llm())
+
         while True:
             try:
-                event = await asyncio.wait_for(async_q.get(), timeout=20)
+                event = await asyncio.wait_for(q.get(), timeout=20)
             except asyncio.TimeoutError:
                 yield ': keep-alive\n\n'
                 continue
             if event is None:
                 break
             yield f'data: {json.dumps(event, ensure_ascii=False)}\n\n'
+
+        await llm_task
 
     return StreamingResponse(
         generate(),

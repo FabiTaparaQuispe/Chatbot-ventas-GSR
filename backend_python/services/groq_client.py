@@ -1,31 +1,26 @@
+import asyncio
 import json
-import os
-import time
 import re
-from openai import OpenAI, APIStatusError
+from openai import AsyncOpenAI, APIStatusError
 
 MAX_ITERATIONS = 10
 MAX_TOOL_JSON_BYTES = 14000
-MAX_429_RETRIES = 5          # ← subido de 3 a 5
-_MAX_WAIT_SEC = 65.0         # ← subido de 25 a 65 (Groq free tier puede pedir hasta ~60s)
-_DEFAULT_WAIT_SEC = 5.0      # ← subido de 3 a 5
+MAX_429_RETRIES = 5
+_MAX_WAIT_SEC = 65.0
+_DEFAULT_WAIT_SEC = 5.0
 
 
 class GroqClient:
     def __init__(self, api_key: str, model: str = 'llama-3.1-8b-instant'):
         self.model = model
-        self._client = OpenAI(
+        self._client = AsyncOpenAI(
             api_key=api_key,
             base_url='https://api.groq.com/openai/v1',
             timeout=45.0,
         )
 
-    def chat_with_tools_stream(self, messages: list, tools: list, run_tool, on_event,
-                               try_fast_format=None) -> tuple:
-        """
-        Igual que chat_with_tools pero llama on_event({'type':...}) para status/tokens.
-        Retorna (reply_text, working_messages).
-        """
+    async def chat_with_tools_stream(self, messages: list, tools: list, run_tool,
+                                     on_event, try_fast_format=None) -> tuple:
         working = list(messages)
         has_tool_results = False
 
@@ -33,39 +28,37 @@ class GroqClient:
             available_tools = tools if iteration == 1 else []
 
             if has_tool_results:
-                # Iteración final: streamear la respuesta
-                on_event({'type': 'status', 'text': 'Generando respuesta...'})
+                await on_event({'type': 'status', 'text': 'Generando respuesta...'})
                 full_text = ''
                 try:
-                    stream = self._client.chat.completions.create(
+                    stream = await self._client.chat.completions.create(
                         model=self.model,
                         messages=working,
                         temperature=0.2,
                         stream=True,
                     )
-                    for chunk in stream:
+                    async for chunk in stream:
                         choice = chunk.choices[0] if chunk.choices else None
                         if not choice:
                             continue
                         delta = choice.delta
                         if delta and delta.content:
                             full_text += delta.content
-                            on_event({'type': 'token', 'text': delta.content})
+                            await on_event({'type': 'token', 'text': delta.content})
                         if choice.finish_reason:
                             break
                 except Exception:
-                    # Fallback sin streaming
-                    response = self._request_completion(working, [])
+                    response = await self._request_completion(working, [])
                     choice = response.choices[0] if response.choices else None
                     full_text = str(choice.message.content or '') if choice else ''
-                    on_event({'type': 'reply', 'text': full_text})
+                    await on_event({'type': 'reply', 'text': full_text})
                 working.append({'role': 'assistant', 'content': full_text})
                 return full_text, working
 
-            # Llamada no-streaming para detectar tool calls
-            response = self._request_completion(working, available_tools)
+            response = await self._request_completion(working, available_tools)
             choice = response.choices[0] if response.choices else None
             if choice is None:
+                await on_event({'type': 'reply', 'text': 'Respuesta vacía del modelo.'})
                 return 'Respuesta vacía del modelo.', working
 
             msg = choice.message
@@ -82,7 +75,7 @@ class GroqClient:
 
             if not tool_calls:
                 full_text = str(msg.content or '')
-                on_event({'type': 'reply', 'text': full_text})
+                await on_event({'type': 'reply', 'text': full_text})
                 return full_text, working
 
             has_tool_results = True
@@ -90,35 +83,37 @@ class GroqClient:
             last_tool_json = None
             for tc in tool_calls:
                 fn_name = tc.function.name
-                label = 'Consultando historial...' if fn_name.startswith('chat_') else (
+                label = (
+                    'Consultando historial...'   if fn_name.startswith('chat_') else
                     'Filtrando resultado anterior...' if fn_name == 'filtrar_previo' else
                     'Consultando base de datos...'
                 )
-                on_event({'type': 'status', 'text': label})
+                await on_event({'type': 'status', 'text': label})
                 try:
                     args = json.loads(tc.function.arguments)
                 except Exception:
                     args = {}
-                tool_json = self._clamp_tool_json(run_tool(fn_name, args))
+                tool_json = self._clamp_tool_json(await run_tool(fn_name, args))
                 working.append({'role': 'tool', 'tool_call_id': tc.id, 'content': tool_json})
                 last_fn_name = fn_name
                 last_tool_json = tool_json
 
-            # Formateo rápido en Python: evita el 2do call al LLM
             if try_fast_format and len(tool_calls) == 1 and last_fn_name and last_tool_json:
                 fast_reply = try_fast_format(last_fn_name, last_tool_json)
                 if fast_reply:
                     working.append({'role': 'assistant', 'content': fast_reply})
-                    on_event({'type': 'reply', 'text': fast_reply})
+                    await on_event({'type': 'reply', 'text': fast_reply})
                     return fast_reply, working
 
-        return 'Se alcanzó el límite de iteraciones.', working
+        reply = 'Se alcanzó el límite de iteraciones.'
+        await on_event({'type': 'reply', 'text': reply})
+        return reply, working
 
-    def chat_with_tools(self, messages: list, tools: list, run_tool,
-                        try_fast_format=None) -> dict:
+    async def chat_with_tools(self, messages: list, tools: list, run_tool,
+                              try_fast_format=None) -> dict:
         working = list(messages)
         for iteration in range(1, MAX_ITERATIONS + 1):
-            response = self._request_completion(working, tools if iteration == 1 else [])
+            response = await self._request_completion(working, tools if iteration == 1 else [])
             choice = response.choices[0] if response.choices else None
             if choice is None:
                 return {'reply': 'Respuesta vacía del modelo.', 'messages': working}
@@ -129,11 +124,8 @@ class GroqClient:
             assistant_payload = {'role': 'assistant', 'content': msg.content}
             if tool_calls:
                 assistant_payload['tool_calls'] = [
-                    {
-                        'id': tc.id,
-                        'type': tc.type,
-                        'function': {'name': tc.function.name, 'arguments': tc.function.arguments},
-                    }
+                    {'id': tc.id, 'type': tc.type,
+                     'function': {'name': tc.function.name, 'arguments': tc.function.arguments}}
                     for tc in tool_calls
                 ]
             working.append(assistant_payload)
@@ -150,16 +142,11 @@ class GroqClient:
                     args = {}
                 if not isinstance(args, dict):
                     args = {}
-                tool_json = self._clamp_tool_json(run_tool(tc.function.name, args))
-                working.append({
-                    'role': 'tool',
-                    'tool_call_id': tc.id,
-                    'content': tool_json,
-                })
+                tool_json = self._clamp_tool_json(await run_tool(tc.function.name, args))
+                working.append({'role': 'tool', 'tool_call_id': tc.id, 'content': tool_json})
                 last_fn_name = tc.function.name
                 last_tool_json = tool_json
 
-            # Formateo rápido en Python: evita el 2do call al LLM
             if try_fast_format and len(tool_calls) == 1 and last_fn_name and last_tool_json:
                 fast_reply = try_fast_format(last_fn_name, last_tool_json)
                 if fast_reply:
@@ -168,7 +155,7 @@ class GroqClient:
 
         return {'reply': 'Se alcanzó el límite de iteraciones con herramientas.', 'messages': working}
 
-    def _request_completion(self, messages: list, tools: list):
+    async def _request_completion(self, messages: list, tools: list):
         params = {
             'model': self.model,
             'messages': messages,
@@ -181,26 +168,23 @@ class GroqClient:
         last_err: Exception | None = None
         for attempt in range(1, MAX_429_RETRIES + 1):
             try:
-                return self._client.chat.completions.create(**params)
+                return await self._client.chat.completions.create(**params)
             except APIStatusError as e:
                 last_err = e
                 msg = str(e)
 
-                # ── Límite diario (TPD): no tiene sentido reintentar ──
                 if self._is_daily_limit(msg):
                     raise RuntimeError(self._friendly_daily_limit(msg))
 
-                # ── Rate limit (RPM / TPM): reintentar con backoff ──
                 if self._is_rate_limit(msg) and attempt < MAX_429_RETRIES:
                     sleep_sec = self._get_wait_seconds(e, msg, attempt)
                     if sleep_sec > _MAX_WAIT_SEC:
                         raise RuntimeError(self._friendly_wait_long(sleep_sec))
                     print(f"[GroqClient] Rate limit (intento {attempt}/{MAX_429_RETRIES}). "
                           f"Esperando {sleep_sec:.1f}s...")
-                    time.sleep(sleep_sec)
+                    await asyncio.sleep(sleep_sec)
                     continue
 
-                # ── Otros errores de API ──
                 raise RuntimeError(self._friendly_error(msg))
 
         raise RuntimeError(self._friendly_error(str(last_err) if last_err else 'Groq: sin respuesta'))
@@ -213,12 +197,7 @@ class GroqClient:
     @staticmethod
     def _is_rate_limit(msg: str) -> bool:
         m = msg.lower()
-        return (
-            'rate_limit' in m
-            or 'rate limit' in m
-            or 'too many requests' in m
-            or '429' in m
-        )
+        return 'rate_limit' in m or 'rate limit' in m or 'too many requests' in m or '429' in m
 
     @staticmethod
     def _friendly_daily_limit(raw: str) -> str:
@@ -250,28 +229,17 @@ class GroqClient:
 
     @classmethod
     def _get_wait_seconds(cls, exc: APIStatusError, msg: str, attempt: int = 1) -> float:
-        """
-        Determina cuánto esperar. Prioridad:
-        1. Header Retry-After de Groq
-        2. Parsear "try again in Xs" del mensaje
-        3. Backoff exponencial: 5s, 10s, 20s, 40s...
-        """
-        # 1. Header
         try:
             ra = exc.response.headers.get('retry-after') or exc.response.headers.get('Retry-After')
             if ra:
                 val = float(ra)
                 if 0.5 <= val <= 300.0:
-                    return val + 1.0  # margen de seguridad
+                    return val + 1.0
         except Exception:
             pass
-
-        # 2. Parsear mensaje
         parsed = cls._parse_retry_seconds(msg)
         if parsed > 1.0:
-            return parsed + 1.0  # margen de seguridad
-
-        # 3. Backoff exponencial con base _DEFAULT_WAIT_SEC
+            return parsed + 1.0
         return min(60.0, _DEFAULT_WAIT_SEC * (2 ** (attempt - 1)))
 
     @staticmethod
@@ -282,7 +250,7 @@ class GroqClient:
             mn = float(m.group(2) or 0)
             s = float(m.group(3) or 0)
             return min(300.0, max(0.5, h * 3600 + mn * 60 + s))
-        return 0.0  # ← cambiado de 3.0 a 0.0 para que el backoff exponencial tome el control
+        return 0.0
 
     def _clamp_tool_json(self, json_str: str) -> str:
         if len(json_str) <= MAX_TOOL_JSON_BYTES:
@@ -291,8 +259,7 @@ class GroqClient:
             data = json.loads(json_str)
         except Exception:
             return json_str
-        slice_keys = ['filas', 'filas_ranking', 'filas_pareto']
-        for key in slice_keys:
+        for key in ['filas', 'filas_ranking', 'filas_pareto']:
             if not isinstance(data, dict) or key not in data or not isinstance(data[key], list):
                 continue
             all_rows = data[key]

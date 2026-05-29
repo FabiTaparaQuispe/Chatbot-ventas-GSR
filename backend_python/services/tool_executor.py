@@ -245,6 +245,11 @@ class ToolExecutor:
         self._last_tool_json = None
         return j
 
+    async def execute_async(self, name: str, args: dict) -> str:
+        """Versión async de execute(): corre el trabajo síncrono en el thread pool."""
+        import asyncio
+        return await asyncio.to_thread(self.execute, name, args)
+
     def execute(self, name, args):
         try:
             method_name = _TOOL_REGISTRY.get(name)
