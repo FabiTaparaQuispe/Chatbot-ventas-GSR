@@ -48,10 +48,19 @@ class GroqClient:
                         if choice.finish_reason:
                             break
                 except Exception:
-                    response = await self._request_completion(working, [])
-                    choice = response.choices[0] if response.choices else None
-                    full_text = str(choice.message.content or '') if choice else ''
-                    await on_event({'type': 'reply', 'text': full_text})
+                    pass
+
+                # Fallback no-streaming si el stream retornó vacío o falló
+                if not full_text:
+                    try:
+                        response = await self._request_completion(working, [])
+                        choice = response.choices[0] if response.choices else None
+                        full_text = str(choice.message.content or '') if choice else ''
+                    except Exception:
+                        pass
+                    if full_text:
+                        await on_event({'type': 'reply', 'text': full_text})
+
                 working.append({'role': 'assistant', 'content': full_text})
                 return full_text, working
 
@@ -75,6 +84,14 @@ class GroqClient:
 
             if not tool_calls:
                 full_text = str(msg.content or '')
+                # Fallback si el modelo respondió sin contenido y sin tools
+                if not full_text:
+                    try:
+                        fallback = await self._request_completion(working[:-1], [])
+                        fc = fallback.choices[0] if fallback.choices else None
+                        full_text = str(fc.message.content or '') if fc else ''
+                    except Exception:
+                        pass
                 await on_event({'type': 'reply', 'text': full_text})
                 return full_text, working
 
