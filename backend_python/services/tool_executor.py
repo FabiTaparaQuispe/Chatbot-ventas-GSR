@@ -1741,8 +1741,8 @@ class ToolExecutor:
         n = len(filas)
         anos = meta.get('anos_historicos') or []
         metodo = meta.get('metodo') or 'media_movil_estacional'
-        _log.debug('[proyeccion] metodo=%s anos_historicos=%s meses_estacional=%s meses_lineal=%s',
-                   metodo, anos, meta.get('meses_estacional'), meta.get('meses_lineal'))
+        _log.info('[proyeccion] metodo=%s anos_historicos=%s meses_estacional=%s meses_lineal=%s',
+                  metodo, anos, meta.get('meses_estacional'), meta.get('meses_lineal'))
 
         nota = 'Nota: Proyección basada en datos actuales.'
 
