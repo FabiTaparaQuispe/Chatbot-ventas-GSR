@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import os
@@ -353,11 +352,11 @@ def chat():
         _last_user = next((m['content'] for m in reversed(messages) if m.get('role') == 'user'), '')
         tools = _filter_tools(_last_user, _all_tools)
 
-        result = asyncio.run(llm_client.chat_with_tools(
+        result = llm_client.chat_with_tools(
             messages, tools,
             lambda name, args: executor.execute(name, args),
             try_fast_format=try_fast_format,
-        ))
+        )
 
         last_tool_json = executor.pull_last_tool_json()
         reply = enrich_reply(str(result.get('reply') or ''), result.get('messages') or [], last_tool_json=last_tool_json)
@@ -566,12 +565,12 @@ def chat_stream():
             def on_event(event):
                 q.put(event)
 
-            reply, working = asyncio.run(llm_client.chat_with_tools_stream(
+            reply, working = llm_client.chat_with_tools_stream(
                 messages, tools,
                 lambda name, args: executor.execute(name, args),
                 on_event,
                 try_fast_format=try_fast_format,
-            ))
+            )
 
             last_tool_json = executor.pull_last_tool_json()
             reply = enrich_reply(str(reply or ''), working, last_tool_json=last_tool_json)
