@@ -12,7 +12,6 @@
         </div>
         <div id="reporte-pdf-root">
             <h2 class="reporte-informe-title">Agregados del periodo</h2>
-            <p class="reporte-informe-meta">Totales sobre líneas de detalle con los filtros aplicados (si los hay).</p>
             <div class="table-wrapper overflow-x-auto productos-dt-skin">
                 <table class="data-table config-table display stripe">
                     <thead>
@@ -49,6 +48,7 @@
 
 {% block extra_scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js" crossorigin="anonymous"></script>
 <script src="/assets/js/chart_reporte_datalabels.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
 <script src="/assets/js/reporte_pdf.js"></script>
@@ -58,6 +58,7 @@
 (function () {
     var d = {{ chart_data | tojson }};
     var legCol = typeof reporteChartLegendColor === 'function' ? reporteChartLegendColor() : '#1e293b';
+    var themeIsDark = document.documentElement.getAttribute('data-theme') === 'dark';
     var anim = window.reporteChartAnimate || {};
     function build() {
         if (!window.Chart) return;
@@ -81,6 +82,21 @@
                 plugins: {
                     legend: { labels: { color: legCol, boxWidth: 14 } },
                     tooltip: { callbacks: { label: function(c) { var v=c.parsed.y; return 'S/ '+(v!=null?v.toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}):''); } } },
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'end',
+                        rotation: -90,
+                        clamp: true,
+                        clip: true,
+                        font: { size: 9, weight: '600' },
+                        color: function() { return themeIsDark ? '#94a3b8' : '#334155'; },
+                        formatter: function(v) {
+                            if (v == null) return '';
+                            if (v >= 1000000) return 'S/ ' + (v/1000000).toLocaleString('es-PE',{minimumFractionDigits:1,maximumFractionDigits:1}) + 'M';
+                            if (v >= 1000) return 'S/ ' + (v/1000).toLocaleString('es-PE',{minimumFractionDigits:0,maximumFractionDigits:0}) + 'K';
+                            return 'S/ ' + v.toLocaleString('es-PE',{minimumFractionDigits:0,maximumFractionDigits:0});
+                        },
+                    },
                 },
                 scales: {
                     x: { ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 10 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
