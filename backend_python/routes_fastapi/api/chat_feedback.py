@@ -37,6 +37,7 @@ async def last_msg_id(request: Request, cid: str = ''):
     if _require_login(request):
         return JSONResponse({'ok': False, 'error': 'No autenticado'}, status_code=401)
     username = str(request.session.get('usuario') or '')
+    _log.info('[feedback] last_msg_id llamado | user=%s cid=%s', username, cid[:12] if cid else '')
     if not cid or not username:
         return JSONResponse({'ok': False, 'error': 'Parámetros inválidos'}, status_code=400)
     try:

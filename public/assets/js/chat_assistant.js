@@ -1533,7 +1533,7 @@
                 var _origComplete = options.onComplete || null;
                 streamAssistantIntoBody(body, text, gen, div, function(){
                     if (_origComplete) _origComplete();
-                    _attachFeedbackButtons(div);
+                    _attachFeedbackButtons();
                 });
             } else {
                 body.innerHTML = renderAssistantHtml(text);
@@ -2110,10 +2110,13 @@
         if (log) log.scrollTop = log.scrollHeight;
     }
 
-    function _attachFeedbackButtons(bubbleDiv) {
-        if (!_userIsAdmin() || !bubbleDiv) return;
+    function _attachFeedbackButtons() {
+        if (!_userIsAdmin() || !log) return;
         var cid = activeThreadId || '';
         if (!cid) return;
+        var msgs = log.querySelectorAll('.ventas-chat-msg.assistant');
+        var bubbleDiv = msgs[msgs.length - 1];
+        if (!bubbleDiv || bubbleDiv.querySelector('.chat-feedback-bar')) return;
         fetch('/api/chat/last_msg_id?cid=' + encodeURIComponent(cid))
             .then(function(r){ return r.json(); })
             .then(function(data){
@@ -2165,7 +2168,7 @@
             }
             bubble.classList.remove('ventas-chat-msg--streaming');
             if (log) log.scrollTop = log.scrollHeight;
-            _attachFeedbackButtons(bubble);
+            _attachFeedbackButtons();
         }
         _streamBubble = null;
         _streamBody = null;
