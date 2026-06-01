@@ -83,6 +83,7 @@ from routes_fastapi.api.stats import router as stats_router
 from routes_fastapi.api.ventas_kpi import router as ventas_kpi_router
 from routes_fastapi.api.chat_script import router as chat_script_router
 from routes_fastapi.api.chat import router as chat_router
+from routes_fastapi.api.auth_token import router as auth_token_router
 from routes_fastapi.reports_modules import router as reports_router
 
 app.include_router(auth_router)
@@ -93,6 +94,7 @@ app.include_router(stats_router)
 app.include_router(ventas_kpi_router)
 app.include_router(chat_script_router)
 app.include_router(chat_router)
+app.include_router(auth_token_router)
 app.include_router(reports_router)
 
 # ── Archivos estáticos (al final — fallback para paths sin ruta registrada) ───
