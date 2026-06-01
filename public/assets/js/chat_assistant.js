@@ -1530,7 +1530,11 @@
                 assistantStreamGen += 1;
                 const gen = assistantStreamGen;
                 div.classList.add('ventas-chat-msg--streaming');
-                streamAssistantIntoBody(body, text, gen, div, options.onComplete || null);
+                var _origComplete = options.onComplete || null;
+                streamAssistantIntoBody(body, text, gen, div, function(){
+                    if (_origComplete) _origComplete();
+                    _attachFeedbackButtons(div);
+                });
             } else {
                 body.innerHTML = renderAssistantHtml(text);
                 if (_assistantBodyHasWideTable(body.innerHTML)) div.classList.add('has-table');
@@ -2106,14 +2110,62 @@
         if (log) log.scrollTop = log.scrollHeight;
     }
 
+    function _attachFeedbackButtons(bubbleDiv) {
+        if (!_userIsAdmin() || !bubbleDiv) return;
+        var cid = activeThreadId || '';
+        if (!cid) return;
+        fetch('/api/chat/last_msg_id?cid=' + encodeURIComponent(cid))
+            .then(function(r){ return r.json(); })
+            .then(function(data){
+                if (!data.ok || !data.id) return;
+                var msgId = data.id;
+                var current = data.feedback;
+                var bar = document.createElement('div');
+                bar.className = 'chat-feedback-bar';
+                var up = document.createElement('button');
+                up.type = 'button';
+                up.className = 'chat-feedback-btn' + (current === 1 ? ' active-good' : '');
+                up.title = 'Buena respuesta';
+                up.innerHTML = '&#128077;';
+                var down = document.createElement('button');
+                down.type = 'button';
+                down.className = 'chat-feedback-btn' + (current === -1 ? ' active-bad' : '');
+                down.title = 'Mala respuesta';
+                down.innerHTML = '&#128078;';
+                function sendFeedback(value) {
+                    fetch('/api/chat/feedback', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({message_id: msgId, value: value})
+                    }).then(function(r){ return r.json(); }).then(function(d){
+                        if (d.ok) {
+                            up.classList.toggle('active-good', value === 1);
+                            down.classList.toggle('active-bad', value === -1);
+                        }
+                    });
+                }
+                up.addEventListener('click', function(){
+                    sendFeedback(up.classList.contains('active-good') ? 0 : 1);
+                });
+                down.addEventListener('click', function(){
+                    sendFeedback(down.classList.contains('active-bad') ? 0 : -1);
+                });
+                bar.appendChild(up);
+                bar.appendChild(down);
+                bubbleDiv.appendChild(bar);
+            }).catch(function(){});
+    }
+
     function finalizeStreamBubble(fullReply) {
-        if (_streamBubble) {
+        var bubble = _streamBubble;
+        if (bubble) {
             if (_streamBody) {
                 _streamBody.innerHTML = renderAssistantHtml(fullReply);
-                if (_assistantBodyHasWideTable(_streamBody.innerHTML)) _streamBubble.classList.add('has-table');
+                if (_assistantBodyHasWideTable(_streamBody.innerHTML)) bubble.classList.add('has-table');
             }
-            _streamBubble.classList.remove('ventas-chat-msg--streaming');
+            bubble.classList.remove('ventas-chat-msg--streaming');
             if (log) log.scrollTop = log.scrollHeight;
+            _attachFeedbackButtons(bubble);
         }
         _streamBubble = null;
         _streamBody = null;
