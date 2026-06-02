@@ -17,6 +17,8 @@ from services.db import get_connection
 from services.historial_data import (
     build_stats,
     clasificar_pregunta,
+    estado_respuesta,
+    fetch_efectividad_stats,
     fetch_historial_rows,
     fetch_historial_usernames,
     historial_preview,
@@ -165,13 +167,17 @@ async def _render_index(request: Request, page: str) -> HTMLResponse:
         f_desde = request.query_params.get('fecha_desde', '').strip()
         f_hasta = request.query_params.get('fecha_hasta', '').strip()
         f_user = request.query_params.get('usuario', '').strip()
-        filtros_activos = bool(f_desde or f_hasta or f_user)
+        f_feedback = request.query_params.get('feedback', '').strip().lower()
+        if f_feedback not in ('buenos', 'malos', 'sin_voto', 'fallos'):
+            f_feedback = ''
+        filtros_activos = bool(f_desde or f_hasta or f_user or f_feedback)
 
         def _fetch_historial():
             conn = get_connection()
             usernames, _ = fetch_historial_usernames(conn)
             rows, db_err = fetch_historial_rows(conn, fecha_desde=f_desde or None,
-                                                fecha_hasta=f_hasta or None, username=f_user or None)
+                                                fecha_hasta=f_hasta or None, username=f_user or None,
+                                                feedback=f_feedback or None)
             return usernames, rows, db_err
 
         usernames, rows, db_err = await asyncio.to_thread(_fetch_historial)
@@ -182,26 +188,13 @@ async def _render_index(request: Request, page: str) -> HTMLResponse:
         stats = build_stats(rows) if rows and not db_err else {}
         top_categoria = (next((k for k, v in sorted(stats.items(), key=lambda x: -x[1]) if v > 0), '—') if stats else '—')
 
-        def _fetch_feedback_stats():
-            conn = get_connection()
-            try:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT COALESCE(SUM(feedback=1),0) buenos, COALESCE(SUM(feedback=-1),0) malos,"
-                        " COALESCE(SUM(feedback IS NULL),0) sin_voto FROM app_chat_messages WHERE role='assistant'"
-                    )
-                    return cur.fetchone()
-            except Exception:
-                return None
-
-        fb = await asyncio.to_thread(_fetch_feedback_stats)
-        fb_buenos  = int(fb['buenos']   if fb else 0)
-        fb_malos   = int(fb['malos']    if fb else 0)
-        fb_sin_voto = int(fb['sin_voto'] if fb else 0)
+        ef = await asyncio.to_thread(lambda: fetch_efectividad_stats(get_connection()))
 
         ctx.update({
             'historial_rows': rows, 'db_error': db_err, 'stats': stats,
-            'fb_buenos': fb_buenos, 'fb_malos': fb_malos, 'fb_sin_voto': fb_sin_voto,
+            'fb_buenos': ef['buenos'], 'fb_malos': ef['malos'], 'fb_sin_voto': ef['sin_voto'],
+            'ef_total': ef['total'], 'ef_fallos': ef['fallos'], 'ef_fallo_auto': ef['fallo_auto'],
+            'ef_aciertos': ef['aciertos'], 'ef_efectividad': ef['efectividad'],
             'total_preguntas': len(rows),
             'total_usuarios': len({str(r.get('usuario') or '') for r in rows if str(r.get('usuario') or '')}),
             'top_categoria': top_categoria,
@@ -209,8 +202,10 @@ async def _render_index(request: Request, page: str) -> HTMLResponse:
                         'Por zona': '#d97706', 'Notas de crédito': '#dc2626', 'Comparativos': '#0891b2',
                         'Proyecciones': '#9333ea', 'Otras': '#6b7280'},
             'clasificar': clasificar_pregunta, 'preview': historial_preview,
+            'estado_respuesta': estado_respuesta,
             'historial_usernames': usernames, 'filtro_fecha_desde': f_desde,
             'filtro_fecha_hasta': f_hasta, 'filtro_usuario': f_user,
+            'filtro_feedback': f_feedback,
             'filtros_activos': filtros_activos, 'historial_filter_msg': historial_filter_msg,
         })
     elif page == 'usuarios':

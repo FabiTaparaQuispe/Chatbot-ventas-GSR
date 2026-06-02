@@ -68,6 +68,17 @@
 .hp-td-a    { max-width: 220px; color: var(--muted, #6b7280); }
 .hp-td-link a { color: var(--accent, #2563eb); text-decoration: none; font-weight: 600; }
 .hp-td-link a:hover { text-decoration: underline; }
+.hp-td-eval { white-space: nowrap; }
+.hp-vote {
+    background: transparent; border: 1px solid var(--border, #cbd5e1);
+    border-radius: .4rem; padding: .15rem .4rem; margin-right: .2rem;
+    cursor: pointer; font-size: .95rem; line-height: 1; opacity: .5;
+    transition: opacity .15s, background .15s, border-color .15s;
+}
+.hp-vote:hover { opacity: 1; }
+.hp-vote.up.active   { opacity: 1; background: rgba(5,150,105,.15);  border-color: #059669; }
+.hp-vote.down.active { opacity: 1; background: rgba(220,38,38,.15); border-color: #dc2626; }
+.hp-vote:disabled { opacity: .3; cursor: wait; }
 .hp-alert {
     margin: 1rem 1.5rem;
     padding: .9rem 1rem;
@@ -174,6 +185,22 @@
                 <div class="kpi-value">{{ fb_sin_voto }}</div>
             </div>
         </div>
+        <div class="kpi-card" style="--kpi-accent:#0ea5e9;">
+            <div class="kpi-icon" style="background:rgba(14,165,233,.12);color:#0ea5e9;"><i class="fas fa-bullseye" aria-hidden="true"></i></div>
+            <div class="kpi-body">
+                <div class="kpi-label">Efectividad</div>
+                <div class="kpi-value">{{ ef_efectividad }}%</div>
+                <div class="kpi-sub" style="font-size:.72rem;color:var(--muted,#9ca3af);">{{ ef_aciertos }} de {{ ef_total }} respuestas</div>
+            </div>
+        </div>
+        <div class="kpi-card" style="--kpi-accent:#ea580c;">
+            <div class="kpi-icon" style="background:rgba(234,88,12,.12);color:#ea580c;"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i></div>
+            <div class="kpi-body">
+                <div class="kpi-label">No pudo contestar</div>
+                <div class="kpi-value">{{ ef_fallos }}</div>
+                <div class="kpi-sub" style="font-size:.72rem;color:var(--muted,#9ca3af);">{{ fb_malos }} 👎 + {{ ef_fallo_auto }} auto</div>
+            </div>
+        </div>
     </div>
     {% if total_preguntas > 0 %}
     <div class="hp-freq-card">
@@ -219,6 +246,16 @@
                         {% endfor %}
                     </select>
                 </div>
+                <div class="hp-filters-field">
+                    <label for="hp-f-fb">Evaluación</label>
+                    <select id="hp-f-fb" name="feedback">
+                        <option value=""        {% if not filtro_feedback %}selected{% endif %}>Todas</option>
+                        <option value="buenos"  {% if filtro_feedback == 'buenos' %}selected{% endif %}>👍 Buenas</option>
+                        <option value="malos"   {% if filtro_feedback == 'malos' %}selected{% endif %}>👎 Malas (dislike)</option>
+                        <option value="fallos"  {% if filtro_feedback == 'fallos' %}selected{% endif %}>⚠️ No pudo contestar</option>
+                        <option value="sin_voto" {% if filtro_feedback == 'sin_voto' %}selected{% endif %}>— Sin evaluar</option>
+                    </select>
+                </div>
             </div>
             <div class="hp-filters-actions">
                 <button type="submit" class="hp-btn hp-btn-primary">Aplicar filtros</button>
@@ -242,6 +279,8 @@
                         <th>Fecha</th>
                         <th>Pregunta</th>
                         <th>Respuesta (extracto)</th>
+                        <th>Estado</th>
+                        <th>Evaluar</th>
                         <th>Chat</th>
                     </tr>
                 </thead>
@@ -271,6 +310,28 @@
                     <td class="hp-td-date"><time datetime="{{ fecha|e }}">{{ fecha|e }}</time></td>
                     <td class="hp-td-q" title="{{ pregunta|e }}">{{ preview(pregunta, 200)|e }}</td>
                     <td class="hp-td-a" title="{{ extracto|e }}">{{ preview(extracto, 130)|e }}</td>
+                    {% set estado = estado_respuesta(r.respuesta_feedback, extracto) %}
+                    {% set estado_meta = {
+                        'bueno':         ('👍 Buena',       '#059669'),
+                        'malo':          ('👎 Mala',        '#dc2626'),
+                        'fallo':         ('⚠️ No contestó', '#ea580c'),
+                        'sin_respuesta': ('⚠️ Sin respuesta','#ea580c'),
+                        'ok':            ('— Sin evaluar',  '#6b7280')
+                    } %}
+                    {% set est_label, est_color = estado_meta.get(estado, ('—', '#6b7280')) %}
+                    <td class="hp-td-estado">
+                        <span class="hp-cat-pill" style="background:{{ est_color }}22;color:{{ est_color }};border:1px solid {{ est_color }}44;white-space:nowrap;">{{ est_label }}</span>
+                    </td>
+                    {% set is_up = (r.respuesta_feedback|string == '1') %}
+                    {% set is_down = (r.respuesta_feedback|string == '-1') %}
+                    <td class="hp-td-eval">
+                        {% if r.respuesta_id %}
+                        <button type="button" class="hp-vote up {% if is_up %}active{% endif %}" data-mid="{{ r.respuesta_id }}" data-val="1" title="Marcar como buena respuesta">👍</button>
+                        <button type="button" class="hp-vote down {% if is_down %}active{% endif %}" data-mid="{{ r.respuesta_id }}" data-val="-1" title="Marcar como mala respuesta">👎</button>
+                        {% else %}
+                        <span style="color:var(--muted,#9ca3af);">—</span>
+                        {% endif %}
+                    </td>
                     <td class="hp-td-link">
                         <a href="{{ href_chat|e }}">Abrir</a>
                         {% if titulo %}
@@ -286,4 +347,33 @@
     </div>
     {% endif %}
 </div>
+<script>
+(function () {
+    // Voto 👍/👎 directo desde el historial (endpoint /api/chat/feedback).
+    document.querySelectorAll('.hp-vote').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var mid = parseInt(btn.getAttribute('data-mid'), 10);
+            var val = parseInt(btn.getAttribute('data-val'), 10);
+            var cell = btn.closest('td');
+            var wasActive = btn.classList.contains('active');
+            var send = wasActive ? 0 : val;   // volver a hacer clic quita el voto
+            var botones = cell.querySelectorAll('.hp-vote');
+            botones.forEach(function (b) { b.disabled = true; });
+            fetch('/api/chat/feedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message_id: mid, value: send })
+            }).then(function (r) { return r.json(); }).then(function (d) {
+                botones.forEach(function (b) { b.disabled = false; });
+                if (!d.ok) { alert('No se pudo guardar el voto: ' + (d.error || '')); return; }
+                botones.forEach(function (b) { b.classList.remove('active'); });
+                if (send !== 0) { btn.classList.add('active'); }
+            }).catch(function () {
+                botones.forEach(function (b) { b.disabled = false; });
+                alert('Error de red al guardar el voto.');
+            });
+        });
+    });
+})();
+</script>
 {% endblock %}

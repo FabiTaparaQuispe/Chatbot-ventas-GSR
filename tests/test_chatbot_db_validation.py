@@ -36,6 +36,11 @@ DB_USER = os.getenv('DB_USER', 'root')
 DB_PASS = os.getenv('DB_PASS', 'root')
 DB_NAME = os.getenv('DB_NAME', 'grsia')
 
+# Guardar cada pregunta/respuesta en el historial (app_chat_threads + app_chat_messages)
+# para poder evaluarla con 👍/👎 desde la UI. SAVE_HISTORIAL=0 lo desactiva.
+SAVE_HISTORIAL = os.getenv('SAVE_HISTORIAL', '1') != '0'
+HIST_USER = os.getenv('HIST_USER', 'pytest_validacion')
+
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 def _db_connection():
@@ -104,7 +109,39 @@ def _get_token() -> str:
     return data['access_token']
 
 
-def _ask_chatbot(token: str, pregunta: str) -> str:
+def _save_to_historial_db(pregunta: str, reply: str, categoria: str = 'validacion') -> None:
+    """Inserta la pregunta y respuesta directamente en las tablas del historial
+    para que aparezcan en 'Preguntas al chatbot' y se puedan evaluar (👍/👎).
+    Escribe directo a la BD porque /api/chat no persiste y /api/chat_threads usa sesión."""
+    if not (SAVE_HISTORIAL and reply.strip()):
+        return
+    thread_cid = f'pytest_val_{uuid.uuid4().hex[:12]}'
+    titulo = f'[{categoria}] {pregunta[:60]}'
+    try:
+        conn = _db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'INSERT INTO app_chat_threads (username, client_thread_id, title) VALUES (%s,%s,%s)',
+                    (HIST_USER, thread_cid, titulo)
+                )
+                thread_id = cur.lastrowid
+                cur.execute(
+                    'INSERT INTO app_chat_messages (thread_id, role, content) VALUES (%s,%s,%s)',
+                    (thread_id, 'user', pregunta)
+                )
+                cur.execute(
+                    'INSERT INTO app_chat_messages (thread_id, role, content) VALUES (%s,%s,%s)',
+                    (thread_id, 'assistant', reply)
+                )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass  # no bloquear el test si falla el guardado
+
+
+def _ask_chatbot(token: str, pregunta: str, categoria: str = 'validacion') -> str:
     headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
     t0 = time.time()
     resp = requests.post(
@@ -117,6 +154,7 @@ def _ask_chatbot(token: str, pregunta: str) -> str:
     assert resp.status_code == 200, f'HTTP {resp.status_code}: {resp.text[:200]}'
     reply = resp.json().get('reply', '')
     print(f'\n     → ({ms}ms) {reply[:200]}')
+    _save_to_historial_db(pregunta, reply, categoria)
     return reply
 
 
@@ -133,10 +171,12 @@ def token():
 class TestVentasGenerales:
 
     def test_importe_enero_2026(self, token):
-        """Importe total vendido en enero 2026 (facturas + boletas)."""
+        """Importe total (venta NETA) vendido en enero 2026.
+        El resumen del chatbot NO filtra CodigoDocumento: incluye facturas (01),
+        boletas (03) y descuenta las notas de crédito (07, valor negativo)."""
         rows = _db_query(
             "SELECT ROUND(SUM(Valor),2) AS total FROM ventasgeneral2 "
-            "WHERE FechaContable BETWEEN %s AND %s AND CodigoDocumento IN ('01','03')",
+            "WHERE FechaContable BETWEEN %s AND %s",
             ('2026-01-01', '2026-01-31')
         )
         esperado = float(rows[0]['total'] or 0)
@@ -149,10 +189,10 @@ class TestVentasGenerales:
         )
 
     def test_importe_abril_2026(self, token):
-        """Importe total vendido en abril 2026."""
+        """Importe total (venta NETA) vendido en abril 2026 — todos los documentos."""
         rows = _db_query(
             "SELECT ROUND(SUM(Valor),2) AS total FROM ventasgeneral2 "
-            "WHERE FechaContable BETWEEN %s AND %s AND CodigoDocumento IN ('01','03')",
+            "WHERE FechaContable BETWEEN %s AND %s",
             ('2026-04-01', '2026-04-30')
         )
         esperado = float(rows[0]['total'] or 0)
@@ -164,10 +204,10 @@ class TestVentasGenerales:
         )
 
     def test_importe_mayo_2026(self, token):
-        """Importe total vendido en mayo 2026."""
+        """Importe total (venta NETA) vendido en mayo 2026 — todos los documentos."""
         rows = _db_query(
             "SELECT ROUND(SUM(Valor),2) AS total FROM ventasgeneral2 "
-            "WHERE FechaContable BETWEEN %s AND %s AND CodigoDocumento IN ('01','03')",
+            "WHERE FechaContable BETWEEN %s AND %s",
             ('2026-05-01', '2026-05-31')
         )
         esperado = float(rows[0]['total'] or 0)
@@ -179,10 +219,11 @@ class TestVentasGenerales:
         )
 
     def test_registros_enero_2026(self, token):
-        """Cantidad de registros (líneas) en enero 2026."""
+        """Cantidad de registros (líneas) en enero 2026 — todos los documentos,
+        igual que el resumen del chatbot (incluye las líneas de NC)."""
         rows = _db_query(
             "SELECT COUNT(*) AS total FROM ventasgeneral2 "
-            "WHERE FechaContable BETWEEN %s AND %s AND CodigoDocumento IN ('01','03')",
+            "WHERE FechaContable BETWEEN %s AND %s",
             ('2026-01-01', '2026-01-31')
         )
         esperado = int(rows[0]['total'] or 0)
@@ -199,10 +240,10 @@ class TestClientes:
     def test_top1_cliente_enero_2026(self, token):
         """El cliente #1 por importe en enero 2026 debe aparecer en la respuesta."""
         rows = _db_query(
-            "SELECT NombreCliente, ROUND(SUM(Valor),2) AS total "
+            "SELECT MAX(NombreCliente) AS NombreCliente, ROUND(SUM(Valor),2) AS total "
             "FROM ventasgeneral2 "
             "WHERE FechaContable BETWEEN %s AND %s AND CodigoDocumento IN ('01','03') "
-            "GROUP BY CodCliente ORDER BY total DESC LIMIT 1",
+            "GROUP BY CodigoCliente ORDER BY total DESC LIMIT 1",
             ('2026-01-01', '2026-01-31')
         )
         cliente = rows[0]['NombreCliente'].strip()
@@ -217,10 +258,10 @@ class TestClientes:
     def test_top1_cliente_abril_2026(self, token):
         """El cliente #1 por importe en abril 2026 debe aparecer en la respuesta."""
         rows = _db_query(
-            "SELECT NombreCliente, ROUND(SUM(Valor),2) AS total "
+            "SELECT MAX(NombreCliente) AS NombreCliente, ROUND(SUM(Valor),2) AS total "
             "FROM ventasgeneral2 "
             "WHERE FechaContable BETWEEN %s AND %s AND CodigoDocumento IN ('01','03') "
-            "GROUP BY CodCliente ORDER BY total DESC LIMIT 1",
+            "GROUP BY CodigoCliente ORDER BY total DESC LIMIT 1",
             ('2026-04-01', '2026-04-30')
         )
         cliente = rows[0]['NombreCliente'].strip()
@@ -235,11 +276,11 @@ class TestClientes:
     def test_top1_cliente_lajoya_enero(self, token):
         """El cliente #1 en LAJOYA enero 2026."""
         rows = _db_query(
-            "SELECT NombreCliente, ROUND(SUM(Valor),2) AS total "
+            "SELECT MAX(NombreCliente) AS NombreCliente, ROUND(SUM(Valor),2) AS total "
             "FROM ventasgeneral2 "
             "WHERE FechaContable BETWEEN %s AND %s AND CodigoDocumento IN ('01','03') "
             "AND ZonaComercial LIKE %s "
-            "GROUP BY CodCliente ORDER BY total DESC LIMIT 1",
+            "GROUP BY CodigoCliente ORDER BY total DESC LIMIT 1",
             ('2026-01-01', '2026-01-31', '%LAJOYA%')
         )
         if not rows:
@@ -257,9 +298,10 @@ class TestLineasComerciales:
 
     def test_peso_pollo_vivo_enero(self, token):
         """Peso total de Pollo Vivo en enero 2026."""
+        # Peso NETO: el resumen-tabla del chatbot no filtra CodigoDocumento.
         rows = _db_query(
             "SELECT ROUND(SUM(Peso),2) AS total_peso FROM ventasgeneral2 "
-            "WHERE FechaContable BETWEEN %s AND %s AND CodigoDocumento IN ('01','03') "
+            "WHERE FechaContable BETWEEN %s AND %s "
             "AND LineaComercial LIKE %s",
             ('2026-01-01', '2026-01-31', '%POLLO VIVO%')
         )
@@ -275,7 +317,7 @@ class TestLineasComerciales:
         """Importe de Pollo Vivo en TACNA marzo 2026."""
         rows = _db_query(
             "SELECT ROUND(SUM(Valor),2) AS total FROM ventasgeneral2 "
-            "WHERE FechaContable BETWEEN %s AND %s AND CodigoDocumento IN ('01','03') "
+            "WHERE FechaContable BETWEEN %s AND %s "
             "AND LineaComercial LIKE %s AND Provincia LIKE %s",
             ('2026-03-01', '2026-03-31', '%POLLO VIVO%', '%TACNA%')
         )
@@ -316,7 +358,9 @@ class TestNotasCredito:
         print(f'\n[DB] Importe NC febrero: S/ {esperado:,.2f}')
 
         reply = _ask_chatbot(token, '¿Cuánto se devolvió en valor en febrero 2026?')
-        assert _number_in_response(esperado, reply, tolerance_pct=1.0), (
+        # La BD guarda el Valor de NC en negativo y el chatbot lo muestra igual,
+        # pero _extract_numbers descarta el signo. Comparamos por magnitud.
+        assert _number_in_response(abs(esperado), reply, tolerance_pct=1.0), (
             f'El chatbot no mencionó S/ {esperado:,.2f}.\nRespuesta: {reply[:300]}'
         )
 
@@ -338,4 +382,58 @@ class TestHuaypuna:
         # Al menos debe mencionar la fecha o el corporativo
         assert _text_in_response('huaypuna', reply) or _text_in_response('2026-05-24', reply) or _text_in_response('24', reply), (
             f'La respuesta no menciona Huaypuna ni la fecha.\nRespuesta: {reply[:300]}'
+        )
+
+
+class TestVentasPorDimension:
+    """Importe/peso NETO (todos los documentos) filtrando por provincia o línea
+    comercial. Espeja el resumen-tabla del chatbot, que NO filtra CodigoDocumento.
+    Ver memoria del proyecto: definición de venta neta."""
+
+    def _importe_neto(self, where_extra: str, params: tuple) -> float:
+        rows = _db_query(
+            "SELECT ROUND(SUM(Valor),2) AS total FROM ventasgeneral2 "
+            "WHERE FechaContable BETWEEN %s AND %s " + where_extra,
+            params
+        )
+        return float(rows[0]['total'] or 0)
+
+    def test_importe_provincia_tacna_febrero(self, token):
+        esperado = self._importe_neto(
+            "AND Provincia LIKE %s", ('2026-02-01', '2026-02-28', '%TACNA%'))
+        print(f'\n[DB] Importe TACNA febrero 2026: S/ {esperado:,.2f}')
+        reply = _ask_chatbot(token, 'Ventas en la provincia de Tacna en febrero 2026')
+        assert _number_in_response(esperado, reply, tolerance_pct=1.0), (
+            f'El chatbot no mencionó S/ {esperado:,.2f}.\nRespuesta: {reply[:300]}'
+        )
+
+    def test_importe_moquegua_enero(self, token):
+        esperado = self._importe_neto(
+            "AND Provincia LIKE %s", ('2026-01-01', '2026-01-31', '%MOQUEGUA%'))
+        print(f'\n[DB] Importe MOQUEGUA enero 2026: S/ {esperado:,.2f}')
+        reply = _ask_chatbot(token, 'Ventas en Moquegua en enero 2026')
+        assert _number_in_response(esperado, reply, tolerance_pct=1.0), (
+            f'El chatbot no mencionó S/ {esperado:,.2f}.\nRespuesta: {reply[:300]}'
+        )
+
+    def test_importe_pollo_vivo_enero(self, token):
+        esperado = self._importe_neto(
+            "AND LineaComercial LIKE %s", ('2026-01-01', '2026-01-31', '%POLLO VIVO%'))
+        print(f'\n[DB] Importe Pollo Vivo enero 2026: S/ {esperado:,.2f}')
+        reply = _ask_chatbot(token, 'Ventas de Pollo Vivo en enero 2026')
+        assert _number_in_response(esperado, reply, tolerance_pct=1.0), (
+            f'El chatbot no mencionó S/ {esperado:,.2f}.\nRespuesta: {reply[:300]}'
+        )
+
+    def test_peso_pollo_vivo_abril(self, token):
+        rows = _db_query(
+            "SELECT ROUND(SUM(Peso),2) AS total_peso FROM ventasgeneral2 "
+            "WHERE FechaContable BETWEEN %s AND %s AND LineaComercial LIKE %s",
+            ('2026-04-01', '2026-04-30', '%POLLO VIVO%')
+        )
+        esperado = float(rows[0]['total_peso'] or 0)
+        print(f'\n[DB] Peso Pollo Vivo abril 2026: {esperado:,.2f} kg')
+        reply = _ask_chatbot(token, '¿Cuánto pesó Pollo Vivo vendido en abril 2026?')
+        assert _number_in_response(esperado, reply, tolerance_pct=1.0), (
+            f'El chatbot no mencionó {esperado:,.2f} kg.\nRespuesta: {reply[:300]}'
         )

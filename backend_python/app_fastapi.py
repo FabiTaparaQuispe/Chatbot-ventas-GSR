@@ -45,11 +45,15 @@ app.add_middleware(SessionMiddleware, secret_key=secret, max_age=8 * 3600)
 _RL_WINDOW = 60
 _RL_MAX_API = 30
 _rl_counters: dict = defaultdict(list)
+# Solo se limitan las llamadas reales al LLM (protegen el crédito de Gemini).
+# NO se limitan /api/chat/feedback ni /api/chat_threads (operaciones baratas de BD),
+# para no bloquear la evaluación 👍/👎 ni la carga del historial.
+_RL_PATHS = ('/api/chat', '/api/chat.php', '/api/chat/stream', '/api/chat/stream.php')
 
 
 @app.middleware('http')
 async def security_middleware(request: Request, call_next):
-    if request.url.path.startswith('/api/chat'):
+    if request.url.path in _RL_PATHS:
         ip = request.headers.get('X-Forwarded-For', request.client.host or '').split(',')[0].strip()
         now = time.time()
         _rl_counters[ip] = [t for t in _rl_counters[ip] if now - t < _RL_WINDOW]
