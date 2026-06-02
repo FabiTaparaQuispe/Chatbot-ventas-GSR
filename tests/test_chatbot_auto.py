@@ -13,12 +13,16 @@ Variables de entorno opcionales:
 """
 import os
 import time
+import uuid
 import pytest
 import requests
 
 BASE_URL  = os.getenv('CHAT_BASE_URL', 'http://localhost:5000')
 CHAT_USER = os.getenv('CHAT_USER', 'admin')
 CHAT_PASS = os.getenv('CHAT_PASS', 'qwerty123')
+
+# Prefijo para identificar estos threads en el historial
+THREAD_PREFIX = 'pytest_auto'
 
 # ── 58 preguntas organizadas por categoría ─────────────────────────────────
 PREGUNTAS = [
@@ -124,11 +128,39 @@ def token():
     return data['access_token']
 
 
-def _send_question(token: str, pregunta: str) -> dict:
+def _save_to_historial(token: str, thread_id: str, pregunta: str, reply: str, categoria: str):
+    """Guarda la pregunta y respuesta en app_chat_threads para que aparezca en el historial."""
     headers = {
         'Authorization': f'Bearer {token}',
         'Content-Type': 'application/json',
     }
+    titulo = f'[{categoria}] {pregunta[:60]}'
+    payload = {
+        'id': thread_id,
+        'title': titulo,
+        'messages': [
+            {'role': 'user',      'content': pregunta},
+            {'role': 'assistant', 'content': reply},
+        ],
+    }
+    try:
+        requests.post(
+            f'{BASE_URL}/api/chat_threads',
+            json=payload,
+            headers=headers,
+            timeout=15,
+        )
+    except Exception:
+        pass  # no bloquear el test si falla el guardado
+
+
+def _send_question(token: str, pregunta: str, categoria: str = '') -> dict:
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json',
+    }
+    # Thread único por pregunta para que aparezca individualmente en el historial
+    thread_id = f'{THREAD_PREFIX}_{uuid.uuid4().hex[:12]}'
     payload = {'messages': [{'role': 'user', 'content': pregunta}]}
     t0 = time.time()
     try:
@@ -141,7 +173,10 @@ def _send_question(token: str, pregunta: str) -> dict:
         ms = round((time.time() - t0) * 1000)
         if resp.status_code == 200:
             data = resp.json()
-            return {'reply': data.get('reply', ''), 'status': 200, 'ms': ms}
+            reply = data.get('reply', '')
+            if reply:
+                _save_to_historial(token, thread_id, pregunta, reply, categoria)
+            return {'reply': reply, 'status': 200, 'ms': ms}
         return {'reply': '', 'status': resp.status_code, 'ms': ms, 'error': resp.text[:300]}
     except requests.exceptions.Timeout:
         return {'reply': '', 'status': -1, 'ms': 90000, 'error': 'Timeout (>90s)'}
@@ -156,7 +191,7 @@ def _send_question(token: str, pregunta: str) -> dict:
     ids=[f'{i:02d}-{cat}-{q[:40]}' for i, (cat, q) in enumerate(PREGUNTAS, 1)],
 )
 def test_pregunta(token, idx, categoria, pregunta):
-    resultado = _send_question(token, pregunta)
+    resultado = _send_question(token, pregunta, categoria)
     status = resultado['status']
     reply  = resultado.get('reply', '')
     ms     = resultado['ms']
