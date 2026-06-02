@@ -181,8 +181,27 @@ async def _render_index(request: Request, page: str) -> HTMLResponse:
             db_err = ''
         stats = build_stats(rows) if rows and not db_err else {}
         top_categoria = (next((k for k, v in sorted(stats.items(), key=lambda x: -x[1]) if v > 0), '—') if stats else '—')
+
+        def _fetch_feedback_stats():
+            conn = get_connection()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT COALESCE(SUM(feedback=1),0) buenos, COALESCE(SUM(feedback=-1),0) malos,"
+                        " COALESCE(SUM(feedback IS NULL),0) sin_voto FROM app_chat_messages WHERE role='assistant'"
+                    )
+                    return cur.fetchone()
+            except Exception:
+                return None
+
+        fb = await asyncio.to_thread(_fetch_feedback_stats)
+        fb_buenos  = int(fb['buenos']   if fb else 0)
+        fb_malos   = int(fb['malos']    if fb else 0)
+        fb_sin_voto = int(fb['sin_voto'] if fb else 0)
+
         ctx.update({
             'historial_rows': rows, 'db_error': db_err, 'stats': stats,
+            'fb_buenos': fb_buenos, 'fb_malos': fb_malos, 'fb_sin_voto': fb_sin_voto,
             'total_preguntas': len(rows),
             'total_usuarios': len({str(r.get('usuario') or '') for r in rows if str(r.get('usuario') or '')}),
             'top_categoria': top_categoria,

@@ -153,6 +153,27 @@
                 <div class="kpi-value" style="font-size:1.05rem;line-height:1.3;">{{ top_categoria|e }}</div>
             </div>
         </div>
+        <div class="kpi-card emerald">
+            <div class="kpi-icon emerald"><i class="fas fa-thumbs-up" aria-hidden="true"></i></div>
+            <div class="kpi-body">
+                <div class="kpi-label">Buenas respuestas</div>
+                <div class="kpi-value">{{ fb_buenos }}</div>
+            </div>
+        </div>
+        <div class="kpi-card" style="--kpi-accent:#dc2626;">
+            <div class="kpi-icon" style="background:rgba(220,38,38,.12);color:#dc2626;"><i class="fas fa-thumbs-down" aria-hidden="true"></i></div>
+            <div class="kpi-body">
+                <div class="kpi-label">Malas respuestas</div>
+                <div class="kpi-value">{{ fb_malos }}</div>
+            </div>
+        </div>
+        <div class="kpi-card" style="--kpi-accent:#6b7280;">
+            <div class="kpi-icon" style="background:rgba(107,114,128,.12);color:#6b7280;"><i class="fas fa-minus-circle" aria-hidden="true"></i></div>
+            <div class="kpi-body">
+                <div class="kpi-label">Sin evaluar</div>
+                <div class="kpi-value">{{ fb_sin_voto }}</div>
+            </div>
+        </div>
     </div>
     {% if total_preguntas > 0 %}
     <div class="hp-freq-card">
