@@ -53,9 +53,9 @@ async def last_msg_id(request: Request, cid: str = ''):
             row = cur.fetchone()
         if not row:
             return {'ok': False, 'id': None}
-        return {'ok': True, 'id': row[0], 'feedback': row[1]}
+        return {'ok': True, 'id': row['id'], 'feedback': row['feedback']}
     except Exception as e:
-        _log.error('last_msg_id error: %s', e)
+        _log.error('last_msg_id error: %s | tipo: %s', e, type(e).__name__, exc_info=True)
         return JSONResponse({'ok': False, 'error': str(e)}, status_code=500)
 
 
@@ -81,10 +81,10 @@ async def feedback_stats(request: Request):
             row = cur.fetchone()
         return {
             'ok': True,
-            'total_respuestas': row[0],
-            'buenos': int(row[1] or 0),
-            'malos': int(row[2] or 0),
-            'sin_voto': int(row[3] or 0),
+            'total_respuestas': row['total'],
+            'buenos': int(row['buenos'] or 0),
+            'malos': int(row['malos'] or 0),
+            'sin_voto': int(row['sin_voto'] or 0),
         }
     except Exception as e:
         _log.error('feedback stats error: %s', e)
