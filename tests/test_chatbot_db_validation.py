@@ -41,6 +41,12 @@ DB_NAME = os.getenv('DB_NAME', 'grsia')
 SAVE_HISTORIAL = os.getenv('SAVE_HISTORIAL', '1') != '0'
 HIST_USER = os.getenv('HIST_USER', 'pytest_validacion')
 
+# Reintentos ante fallos transitorios del LLM (Gemini a veces devuelve vacío o
+# el mensaje de respaldo "No pude generar una respuesta"). En el servidor suele
+# responder tras unos segundos. ASK_RETRIES=1 desactiva el reintento.
+ASK_RETRIES = int(os.getenv('ASK_RETRIES', '3'))
+RETRY_WAIT = float(os.getenv('RETRY_WAIT', '4'))
+
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 def _db_connection():
@@ -142,18 +148,41 @@ def _save_to_historial_db(pregunta: str, reply: str, categoria: str = 'validacio
 
 
 def _ask_chatbot(token: str, pregunta: str, categoria: str = 'validacion') -> str:
+    """Pregunta al chatbot reintentando ante fallos transitorios del LLM
+    (respuesta vacía, mensaje de respaldo, error de red o HTTP != 200)."""
     headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
-    t0 = time.time()
-    resp = requests.post(
-        f'{BASE_URL}/api/chat',
-        json={'messages': [{'role': 'user', 'content': pregunta}]},
-        headers=headers,
-        timeout=90,
-    )
-    ms = round((time.time() - t0) * 1000)
-    assert resp.status_code == 200, f'HTTP {resp.status_code}: {resp.text[:200]}'
-    reply = resp.json().get('reply', '')
-    print(f'\n     → ({ms}ms) {reply[:200]}')
+    reply = ''
+    for intento in range(1, ASK_RETRIES + 1):
+        t0 = time.time()
+        try:
+            resp = requests.post(
+                f'{BASE_URL}/api/chat',
+                json={'messages': [{'role': 'user', 'content': pregunta}]},
+                headers=headers,
+                timeout=90,
+            )
+        except requests.exceptions.RequestException as e:
+            print(f'\n     ⚠ intento {intento}/{ASK_RETRIES}: error de red ({e})')
+            if intento < ASK_RETRIES:
+                time.sleep(RETRY_WAIT)
+                continue
+            raise
+        ms = round((time.time() - t0) * 1000)
+        if resp.status_code != 200:
+            print(f'\n     ⚠ intento {intento}/{ASK_RETRIES}: HTTP {resp.status_code} {resp.text[:150]}')
+            if intento < ASK_RETRIES:
+                time.sleep(RETRY_WAIT)
+                continue
+            assert resp.status_code == 200, f'HTTP {resp.status_code}: {resp.text[:200]}'
+        reply = resp.json().get('reply', '')
+        low = reply.strip().lower()
+        es_respaldo = (not low) or ('no pude generar' in low)
+        if es_respaldo and intento < ASK_RETRIES:
+            print(f'\n     ⚠ intento {intento}/{ASK_RETRIES}: respuesta de respaldo, reintentando en {RETRY_WAIT:.0f}s...')
+            time.sleep(RETRY_WAIT)
+            continue
+        print(f'\n     → ({ms}ms) {reply[:200]}')
+        break
     _save_to_historial_db(pregunta, reply, categoria)
     return reply
 
