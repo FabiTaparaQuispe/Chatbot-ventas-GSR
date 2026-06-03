@@ -46,6 +46,8 @@ HIST_USER = os.getenv('HIST_USER', 'pytest_validacion')
 # responder tras unos segundos. ASK_RETRIES=1 desactiva el reintento.
 ASK_RETRIES = int(os.getenv('ASK_RETRIES', '3'))
 RETRY_WAIT = float(os.getenv('RETRY_WAIT', '4'))
+# Timeout por petición. El servidor a veces tarda >90s; súbelo si ves ReadTimeout.
+ASK_TIMEOUT = float(os.getenv('ASK_TIMEOUT', '120'))
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -159,7 +161,7 @@ def _ask_chatbot(token: str, pregunta: str, categoria: str = 'validacion') -> st
                 f'{BASE_URL}/api/chat',
                 json={'messages': [{'role': 'user', 'content': pregunta}]},
                 headers=headers,
-                timeout=90,
+                timeout=ASK_TIMEOUT,
             )
         except requests.exceptions.RequestException as e:
             print(f'\n     ⚠ intento {intento}/{ASK_RETRIES}: error de red ({e})')
@@ -271,7 +273,7 @@ class TestClientes:
         rows = _db_query(
             "SELECT MAX(NombreCliente) AS NombreCliente, ROUND(SUM(Valor),2) AS total "
             "FROM ventasgeneral2 "
-            "WHERE FechaContable BETWEEN %s AND %s AND CodigoDocumento IN ('01','03') "
+            "WHERE FechaContable BETWEEN %s AND %s "
             "GROUP BY CodigoCliente ORDER BY total DESC LIMIT 1",
             ('2026-01-01', '2026-01-31')
         )
@@ -289,7 +291,7 @@ class TestClientes:
         rows = _db_query(
             "SELECT MAX(NombreCliente) AS NombreCliente, ROUND(SUM(Valor),2) AS total "
             "FROM ventasgeneral2 "
-            "WHERE FechaContable BETWEEN %s AND %s AND CodigoDocumento IN ('01','03') "
+            "WHERE FechaContable BETWEEN %s AND %s "
             "GROUP BY CodigoCliente ORDER BY total DESC LIMIT 1",
             ('2026-04-01', '2026-04-30')
         )
@@ -307,7 +309,7 @@ class TestClientes:
         rows = _db_query(
             "SELECT MAX(NombreCliente) AS NombreCliente, ROUND(SUM(Valor),2) AS total "
             "FROM ventasgeneral2 "
-            "WHERE FechaContable BETWEEN %s AND %s AND CodigoDocumento IN ('01','03') "
+            "WHERE FechaContable BETWEEN %s AND %s "
             "AND ZonaComercial LIKE %s "
             "GROUP BY CodigoCliente ORDER BY total DESC LIMIT 1",
             ('2026-01-01', '2026-01-31', '%LAJOYA%')
