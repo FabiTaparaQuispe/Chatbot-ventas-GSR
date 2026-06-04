@@ -1705,6 +1705,8 @@ class ToolExecutor:
         provincia = str(args.get('provincia') or '').strip()
         zona = str(args.get('zona_comercial') or '').strip()
         pref_z = str(args.get('prefijo_descri_zona_precio') or '').strip().upper()
+        nombre_cliente = str(args.get('nombre_cliente') or '').strip()
+        cod_item = str(args.get('cod_item') or '').strip()
 
         sql = ("SELECT DATE_FORMAT(FechaContable, '%%Y-%%m') AS mes,"
                " COALESCE(SUM(Valor),0) AS suma_valor,"
@@ -1727,6 +1729,12 @@ class ToolExecutor:
         if pref_z:
             sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(pref_z)s"
             params['pref_z'] = pref_z + '%'
+        if nombre_cliente:
+            sql += " AND NombreCliente LIKE %(ncli)s"
+            params['ncli'] = f'%{nombre_cliente}%'
+        if cod_item:
+            sql += " AND CodigoItem = %(coditem)s"
+            params['coditem'] = cod_item
         sql += " GROUP BY DATE_FORMAT(FechaContable, '%%Y-%%m') ORDER BY mes"
 
         filas = _q(self._conn, sql, params)
@@ -1755,6 +1763,10 @@ class ToolExecutor:
             filtros['zona_comercial'] = zona
         if pref_z:
             filtros['prefijo_descri_zona_precio'] = pref_z
+        if nombre_cliente:
+            filtros['nombre_cliente'] = nombre_cliente
+        if cod_item:
+            filtros['cod_item'] = cod_item
         return {
             'tabla': 'ventasgeneral2',
             'tipo': 'proyeccion_ventas',
@@ -1782,6 +1794,8 @@ class ToolExecutor:
             escala, n_dias = 'semana', 7
         elif escala_raw in ('quincena', 'quincenal'):
             escala, n_dias = 'quincena', 15
+        elif escala_raw in ('mes', 'mensual', 'mes_diario'):
+            escala, n_dias = 'mes', 30
         else:
             escala, n_dias = 'dia', 1
 
@@ -1800,6 +1814,8 @@ class ToolExecutor:
         provincia = str(args.get('provincia') or '').strip()
         zona = str(args.get('zona_comercial') or '').strip()
         pref_z = str(args.get('prefijo_descri_zona_precio') or '').strip().upper()
+        nombre_cliente = str(args.get('nombre_cliente') or '').strip()
+        cod_item = str(args.get('cod_item') or '').strip()
 
         # Totales diarios históricos para promediar por día de semana.
         dias_hist = semanas * 7 + 7
@@ -1825,13 +1841,18 @@ class ToolExecutor:
         if pref_z:
             sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(pref_z)s"
             params['pref_z'] = pref_z + '%'
+        if nombre_cliente:
+            sql += " AND NombreCliente LIKE %(ncli)s"
+            params['ncli'] = f'%{nombre_cliente}%'
+        if cod_item:
+            sql += " AND CodigoItem = %(coditem)s"
+            params['coditem'] = cod_item
         sql += " GROUP BY FechaContable"
 
         filas = _q(self._conn, sql, params)
         if not filas:
             raise ValueError(
-                'No hay datos históricos recientes para proyectar '
-                f'{"esa línea" if linea else "ese período"}.'
+                'No hay datos históricos recientes para proyectar con esos filtros.'
             )
 
         nombres = {1: 'domingo', 2: 'lunes', 3: 'martes', 4: 'miércoles',
@@ -1881,10 +1902,26 @@ class ToolExecutor:
             filtros['zona_comercial'] = zona
         if pref_z:
             filtros['prefijo_descri_zona_precio'] = pref_z
+        if nombre_cliente:
+            filtros['nombre_cliente'] = nombre_cliente
+        if cod_item:
+            filtros['cod_item'] = cod_item
+
+        _rep_qp = {'escala': escala, 'fecha': inicio.isoformat()}
+        if linea:
+            _rep_qp['linea_comercial'] = linea
+        if provincia:
+            _rep_qp['provincia'] = provincia
+        if nombre_cliente:
+            _rep_qp['nombre_cliente'] = nombre_cliente
+        if cod_item:
+            _rep_qp['cod_item'] = cod_item
+        reporte_url = '/modules/reports/proyeccion?' + urlencode(_rep_qp)
 
         return {
             'tabla': 'ventasgeneral2',
             'tipo': 'proyeccion_dia',
+            'reporte_url': reporte_url,
             'escala': escala,
             'fecha_inicio': inicio.isoformat(),
             'fecha_fin': fin.isoformat(),

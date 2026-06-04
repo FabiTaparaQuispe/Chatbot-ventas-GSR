@@ -635,6 +635,134 @@ def ventas_serie_mensual(request: Request):
     return _tmpl(request, 'pages/reporte_serie_mensual.html', ctx)
 
 
+@router.get('/modules/reports/proyeccion')
+def ventas_proyeccion(request: Request):
+    if err := _require_login(request):
+        return err
+    import datetime
+    from collections import defaultdict
+
+    escala_raw = _q(request, 'escala').lower()
+    if escala_raw in ('semana', 'semanal'):
+        escala, n_dias, etiqueta = 'semana', 7, 'Próxima semana'
+    elif escala_raw in ('quincena', 'quincenal'):
+        escala, n_dias, etiqueta = 'quincena', 15, 'Próxima quincena'
+    elif escala_raw in ('mes', 'mensual', 'mes_diario'):
+        escala, n_dias, etiqueta = 'mes', 30, 'Próximos 30 días'
+    else:
+        escala, n_dias, etiqueta = 'dia', 1, 'Mañana'
+
+    fstr = _q(request, 'fecha')
+    try:
+        inicio = (datetime.date.fromisoformat(fstr[:10]) if fstr
+                  else datetime.date.today() + datetime.timedelta(days=1))
+    except ValueError:
+        return _bad('Fecha inválida (use YYYY-MM-DD).')
+    fin = inicio + datetime.timedelta(days=n_dias - 1)
+    try:
+        semanas = max(2, min(26, int(_q(request, 'semanas') or '8')))
+    except ValueError:
+        semanas = 8
+    linea = _q(request, 'linea_comercial')
+    provincia = _q(request, 'provincia')
+    nombre_cliente = _q(request, 'nombre_cliente')
+    cod_item = _q(request, 'cod_item')
+
+    conn = get_connection()
+    extra = ''
+    fparams: dict = {}
+    if linea:
+        lw, lb = linea_where_fragment(conn, linea, style='pyformat')
+        extra += lw
+        fparams.update(lb)
+    if provincia:
+        extra += " AND Provincia LIKE %(prov)s"
+        fparams['prov'] = f'%{provincia}%'
+    if nombre_cliente:
+        extra += " AND NombreCliente LIKE %(ncli)s"
+        fparams['ncli'] = f'%{nombre_cliente}%'
+    if cod_item:
+        extra += " AND CodigoItem = %(coditem)s"
+        fparams['coditem'] = cod_item
+
+    dias_hist = semanas * 7 + 7
+    p1 = dict(fparams)
+    p1.update({'inicio': inicio.isoformat(), 'dh': dias_hist})
+
+    sql = ("SELECT FechaContable f, DAYOFWEEK(FechaContable) dow,"
+           " COALESCE(SUM(Valor),0) v, COALESCE(SUM(Cantidad),0) c, COALESCE(SUM(Peso),0) p"
+           " FROM ventasgeneral2 WHERE CodigoDocumento IN ('01','03')"
+           " AND FechaContable < %(inicio)s AND FechaContable >= DATE_SUB(%(inicio)s, INTERVAL %(dh)s DAY)"
+           + extra + " GROUP BY FechaContable")
+    with conn.cursor() as cur:
+        cur.execute(sql, p1)
+        filas = cur.fetchall() or []
+
+    by: dict = defaultdict(list)
+    for r in sorted(filas, key=lambda x: str(x['f']), reverse=True):
+        by[int(r['dow'])].append(r)
+    prom: dict = {}
+    for dow, rows in by.items():
+        rows = rows[:semanas]
+        m = len(rows)
+        prom[dow] = (sum(float(x['v'] or 0) for x in rows) / m,
+                     sum(float(x['c'] or 0) for x in rows) / m,
+                     sum(float(x['p'] or 0) for x in rows) / m)
+    ng = len(filas) or 1
+    fb = (sum(float(x['v'] or 0) for x in filas) / ng,
+          sum(float(x['c'] or 0) for x in filas) / ng,
+          sum(float(x['p'] or 0) for x in filas) / ng)
+
+    nombres = {1: 'Dom', 2: 'Lun', 3: 'Mar', 4: 'Mié', 5: 'Jue', 6: 'Vie', 7: 'Sáb'}
+    detalle, labels_dia, v_dia, c_dia, p_dia = [], [], [], [], []
+    tv = tc = tp = 0.0
+    d = inicio
+    while d <= fin:
+        dow = (d.weekday() + 1) % 7 + 1
+        v, c, p = prom.get(dow, fb)
+        tv += v; tc += c; tp += p
+        detalle.append({'fecha': d.isoformat(), 'dia': nombres[dow],
+                        'v': f'{v:,.2f}', 'c': f'{c:,.0f}', 'p': f'{p:,.0f}'})
+        labels_dia.append(f'{nombres[dow]} {d.strftime("%d/%m")}')
+        v_dia.append(round(v, 2)); c_dia.append(round(c)); p_dia.append(round(p))
+        d += datetime.timedelta(days=1)
+
+    # Serie histórica semanal (para el gráfico de tendencia)
+    sqlh = ("SELECT YEARWEEK(FechaContable,3) yw, MIN(FechaContable) ini,"
+            " COALESCE(SUM(Valor),0) v"
+            " FROM ventasgeneral2 WHERE CodigoDocumento IN ('01','03')"
+            " AND FechaContable < %(inicio)s AND FechaContable >= DATE_SUB(%(inicio)s, INTERVAL %(dh)s DAY)"
+            + extra + " GROUP BY YEARWEEK(FechaContable,3) ORDER BY yw")
+    with conn.cursor() as cur:
+        cur.execute(sqlh, p1)
+        semrows = cur.fetchall() or []
+    hist_labels, hist_v = [], []
+    for r in semrows[-8:]:
+        hist_labels.append('Sem ' + str(r['ini'])[5:])
+        hist_v.append(round(float(r['v'] or 0), 2))
+    hist_labels.append(etiqueta)
+    hist_v.append(round(tv, 2))
+
+    titulo = f'Proyección de ventas — {etiqueta.lower()}'
+    if linea:
+        titulo += f' · {linea}'
+    if nombre_cliente:
+        titulo += f' · {nombre_cliente}'
+    ctx = _report_ctx(request, titulo)
+    ctx.update({
+        'escala': escala, 'etiqueta': etiqueta,
+        'inicio': inicio.isoformat(), 'fin': fin.isoformat(),
+        'linea': linea, 'provincia': provincia, 'semanas': semanas,
+        'cliente': nombre_cliente, 'producto': cod_item,
+        'tot_v': f'{tv:,.2f}', 'tot_c': f'{tc:,.0f}', 'tot_p': f'{tp:,.0f}',
+        'detalle': detalle,
+        'pdf_filename': f'proyeccion_{escala}_{inicio.isoformat()}.pdf',
+        'chart_dia': {'labels': labels_dia, 'valor': v_dia, 'cantidad': c_dia, 'peso': p_dia},
+        'chart_hist': {'labels': hist_labels, 'valor': hist_v, 'proj_idx': len(hist_v) - 1},
+    })
+    return _tmpl(request, 'pages/reporte_proyeccion.html', ctx)
+
+
 @router.get('/modules/reports/ventas-mix-tdoc')
 def ventas_mix_tdoc(request: Request):
     if err := _require_login(request):

@@ -450,14 +450,24 @@ def _fmt_proyeccion_dia(result):
         fecha = str(result.get('fecha_inicio', '') or result.get('fecha_proyectada', '') or '')
         cuando = f"el {dia} {fecha}".strip() if dia else f"el {fecha}"
     else:
-        etiqueta = 'la próxima semana' if escala == 'semana' else 'la próxima quincena'
+        etiqueta = {'semana': 'la próxima semana', 'quincena': 'la próxima quincena',
+                    'mes': 'los próximos 30 días'}.get(escala, 'el período')
         d1 = str(result.get('fecha_inicio', '') or '')
         d2 = str(result.get('fecha_fin', '') or '')
         cuando = f"{etiqueta} (del {d1} al {d2})"
-    return (
-        f"Proyección de venta {sujeto}para {cuando}{lugar}: {_m(valor)}.\n\n"
-        "Nota: Proyección basada en datos actuales."
-    )
+    cantidad = result.get('cantidad_proyectada')
+    peso = result.get('peso_proyectado')
+    lineas = [f"Proyección de venta {sujeto}para {cuando}{lugar}:", ""]
+    lineas.append(f"- Importe: {_m(valor)}")
+    if cantidad is not None:
+        lineas.append(f"- Cantidad: {_n(cantidad)} unidades")
+    if peso is not None:
+        lineas.append(f"- Peso: {_n(peso)} kg")
+    url = _url(result)
+    if url:
+        lineas.append(f"\n{url}")
+    lineas += ["", "Nota: Proyección basada en datos actuales."]
+    return "\n".join(lineas)
 
 
 def _fmt_proyeccion_ventas(result):

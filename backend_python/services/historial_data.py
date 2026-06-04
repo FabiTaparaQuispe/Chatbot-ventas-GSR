@@ -213,8 +213,40 @@ def build_stats(rows: list[dict[str, Any]]) -> dict[str, int]:
     return dict(sorted(conteos.items(), key=lambda x: x[1], reverse=True))
 
 
-def fetch_efectividad_stats(conn) -> dict[str, Any]:
-    """Métricas de efectividad de las respuestas del asistente.
+def _ef_metricas(total: int, buenos: int, malos: int, fallo_auto: int) -> dict[str, Any]:
+    """Deriva las métricas de efectividad a partir de los conteos crudos."""
+    fallos = malos + fallo_auto
+    aciertos = total - fallos
+    return {
+        "total": total, "buenos": buenos, "malos": malos, "fallo_auto": fallo_auto,
+        "sin_voto": total - buenos - malos, "fallos": fallos, "aciertos": aciertos,
+        "efectividad": round(aciertos / total * 100, 1) if total else 0.0,
+        # Tasa de respuesta = la IA entregó una respuesta sin error (automático,
+        # sin contar los 👎 manuales).
+        "respondidas": total - fallo_auto,
+        "indice_exito": round((total - fallo_auto) / total * 100, 1) if total else 0.0,
+    }
+
+
+def _ef_where(fecha_desde: str | None, fecha_hasta: str | None) -> tuple[str, dict[str, Any]]:
+    """WHERE (sobre app_chat_messages del asistente) con filtro opcional de fechas."""
+    where = ["role = 'assistant'"]
+    params: dict[str, Any] = {}
+    d1, _ = _parse_hist_date(fecha_desde)
+    d2, _ = _parse_hist_date(fecha_hasta)
+    if d1:
+        where.append("created_at >= %(d1)s")
+        params["d1"] = d1
+    if d2:
+        where.append("created_at < DATE_ADD(%(d2)s, INTERVAL 1 DAY)")
+        params["d2"] = d2
+    return " AND ".join(where), params
+
+
+def fetch_efectividad_stats(conn, *, fecha_desde: str | None = None,
+                            fecha_hasta: str | None = None) -> dict[str, Any]:
+    """Métricas de efectividad de las respuestas del asistente, opcionalmente
+    filtradas por rango de fechas.
 
     Un FALLO ("la IA no pudo contestar") es:
       - dislike manual (feedback = -1), o
@@ -223,46 +255,54 @@ def fetch_efectividad_stats(conn) -> dict[str, Any]:
 
     efectividad % = aciertos / total * 100  (aciertos = total − fallos).
     """
-    base: dict[str, Any] = {
-        "ok": False, "total": 0, "buenos": 0, "malos": 0, "fallo_auto": 0,
-        "sin_voto": 0, "fallos": 0, "aciertos": 0, "efectividad": 0.0,
-    }
+    base: dict[str, Any] = {"ok": False, **_ef_metricas(0, 0, 0, 0)}
     fallo = _fallo_sql("content")
+    wh, params = _ef_where(fecha_desde, fecha_hasta)
     sql = (
         "SELECT COUNT(*) AS total,"
         " COALESCE(SUM(feedback = 1), 0)  AS buenos,"
         " COALESCE(SUM(feedback = -1), 0) AS malos,"
         f" COALESCE(SUM(feedback IS NULL AND {fallo}), 0) AS fallo_auto"
-        " FROM app_chat_messages WHERE role = 'assistant'"
+        f" FROM app_chat_messages WHERE {wh}"
     )
     try:
         with conn.cursor() as cur:
-            cur.execute(sql)
+            cur.execute(sql, params)
             r = cur.fetchone() or {}
     except Exception:
         return base
+    return {"ok": True, **_ef_metricas(
+        int(r.get("total") or 0), int(r.get("buenos") or 0),
+        int(r.get("malos") or 0), int(r.get("fallo_auto") or 0))}
 
-    total = int(r.get("total") or 0)
-    buenos = int(r.get("buenos") or 0)
-    malos = int(r.get("malos") or 0)
-    fallo_auto = int(r.get("fallo_auto") or 0)
-    fallos = malos + fallo_auto
-    aciertos = total - fallos
-    return {
-        "ok": True,
-        "total": total,
-        "buenos": buenos,
-        "malos": malos,
-        "fallo_auto": fallo_auto,
-        "sin_voto": total - buenos - malos,
-        "fallos": fallos,
-        "aciertos": aciertos,
-        "efectividad": round(aciertos / total * 100, 1) if total else 0.0,
-        # Índice de éxito = la IA entregó una respuesta sin error (automático,
-        # sin contar los 👎 manuales). Equivale al "índice de éxito" de la API.
-        "respondidas": total - fallo_auto,
-        "indice_exito": round((total - fallo_auto) / total * 100, 1) if total else 0.0,
-    }
+
+def fetch_efectividad_por_mes(conn, *, fecha_desde: str | None = None,
+                              fecha_hasta: str | None = None) -> list[dict[str, Any]]:
+    """Efectividad agrupada por mes (YYYY-MM), para ver la tendencia mes a mes."""
+    fallo = _fallo_sql("content")
+    wh, params = _ef_where(fecha_desde, fecha_hasta)
+    sql = (
+        "SELECT DATE_FORMAT(created_at, '%%Y-%%m') AS mes,"
+        " COUNT(*) AS total,"
+        " COALESCE(SUM(feedback = 1), 0)  AS buenos,"
+        " COALESCE(SUM(feedback = -1), 0) AS malos,"
+        f" COALESCE(SUM(feedback IS NULL AND {fallo}), 0) AS fallo_auto"
+        f" FROM app_chat_messages WHERE {wh}"
+        " GROUP BY DATE_FORMAT(created_at, '%%Y-%%m') ORDER BY mes"
+    )
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            rows = cur.fetchall() or []
+    except Exception:
+        return []
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        m = _ef_metricas(int(r.get("total") or 0), int(r.get("buenos") or 0),
+                         int(r.get("malos") or 0), int(r.get("fallo_auto") or 0))
+        m["mes"] = str(r.get("mes") or "")
+        out.append(m)
+    return out
 
 
 def is_historial_filter_validation_error(msg: str) -> bool:

@@ -247,6 +247,47 @@
             </div>
         </div>
     </div>
+    {% if ef_por_mes %}
+    <div class="hp-freq-card">
+        <div class="hp-freq-title">Efectividad por mes (tendencia)</div>
+        <div style="overflow-x:auto;">
+            <table class="hp-table" style="min-width:600px;">
+                <thead>
+                    <tr>
+                        <th>Mes</th>
+                        <th style="text-align:right;">Respuestas</th>
+                        <th style="text-align:right;">👍 Buenas</th>
+                        <th style="text-align:right;">👎 Malas</th>
+                        <th style="text-align:right;">No contestó</th>
+                        <th style="text-align:right;">Tasa resp.</th>
+                        <th style="min-width:160px;">Efectividad</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for m in ef_por_mes %}
+                    <tr>
+                        <td style="font-weight:700;">{{ m.mes }}</td>
+                        <td style="text-align:right;font-variant-numeric:tabular-nums;">{{ m.total }}</td>
+                        <td style="text-align:right;color:#059669;font-weight:600;">{{ m.buenos }}</td>
+                        <td style="text-align:right;color:#dc2626;font-weight:600;">{{ m.malos }}</td>
+                        <td style="text-align:right;color:#ea580c;font-weight:600;">{{ m.fallo_auto }}</td>
+                        <td style="text-align:right;font-variant-numeric:tabular-nums;">{{ m.indice_exito }}%</td>
+                        <td>
+                            <div style="display:flex;align-items:center;gap:.5rem;">
+                                <div class="hp-freq-bar-wrap" style="flex:1;">
+                                    <div class="hp-freq-bar" style="width:{{ m.efectividad }}%;background:#2563eb;"></div>
+                                </div>
+                                <span style="font-weight:800;font-variant-numeric:tabular-nums;min-width:3rem;text-align:right;">{{ m.efectividad }}%</span>
+                            </div>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div style="font-size:.75rem;color:var(--muted,#6b7280);padding:.5rem 1rem;">Efectividad = respuestas buenas / total del mes. Usa los filtros de fecha de abajo para acotar el rango.</div>
+    </div>
+    {% endif %}
     {% if total_preguntas > 0 %}
     <div class="hp-freq-card">
         <div class="hp-freq-title">Frecuencia por tipo de pregunta</div>

@@ -19,6 +19,7 @@ from services.historial_data import (
     clasificar_pregunta,
     estado_respuesta,
     fetch_efectividad_stats,
+    fetch_efectividad_por_mes,
     fetch_historial_rows,
     fetch_historial_usernames,
     historial_preview,
@@ -188,7 +189,14 @@ async def _render_index(request: Request, page: str) -> HTMLResponse:
         stats = build_stats(rows) if rows and not db_err else {}
         top_categoria = (next((k for k, v in sorted(stats.items(), key=lambda x: -x[1]) if v > 0), '—') if stats else '—')
 
-        ef = await asyncio.to_thread(lambda: fetch_efectividad_stats(get_connection()))
+        def _fetch_ef():
+            conn = get_connection()
+            return (
+                fetch_efectividad_stats(conn, fecha_desde=f_desde or None, fecha_hasta=f_hasta or None),
+                fetch_efectividad_por_mes(conn, fecha_desde=f_desde or None, fecha_hasta=f_hasta or None),
+            )
+
+        ef, ef_por_mes = await asyncio.to_thread(_fetch_ef)
 
         ctx.update({
             'historial_rows': rows, 'db_error': db_err, 'stats': stats,
@@ -196,6 +204,7 @@ async def _render_index(request: Request, page: str) -> HTMLResponse:
             'ef_total': ef['total'], 'ef_fallos': ef['fallos'], 'ef_fallo_auto': ef['fallo_auto'],
             'ef_aciertos': ef['aciertos'], 'ef_efectividad': ef['efectividad'],
             'ef_indice_exito': ef['indice_exito'], 'ef_respondidas': ef['respondidas'],
+            'ef_por_mes': ef_por_mes,
             'total_preguntas': len(rows),
             'total_usuarios': len({str(r.get('usuario') or '') for r in rows if str(r.get('usuario') or '')}),
             'top_categoria': top_categoria,

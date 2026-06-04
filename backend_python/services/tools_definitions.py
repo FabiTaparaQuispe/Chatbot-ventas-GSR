@@ -216,44 +216,53 @@ def ventas_tool_definitions():
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_proyeccion_ventas',
             'description': (
-                'Proyección de ventas futuras a partir de la serie mensual en ventasgeneral2. '
-                'Proyecta valor (S/), cantidad (unidades) y peso promedio (kg/unidad). '
-                'Requiere ≥2 meses de historial. SQL agrega por mes en MySQL. '
-                'Filtros opcionales: linea_comercial, provincia, zona_comercial, prefijo_descri_zona_precio. '
+                'Proyección de ventas futuras MES A MES (serie mensual de ventasgeneral2). '
+                'Proyecta valor (S/), cantidad (unidades) y peso promedio (kg/unidad) por mes. '
+                'Úsala para "cuánto se venderá por mes", "proyección de los próximos N meses", '
+                '"cuánto me comprará el cliente X / el producto Y este año" (meses_a_proyectar=12). '
+                'Requiere ≥2 meses de historial. '
+                'Filtros opcionales: linea_comercial, provincia, zona_comercial, prefijo_descri_zona_precio, '
+                'nombre_cliente (un cliente específico), cod_item (un producto/ítem específico). '
                 'Al responder al usuario: solo tabla + nota fija "Nota: Proyección basada en datos actuales." '
                 '(no mencionar método estadístico ni regresión).'
             ),
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt,
-                'meses_a_proyectar': {'type': 'integer', 'default': 3, 'description': 'Meses futuros a proyectar (1-12)'},
+                'meses_a_proyectar': {'type': 'integer', 'default': 3, 'description': 'Meses futuros a proyectar (1-12). Para "todo el año" usar 12.'},
                 'linea_comercial': {'type': 'string', 'description': "Filtrar por línea comercial, ej. 'Pollo Vivo'"},
                 'provincia': prov,
                 'zona_comercial': {'type': 'string', 'description': 'Filtrar por zona comercial'},
                 'prefijo_descri_zona_precio': pref,
+                'nombre_cliente': {'type': 'string', 'description': 'Filtrar por un cliente (NombreCliente LIKE), ej. "QUISPE VARGAS VICTOR"'},
+                'cod_item': {'type': 'string', 'description': 'Filtrar por un producto/ítem (CodigoItem), ej. "100"'},
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
             'name': 'ventasgeneral_proyeccion_dia',
             'description': (
-                'Proyección de ventas a CORTO PLAZO: un DÍA (mañana), una SEMANA o una QUINCENA futura. '
+                'Proyección de ventas a CORTO PLAZO día a día: un DÍA (mañana), una SEMANA, una QUINCENA o un MES (30 días). '
                 'Calcula valor (S/), cantidad y peso esperados sumando, por cada día del período, el '
                 'promedio del MISMO día de la semana en las últimas 8 semanas. '
-                'Úsala cuando el usuario pida proyectar/estimar día, semana o quincena (NO meses): '
+                'Úsala cuando el usuario pida proyectar/estimar día, semana, quincena o "día a día" (NO la serie mensual de varios meses): '
                 '"proyecta la venta de mañana", "cuánto se venderá la próxima semana", "proyección de la quincena", '
-                '"proyecta Pollo Vivo para mañana". '
-                'escala="dia" (default) | "semana" | "quincena". Si no se da fecha, el período arranca mañana. '
-                'Filtros opcionales: linea_comercial, provincia, zona_comercial, prefijo_descri_zona_precio. '
-                'TEXTO AL USUARIO: una línea con el valor proyectado del período y termina con '
-                '"Nota: Proyección basada en datos actuales." (no menciones método, promedios ni días de semana).'
+                '"proyecta Pollo Vivo para mañana", "proyecta las ventas de Pollo Vivo día a día". '
+                'escala="dia" (default) | "semana" | "quincena" | "mes" (30 días, día a día). Si no se da fecha, el período arranca mañana. '
+                'Filtros opcionales: linea_comercial, provincia, zona_comercial, prefijo_descri_zona_precio, '
+                'nombre_cliente (un cliente específico), cod_item (un producto/ítem específico). '
+                'TEXTO AL USUARIO: muestra el importe (S/), la cantidad (unidades) y el peso (kg) '
+                'proyectados del período y termina con "Nota: Proyección basada en datos actuales." '
+                '(no menciones método, promedios ni días de semana).'
             ),
             'parameters': {'type': 'object', 'properties': {
-                'escala': {'type': 'string', 'enum': ['dia', 'semana', 'quincena'],
-                           'description': "Escala de tiempo: 'dia' (mañana), 'semana' (7 días) o 'quincena' (15 días). Default 'dia'."},
+                'escala': {'type': 'string', 'enum': ['dia', 'semana', 'quincena', 'mes'],
+                           'description': "Escala: 'dia' (mañana), 'semana' (7 días), 'quincena' (15 días) o 'mes' (30 días, día a día). Default 'dia'."},
                 'fecha': {'type': 'string', 'description': 'Inicio del período YYYY-MM-DD. Si se omite, arranca mañana.'},
                 'linea_comercial': {'type': 'string', 'description': "Filtrar por línea comercial, ej. 'Pollo Vivo'"},
                 'provincia': prov,
                 'zona_comercial': {'type': 'string', 'description': 'Filtrar por zona comercial'},
                 'prefijo_descri_zona_precio': pref,
+                'nombre_cliente': {'type': 'string', 'description': 'Filtrar por un cliente (NombreCliente LIKE), ej. "QUISPE VARGAS VICTOR"'},
+                'cod_item': {'type': 'string', 'description': 'Filtrar por un producto/ítem (CodigoItem), ej. "100"'},
                 'semanas': {'type': 'integer', 'default': 8, 'description': 'Semanas de historial a promediar (2-26)'},
             }},
         }},

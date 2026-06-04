@@ -1,0 +1,178 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+    <h1>Proyección de ventas — {{ etiqueta }}</h1>
+    <p class="page-lead">
+        Período proyectado del <strong>{{ inicio }}</strong> al <strong>{{ fin }}</strong>
+        {% if linea %} · Línea: <strong>{{ linea }}</strong>{% endif %}
+        {% if provincia %} · Provincia: <strong>{{ provincia }}</strong>{% endif %}
+        {% if cliente %} · Cliente: <strong>{{ cliente }}</strong>{% endif %}
+        {% if producto %} · Producto (ítem): <strong>{{ producto }}</strong>{% endif %}
+        · basado en el promedio de las últimas {{ semanas }} semanas.
+    </p>
+</div>
+
+<div class="reporte-page">
+    <div class="card-filtros-demo reporte-informe-panel">
+        <div class="reporte-informe-toolbar">
+            <button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button>
+        </div>
+        <div id="reporte-pdf-root">
+            <h2 class="reporte-informe-title">Resumen proyectado del período</h2>
+
+            <div style="display:flex;flex-wrap:wrap;gap:1rem;margin:1rem 0 1.25rem;">
+                <div style="flex:1;min-width:200px;border:1px solid var(--border,#e2e8f0);border-radius:.75rem;padding:1rem 1.25rem;">
+                    <div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#6b7280);font-weight:700;">Importe proyectado</div>
+                    <div style="font-size:1.5rem;font-weight:800;color:#2563eb;">S/ {{ tot_v }}</div>
+                </div>
+                <div style="flex:1;min-width:200px;border:1px solid var(--border,#e2e8f0);border-radius:.75rem;padding:1rem 1.25rem;">
+                    <div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#6b7280);font-weight:700;">Cantidad proyectada</div>
+                    <div style="font-size:1.5rem;font-weight:800;color:#059669;">{{ tot_c }} <span style="font-size:.9rem;font-weight:600;">unidades</span></div>
+                </div>
+                <div style="flex:1;min-width:200px;border:1px solid var(--border,#e2e8f0);border-radius:.75rem;padding:1rem 1.25rem;">
+                    <div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#6b7280);font-weight:700;">Peso proyectado</div>
+                    <div style="font-size:1.5rem;font-weight:800;color:#d97706;">{{ tot_p }} <span style="font-size:.9rem;font-weight:600;">kg</span></div>
+                </div>
+            </div>
+
+            <div class="table-wrapper overflow-x-auto productos-dt-skin">
+                <table class="data-table config-table display stripe rct-auto">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Día</th>
+                            <th style="text-align:right;">Importe (S/)</th>
+                            <th style="text-align:right;">Cantidad (u)</th>
+                            <th style="text-align:right;">Peso (kg)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in detalle %}
+                        <tr>
+                            <td>{{ f.fecha }}</td>
+                            <td>{{ f.dia }}</td>
+                            <td style="text-align:right;">{{ f.v }}</td>
+                            <td style="text-align:right;">{{ f.c }}</td>
+                            <td style="text-align:right;">{{ f.p }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <th colspan="2" style="text-align:right;">Total proyectado</th>
+                            <th style="text-align:right;">{{ tot_v }}</th>
+                            <th style="text-align:right;">{{ tot_c }}</th>
+                            <th style="text-align:right;">{{ tot_p }}</th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <p style="font-size:.8rem;color:var(--muted,#6b7280);margin-top:.5rem;">Nota: Proyección basada en datos actuales.</p>
+        </div>
+    </div>
+
+    <section class="reporte-chart-section" aria-label="Importe proyectado por día">
+        <h3 class="reporte-chart-heading">Importe proyectado por día (S/)</h3>
+        <div class="chart-inner"><canvas id="chartImporteDia"></canvas></div>
+    </section>
+
+    <section class="reporte-chart-section" aria-label="Cantidad y peso proyectados por día">
+        <h3 class="reporte-chart-heading">Cantidad (unidades) y peso (kg) por día</h3>
+        <div class="chart-inner"><canvas id="chartCantPeso"></canvas></div>
+    </section>
+
+    <section class="reporte-chart-section" aria-label="Histórico y proyección">
+        <h3 class="reporte-chart-heading">Histórico semanal vs. proyección (S/)</h3>
+        <div class="chart-inner"><canvas id="chartHist"></canvas></div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/chart_reporte_datalabels.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/reporte_pdf.js"></script>
+<script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
+<script>
+(function () {
+    var dDia = {{ chart_dia | tojson }};
+    var dHist = {{ chart_hist | tojson }};
+    var legCol = typeof reporteChartLegendColor === 'function' ? reporteChartLegendColor() : '#1e293b';
+    var anim = window.reporteChartAnimate || {};
+    var pe = function (v, dec) { return (v != null ? v.toLocaleString('es-PE', {minimumFractionDigits: dec||0, maximumFractionDigits: dec||0}) : ''); };
+
+    function build() {
+        if (!window.Chart) return;
+
+        var c1 = document.getElementById('chartImporteDia');
+        if (c1 && dDia.labels) {
+            new Chart(c1, {
+                type: 'bar',
+                data: { labels: dDia.labels, datasets: [
+                    { label: 'Importe S/', data: dDia.valor, backgroundColor: 'rgba(37,99,235,0.55)', borderColor: 'rgba(37,99,235,1)', borderWidth: 1 },
+                ] },
+                options: Object.assign({}, anim, {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: legCol, boxWidth: 14 } },
+                        tooltip: { callbacks: { label: function(x){ return 'Importe: S/ ' + pe(x.parsed.y, 2); } } },
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                        y: { ticks: { color: '#94a3b8', callback: function(v){ return 'S/ ' + pe(v); } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                    },
+                }),
+            });
+        }
+
+        var c2 = document.getElementById('chartCantPeso');
+        if (c2 && dDia.labels) {
+            new Chart(c2, {
+                data: { labels: dDia.labels, datasets: [
+                    { type: 'bar', label: 'Cantidad (u)', data: dDia.cantidad, backgroundColor: 'rgba(5,150,105,0.5)', borderColor: 'rgba(5,150,105,1)', borderWidth: 1, yAxisID: 'y' },
+                    { type: 'line', label: 'Peso (kg)', data: dDia.peso, borderColor: 'rgba(217,119,6,1)', backgroundColor: 'rgba(217,119,6,0.15)', borderWidth: 2, tension: 0.25, pointRadius: 4, yAxisID: 'y2' },
+                ] },
+                options: Object.assign({}, anim, {
+                    responsive: true, maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { labels: { color: legCol, boxWidth: 14 } },
+                        tooltip: { callbacks: { label: function(x){ var u = x.dataset.yAxisID === 'y' ? ' u' : ' kg'; return x.dataset.label + ': ' + pe(x.parsed.y) + u; } } },
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                        y: { type: 'linear', position: 'left', ticks: { color: '#6ee7b7' }, grid: { color: 'rgba(148,163,184,0.15)' }, title: { display: true, text: 'Unidades', color: '#6ee7b7', font: { size: 11 } } },
+                        y2: { type: 'linear', position: 'right', ticks: { color: '#fcd34d' }, grid: { drawOnChartArea: false }, title: { display: true, text: 'Peso (kg)', color: '#fcd34d', font: { size: 11 } } },
+                    },
+                }),
+            });
+        }
+
+        var c3 = document.getElementById('chartHist');
+        if (c3 && dHist.labels) {
+            var colors = dHist.valor.map(function (_, i) { return i === dHist.proj_idx ? 'rgba(220,38,38,0.7)' : 'rgba(37,99,235,0.5)'; });
+            new Chart(c3, {
+                type: 'bar',
+                data: { labels: dHist.labels, datasets: [
+                    { label: 'Importe semanal S/', data: dHist.valor, backgroundColor: colors, borderColor: 'rgba(37,99,235,0.9)', borderWidth: 1 },
+                ] },
+                options: Object.assign({}, anim, {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { callbacks: { label: function(x){ var t = x.dataIndex === dHist.proj_idx ? 'Proyección: S/ ' : 'Real: S/ '; return t + pe(x.parsed.y, 2); } } },
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                        y: { ticks: { color: '#94a3b8', callback: function(v){ return 'S/ ' + pe(v); } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                    },
+                }),
+            });
+        }
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
+    else build();
+})();
+</script>
+{% endblock %}

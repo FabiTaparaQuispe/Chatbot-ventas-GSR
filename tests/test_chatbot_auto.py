@@ -37,6 +37,12 @@ DB_NAME = os.getenv('DB_NAME', 'grsia')
 SAVE_HISTORIAL = os.getenv('SAVE_HISTORIAL', '1') != '0'
 HIST_USER = os.getenv('HIST_USER', 'pytest_auto')
 
+# Reintentos ante fallos transitorios del LLM (Gemini a veces devuelve vacío o
+# el mensaje de respaldo "No pude generar una respuesta"). ASK_RETRIES=1 desactiva.
+ASK_RETRIES = int(os.getenv('ASK_RETRIES', '3'))
+RETRY_WAIT = float(os.getenv('RETRY_WAIT', '4'))
+ASK_TIMEOUT = float(os.getenv('ASK_TIMEOUT', '120'))
+
 
 def _db_connection():
     return pymysql.connect(
@@ -181,33 +187,43 @@ def _save_to_historial_db(pregunta: str, reply: str, categoria: str):
 
 
 def _send_question(token: str, pregunta: str, categoria: str = '') -> dict:
+    """Pregunta al chatbot reintentando ante fallos transitorios del LLM
+    (respuesta vacía, mensaje de respaldo, error HTTP o timeout)."""
     headers = {
         'Authorization': f'Bearer {token}',
         'Content-Type': 'application/json',
     }
-    # Thread único por pregunta para que aparezca individualmente en el historial
-    thread_id = f'{THREAD_PREFIX}_{uuid.uuid4().hex[:12]}'
     payload = {'messages': [{'role': 'user', 'content': pregunta}]}
-    t0 = time.time()
-    try:
-        resp = requests.post(
-            f'{BASE_URL}/api/chat',
-            json=payload,
-            headers=headers,
-            timeout=90,
-        )
-        ms = round((time.time() - t0) * 1000)
-        if resp.status_code == 200:
-            data = resp.json()
-            reply = data.get('reply', '')
-            if reply:
-                _save_to_historial_db(pregunta, reply, categoria)
-            return {'reply': reply, 'status': 200, 'ms': ms}
-        return {'reply': '', 'status': resp.status_code, 'ms': ms, 'error': resp.text[:300]}
-    except requests.exceptions.Timeout:
-        return {'reply': '', 'status': -1, 'ms': 90000, 'error': 'Timeout (>90s)'}
-    except Exception as e:
-        return {'reply': '', 'status': -2, 'ms': 0, 'error': str(e)}
+    resultado = {'reply': '', 'status': -2, 'ms': 0, 'error': 'sin intento'}
+    for intento in range(1, ASK_RETRIES + 1):
+        t0 = time.time()
+        try:
+            resp = requests.post(
+                f'{BASE_URL}/api/chat',
+                json=payload,
+                headers=headers,
+                timeout=ASK_TIMEOUT,
+            )
+            ms = round((time.time() - t0) * 1000)
+            if resp.status_code == 200:
+                reply = resp.json().get('reply', '')
+                low = reply.strip().lower()
+                es_respaldo = (not low) or ('no pude generar' in low)
+                if es_respaldo and intento < ASK_RETRIES:
+                    time.sleep(RETRY_WAIT)
+                    continue
+                if reply:
+                    _save_to_historial_db(pregunta, reply, categoria)
+                return {'reply': reply, 'status': 200, 'ms': ms}
+            resultado = {'reply': '', 'status': resp.status_code, 'ms': ms, 'error': resp.text[:300]}
+        except requests.exceptions.Timeout:
+            resultado = {'reply': '', 'status': -1, 'ms': int(ASK_TIMEOUT * 1000),
+                         'error': f'Timeout (>{ASK_TIMEOUT:.0f}s)'}
+        except Exception as e:
+            resultado = {'reply': '', 'status': -2, 'ms': 0, 'error': str(e)}
+        if intento < ASK_RETRIES:
+            time.sleep(RETRY_WAIT)
+    return resultado
 
 
 # ── Tests parametrizados ───────────────────────────────────────────────────
