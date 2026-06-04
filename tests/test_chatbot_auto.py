@@ -16,6 +16,8 @@ import time
 import uuid
 import pytest
 import requests
+import pymysql
+import pymysql.cursors
 
 BASE_URL  = os.getenv('CHAT_BASE_URL', 'http://localhost:5000')
 CHAT_USER = os.getenv('CHAT_USER', 'admin')
@@ -23,6 +25,24 @@ CHAT_PASS = os.getenv('CHAT_PASS', 'qwerty123')
 
 # Prefijo para identificar estos threads en el historial
 THREAD_PREFIX = 'pytest_auto'
+
+# ── Conexión a la BD para guardar en el historial ──────────────────────────
+# /api/chat no persiste y /api/chat_threads usa sesión (no JWT), así que el
+# guardado se hace directo a la BD, igual que en test_chatbot_db_validation.py.
+DB_HOST = os.getenv('DB_HOST', 'localhost')
+DB_PORT = int(os.getenv('DB_PORT', '3307'))
+DB_USER = os.getenv('DB_USER', 'root')
+DB_PASS = os.getenv('DB_PASS', 'root')
+DB_NAME = os.getenv('DB_NAME', 'grsia')
+SAVE_HISTORIAL = os.getenv('SAVE_HISTORIAL', '1') != '0'
+HIST_USER = os.getenv('HIST_USER', 'pytest_auto')
+
+
+def _db_connection():
+    return pymysql.connect(
+        host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASS,
+        database=DB_NAME, cursorclass=pymysql.cursors.DictCursor, charset='latin1',
+    )
 
 # ── 58 preguntas organizadas por categoría ─────────────────────────────────
 PREGUNTAS = [
@@ -128,28 +148,34 @@ def token():
     return data['access_token']
 
 
-def _save_to_historial(token: str, thread_id: str, pregunta: str, reply: str, categoria: str):
-    """Guarda la pregunta y respuesta en app_chat_threads para que aparezca en el historial."""
-    headers = {
-        'Authorization': f'Bearer {token}',
-        'Content-Type': 'application/json',
-    }
+def _save_to_historial_db(pregunta: str, reply: str, categoria: str):
+    """Guarda la pregunta y respuesta directo en la BD (app_chat_threads +
+    app_chat_messages) bajo el usuario HIST_USER, para que aparezcan en
+    'Preguntas al chatbot' y se puedan evaluar con 👍/👎."""
+    if not (SAVE_HISTORIAL and reply.strip()):
+        return
+    thread_cid = f'{THREAD_PREFIX}_{uuid.uuid4().hex[:12]}'
     titulo = f'[{categoria}] {pregunta[:60]}'
-    payload = {
-        'id': thread_id,
-        'title': titulo,
-        'messages': [
-            {'role': 'user',      'content': pregunta},
-            {'role': 'assistant', 'content': reply},
-        ],
-    }
     try:
-        requests.post(
-            f'{BASE_URL}/api/chat_threads',
-            json=payload,
-            headers=headers,
-            timeout=15,
-        )
+        conn = _db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'INSERT INTO app_chat_threads (username, client_thread_id, title) VALUES (%s,%s,%s)',
+                    (HIST_USER, thread_cid, titulo)
+                )
+                thread_id = cur.lastrowid
+                cur.execute(
+                    'INSERT INTO app_chat_messages (thread_id, role, content) VALUES (%s,%s,%s)',
+                    (thread_id, 'user', pregunta)
+                )
+                cur.execute(
+                    'INSERT INTO app_chat_messages (thread_id, role, content) VALUES (%s,%s,%s)',
+                    (thread_id, 'assistant', reply)
+                )
+            conn.commit()
+        finally:
+            conn.close()
     except Exception:
         pass  # no bloquear el test si falla el guardado
 
@@ -175,7 +201,7 @@ def _send_question(token: str, pregunta: str, categoria: str = '') -> dict:
             data = resp.json()
             reply = data.get('reply', '')
             if reply:
-                _save_to_historial(token, thread_id, pregunta, reply, categoria)
+                _save_to_historial_db(pregunta, reply, categoria)
             return {'reply': reply, 'status': 200, 'ms': ms}
         return {'reply': '', 'status': resp.status_code, 'ms': ms, 'error': resp.text[:300]}
     except requests.exceptions.Timeout:
