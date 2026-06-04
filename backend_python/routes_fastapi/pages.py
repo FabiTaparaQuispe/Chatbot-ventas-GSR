@@ -195,6 +195,7 @@ async def _render_index(request: Request, page: str) -> HTMLResponse:
             'fb_buenos': ef['buenos'], 'fb_malos': ef['malos'], 'fb_sin_voto': ef['sin_voto'],
             'ef_total': ef['total'], 'ef_fallos': ef['fallos'], 'ef_fallo_auto': ef['fallo_auto'],
             'ef_aciertos': ef['aciertos'], 'ef_efectividad': ef['efectividad'],
+            'ef_indice_exito': ef['indice_exito'], 'ef_respondidas': ef['respondidas'],
             'total_preguntas': len(rows),
             'total_usuarios': len({str(r.get('usuario') or '') for r in rows if str(r.get('usuario') or '')}),
             'top_categoria': top_categoria,

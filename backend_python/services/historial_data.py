@@ -258,6 +258,10 @@ def fetch_efectividad_stats(conn) -> dict[str, Any]:
         "fallos": fallos,
         "aciertos": aciertos,
         "efectividad": round(aciertos / total * 100, 1) if total else 0.0,
+        # Índice de éxito = la IA entregó una respuesta sin error (automático,
+        # sin contar los 👎 manuales). Equivale al "índice de éxito" de la API.
+        "respondidas": total - fallo_auto,
+        "indice_exito": round((total - fallo_auto) / total * 100, 1) if total else 0.0,
     }
 
 

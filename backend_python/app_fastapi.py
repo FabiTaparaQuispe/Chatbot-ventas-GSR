@@ -21,6 +21,8 @@ logging.getLogger('httpcore').setLevel(logging.WARNING)
 logging.getLogger('openai').setLevel(logging.WARNING)
 logging.getLogger('google').setLevel(logging.WARNING)
 
+_perf_log = logging.getLogger('perf')
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -61,7 +63,15 @@ async def security_middleware(request: Request, call_next):
             return JSONResponse({'ok': False, 'error': 'Demasiadas solicitudes. Esperá un minuto.'}, status_code=429)
         _rl_counters[ip].append(now)
 
+    # DEBUG temporal: medir tiempo total por request para diagnosticar lentitud
+    # de "ver reporte". Quitar este bloque cuando termine el diagnóstico.
+    _t0 = time.perf_counter()
     response = await call_next(request)
+    _ms = (time.perf_counter() - _t0) * 1000
+    if request.url.path.startswith('/modules/') or _ms > 800:
+        _perf_log.info('[REQ %.0f ms] %s %s?%s', _ms, request.method,
+                       request.url.path, request.url.query)
+
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'

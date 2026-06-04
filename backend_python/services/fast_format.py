@@ -433,7 +433,35 @@ def _fmt_linea_resumen(result):
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
+def _fmt_proyeccion_dia(result):
+    if result.get('tipo') != 'proyeccion_dia':
+        return None
+    valor = result.get('valor_proyectado')
+    if valor is None:
+        return None
+    escala = str(result.get('escala', 'dia') or 'dia')
+    filtros = result.get('filtros') or {}
+    linea = filtros.get('linea_comercial')
+    prov = filtros.get('provincia')
+    sujeto = f"de {linea} " if linea else ""
+    lugar = f" en {prov}" if prov else ""
+    if escala == 'dia':
+        dia = str(result.get('dia_semana', '') or '')
+        fecha = str(result.get('fecha_inicio', '') or result.get('fecha_proyectada', '') or '')
+        cuando = f"el {dia} {fecha}".strip() if dia else f"el {fecha}"
+    else:
+        etiqueta = 'la próxima semana' if escala == 'semana' else 'la próxima quincena'
+        d1 = str(result.get('fecha_inicio', '') or '')
+        d2 = str(result.get('fecha_fin', '') or '')
+        cuando = f"{etiqueta} (del {d1} al {d2})"
+    return (
+        f"Proyección de venta {sujeto}para {cuando}{lugar}: {_m(valor)}.\n\n"
+        "Nota: Proyección basada en datos actuales."
+    )
+
+
 _FORMATTERS = {
+    'ventasgeneral_proyeccion_dia':           _fmt_proyeccion_dia,
     'ventasgeneral_top_clientes_globales':    _fmt_top_clientes_global,
     'ventasgeneral_top_clientes_zona_precio': _fmt_top_clientes_zona,
     'ventasgeneral_top_productos':            _fmt_top_productos,

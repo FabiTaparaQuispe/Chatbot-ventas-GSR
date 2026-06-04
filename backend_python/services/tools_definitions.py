@@ -233,6 +233,31 @@ def ventas_tool_definitions():
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
+            'name': 'ventasgeneral_proyeccion_dia',
+            'description': (
+                'Proyección de ventas a CORTO PLAZO: un DÍA (mañana), una SEMANA o una QUINCENA futura. '
+                'Calcula valor (S/), cantidad y peso esperados sumando, por cada día del período, el '
+                'promedio del MISMO día de la semana en las últimas 8 semanas. '
+                'Úsala cuando el usuario pida proyectar/estimar día, semana o quincena (NO meses): '
+                '"proyecta la venta de mañana", "cuánto se venderá la próxima semana", "proyección de la quincena", '
+                '"proyecta Pollo Vivo para mañana". '
+                'escala="dia" (default) | "semana" | "quincena". Si no se da fecha, el período arranca mañana. '
+                'Filtros opcionales: linea_comercial, provincia, zona_comercial, prefijo_descri_zona_precio. '
+                'TEXTO AL USUARIO: una línea con el valor proyectado del período y termina con '
+                '"Nota: Proyección basada en datos actuales." (no menciones método, promedios ni días de semana).'
+            ),
+            'parameters': {'type': 'object', 'properties': {
+                'escala': {'type': 'string', 'enum': ['dia', 'semana', 'quincena'],
+                           'description': "Escala de tiempo: 'dia' (mañana), 'semana' (7 días) o 'quincena' (15 días). Default 'dia'."},
+                'fecha': {'type': 'string', 'description': 'Inicio del período YYYY-MM-DD. Si se omite, arranca mañana.'},
+                'linea_comercial': {'type': 'string', 'description': "Filtrar por línea comercial, ej. 'Pollo Vivo'"},
+                'provincia': prov,
+                'zona_comercial': {'type': 'string', 'description': 'Filtrar por zona comercial'},
+                'prefijo_descri_zona_precio': pref,
+                'semanas': {'type': 'integer', 'default': 8, 'description': 'Semanas de historial a promediar (2-26)'},
+            }},
+        }},
+        {'type': 'function', 'function': {
             'name': 'ventasgeneral_linea_resumen_provincia',
             'description': f'Resumen de ventas de una línea comercial agrupado por provincia y cliente: SUM(Cantidad), SUM(Peso), SUM(Valor), ordenado por peso DESC. Paginado con pagina/por_pagina. Filtros opcionales: cod_item (producto, ej. 100=carne, 103=brasa) y mercado (prefijo DescripcionZonaPrecio, ej. TACNA, AQPMERCADO). reporte_url={REPORTS_PREFIX}{REPORT_SLUG_VENTAS_LINEA_RESUMEN_PROVINCIA}?…',
             'parameters': {'type': 'object', 'properties': {

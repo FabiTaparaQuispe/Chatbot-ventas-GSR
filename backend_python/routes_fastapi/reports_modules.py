@@ -1,6 +1,8 @@
 """Reportes /modules/... — FastAPI. Helpers puros importados del módulo Flask."""
 from __future__ import annotations
 
+import logging
+import time
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -33,6 +35,33 @@ from services.urlmap import (
 )
 
 router = APIRouter()
+
+_perf_log = logging.getLogger('perf')
+
+
+# DEBUG temporal: ejecuta una query midiendo su tiempo y logueando el plan
+# (EXPLAIN) para ver si usa índice o hace full scan. Quitar cuando termine
+# el diagnóstico de lentitud de "ver reporte".
+def _timed_exec(conn, label: str, sql: str, params):
+    t0 = time.perf_counter()
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+    ms = (time.perf_counter() - t0) * 1000
+    plan = ''
+    try:
+        with conn.cursor() as cur:
+            cur.execute('EXPLAIN ' + sql, params)
+            ex = cur.fetchall() or []
+        plan = ' | '.join(
+            f"{r.get('table')}:type={r.get('type')},key={r.get('key')},"
+            f"rows={r.get('rows')},extra={r.get('Extra')}"
+            for r in ex
+        )
+    except Exception as e:
+        plan = f'(EXPLAIN falló: {e})'
+    _perf_log.info('[SQL %.0f ms] %s -> %d filas | %s', ms, label, len(rows), plan)
+    return rows
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -136,12 +165,9 @@ def ventasgeneral_resumen_tabla(request: Request):
                  + " GROUP BY FechaContable ORDER BY FechaContable")
 
     conn = get_connection()
-    with conn.cursor() as cur:
-        cur.execute(_colon_params_to_pymysql(sql), bind)
-        row = cur.fetchone() or {}
-    with conn.cursor() as cur:
-        cur.execute(_colon_params_to_pymysql(sql_daily), bind)
-        raw_daily = cur.fetchall() or []
+    _rows_tot = _timed_exec(conn, 'resumen.totales', _colon_params_to_pymysql(sql), bind)
+    row = (_rows_tot[0] if _rows_tot else {}) or {}
+    raw_daily = _timed_exec(conn, 'resumen.diario', _colon_params_to_pymysql(sql_daily), bind) or []
 
     chart_fechas, chart_diario = [], []
     for r in raw_daily:

@@ -1768,6 +1768,138 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('ventasgeneral_proyeccion_dia')
+    def _proyeccion_dia(self, args):
+        """Proyección de ventas a corto plazo: un día (mañana), una semana o una
+        quincena. Para cada día del período suma el promedio del MISMO día de la
+        semana en las últimas N semanas (captura la estacionalidad semanal).
+        Filtra por línea/provincia/zona. Venta bruta (facturas+boletas)."""
+        from datetime import date as _date, timedelta as _timedelta
+        from collections import defaultdict
+
+        escala_raw = str(args.get('escala') or 'dia').strip().lower()
+        if escala_raw in ('semana', 'semanal'):
+            escala, n_dias = 'semana', 7
+        elif escala_raw in ('quincena', 'quincenal'):
+            escala, n_dias = 'quincena', 15
+        else:
+            escala, n_dias = 'dia', 1
+
+        fecha_str = str(args.get('fecha') or '').strip()
+        if fecha_str:
+            try:
+                inicio = _date.fromisoformat(fecha_str[:10])
+            except ValueError:
+                raise ValueError('Fecha inválida; use el formato YYYY-MM-DD.')
+        else:
+            inicio = _date.today() + _timedelta(days=1)
+        fin = inicio + _timedelta(days=n_dias - 1)
+
+        semanas = _int_arg(args.get('semanas'), 8, 2, 26)
+        linea = str(args.get('linea_comercial') or '').strip()
+        provincia = str(args.get('provincia') or '').strip()
+        zona = str(args.get('zona_comercial') or '').strip()
+        pref_z = str(args.get('prefijo_descri_zona_precio') or '').strip().upper()
+
+        # Totales diarios históricos para promediar por día de semana.
+        dias_hist = semanas * 7 + 7
+        sql = ("SELECT FechaContable AS f, DAYOFWEEK(FechaContable) AS dow,"
+               " COALESCE(SUM(Valor),0) AS valor,"
+               " COALESCE(SUM(Cantidad),0) AS cantidad,"
+               " COALESCE(SUM(Peso),0) AS peso"
+               " FROM ventasgeneral2"
+               " WHERE CodigoDocumento IN ('01','03')"
+               " AND FechaContable < %(inicio)s"
+               " AND FechaContable >= DATE_SUB(%(inicio)s, INTERVAL %(dias_hist)s DAY)")
+        params: dict = {'inicio': inicio.isoformat(), 'dias_hist': dias_hist}
+        if linea:
+            _lw, _lb = linea_where_fragment(self._conn, linea, style='pyformat')
+            sql += _lw
+            params.update(_lb)
+        if provincia:
+            sql += " AND Provincia LIKE %(prov)s"
+            params['prov'] = f'%{provincia}%'
+        if zona:
+            sql += " AND ZonaComercial LIKE %(zona)s"
+            params['zona'] = f'%{zona}%'
+        if pref_z:
+            sql += " AND UPPER(TRIM(COALESCE(DescripcionZonaPrecio,''))) LIKE %(pref_z)s"
+            params['pref_z'] = pref_z + '%'
+        sql += " GROUP BY FechaContable"
+
+        filas = _q(self._conn, sql, params)
+        if not filas:
+            raise ValueError(
+                'No hay datos históricos recientes para proyectar '
+                f'{"esa línea" if linea else "ese período"}.'
+            )
+
+        nombres = {1: 'domingo', 2: 'lunes', 3: 'martes', 4: 'miércoles',
+                   5: 'jueves', 6: 'viernes', 7: 'sábado'}
+
+        # Promedio por día de semana usando las últimas `semanas` ocurrencias.
+        by_dow: dict[int, list] = defaultdict(list)
+        for r in sorted(filas, key=lambda x: str(x['f']), reverse=True):
+            by_dow[int(r['dow'])].append(r)
+        prom_dow: dict[int, tuple] = {}
+        for dow, rows in by_dow.items():
+            rows = rows[:semanas]
+            m = len(rows)
+            prom_dow[dow] = (
+                sum(float(x['valor'] or 0) for x in rows) / m,
+                sum(float(x['cantidad'] or 0) for x in rows) / m,
+                sum(float(x['peso'] or 0) for x in rows) / m,
+            )
+        # Fallback (promedio global diario) por si falta algún día de semana.
+        ng = len(filas)
+        fb = (
+            sum(float(x['valor'] or 0) for x in filas) / ng,
+            sum(float(x['cantidad'] or 0) for x in filas) / ng,
+            sum(float(x['peso'] or 0) for x in filas) / ng,
+        )
+
+        # Sumar sobre el rango del período proyectado.
+        detalle: list = []
+        tot_v = tot_c = tot_p = 0.0
+        d = inicio
+        while d <= fin:
+            dow = (d.weekday() + 1) % 7 + 1
+            v, c, p = prom_dow.get(dow, fb)
+            tot_v += v
+            tot_c += c
+            tot_p += p
+            detalle.append({'fecha': d.isoformat(), 'dia_semana': nombres[dow],
+                            'valor': round(v, 2)})
+            d += _timedelta(days=1)
+
+        filtros = {}
+        if linea:
+            filtros['linea_comercial'] = linea
+        if provincia:
+            filtros['provincia'] = provincia
+        if zona:
+            filtros['zona_comercial'] = zona
+        if pref_z:
+            filtros['prefijo_descri_zona_precio'] = pref_z
+
+        return {
+            'tabla': 'ventasgeneral2',
+            'tipo': 'proyeccion_dia',
+            'escala': escala,
+            'fecha_inicio': inicio.isoformat(),
+            'fecha_fin': fin.isoformat(),
+            'fecha_proyectada': inicio.isoformat(),
+            'dia_semana': nombres[(inicio.weekday() + 1) % 7 + 1] if escala == 'dia' else None,
+            'semanas_usadas': semanas,
+            'valor_proyectado': round(tot_v, 2),
+            'cantidad_proyectada': round(tot_c, 2),
+            'peso_proyectado': round(tot_p, 2),
+            'detalle_dias': detalle if escala != 'dia' else None,
+            'filtros': filtros or None,
+            'nota': 'Nota: Proyección basada en datos actuales.',
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
     _CATALOGO_CAMPOS = {
         'provincia':       'Provincia',
         'linea_comercial': 'LineaComercial',

@@ -79,6 +79,43 @@
 .hp-vote.up.active   { opacity: 1; background: rgba(5,150,105,.15);  border-color: #059669; }
 .hp-vote.down.active { opacity: 1; background: rgba(220,38,38,.15); border-color: #dc2626; }
 .hp-vote:disabled { opacity: .3; cursor: wait; }
+.hp-ver-btn {
+    background: transparent; border: 1px solid var(--accent, #2563eb);
+    color: var(--accent, #2563eb); border-radius: .4rem;
+    padding: .2rem .65rem; font-size: .8rem; font-weight: 600; cursor: pointer;
+}
+.hp-ver-btn:hover { background: var(--accent, #2563eb); color: #fff; }
+.hp-modal-ov {
+    position: fixed; inset: 0; background: rgba(15,23,42,.55);
+    display: none; align-items: center; justify-content: center; z-index: 1000; padding: 1rem;
+}
+.hp-modal-ov[data-open="1"] { display: flex; }
+.hp-modal {
+    background: var(--card-bg, #fff); color: inherit;
+    border: 1px solid var(--border, #e2e8f0); border-radius: .9rem;
+    width: 100%; max-width: 780px; max-height: 88vh; display: flex; flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,.3);
+}
+[data-theme="dark"] .hp-modal { background: var(--card-bg, #1e293b); border-color: var(--border, #334155); }
+.hp-modal-head {
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;
+    padding: 1rem 1.25rem; border-bottom: 1px solid var(--border, #e2e8f0);
+}
+.hp-modal-head h3 { margin: 0; font-size: 1rem; font-weight: 800; }
+.hp-modal-meta { font-size: .78rem; color: var(--muted, #6b7280); margin-top: .15rem; }
+.hp-modal-close { background: none; border: none; font-size: 1.4rem; line-height: 1; cursor: pointer; color: var(--muted, #6b7280); }
+.hp-modal-body { padding: 1.1rem 1.25rem; overflow-y: auto; }
+.hp-modal-lbl { font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted, #6b7280); margin: 0 0 .35rem; }
+.hp-modal-pregunta { font-weight: 600; margin: 0 0 1rem; white-space: pre-wrap; }
+.hp-modal-respuesta {
+    white-space: pre-wrap; font-size: .9rem; line-height: 1.5;
+    background: var(--hover-bg, rgba(0,0,0,.03)); border-radius: .5rem; padding: .85rem 1rem;
+}
+.hp-modal-foot {
+    display: flex; align-items: center; gap: .75rem;
+    padding: .85rem 1.25rem; border-top: 1px solid var(--border, #e2e8f0);
+}
+.hp-modal-foot span { font-size: .82rem; color: var(--muted, #6b7280); }
 .hp-alert {
     margin: 1rem 1.5rem;
     padding: .9rem 1rem;
@@ -185,12 +222,20 @@
                 <div class="kpi-value">{{ fb_sin_voto }}</div>
             </div>
         </div>
+        <div class="kpi-card" style="--kpi-accent:#16a34a;">
+            <div class="kpi-icon" style="background:rgba(22,163,74,.12);color:#16a34a;"><i class="fas fa-circle-check" aria-hidden="true"></i></div>
+            <div class="kpi-body">
+                <div class="kpi-label">Índice de éxito</div>
+                <div class="kpi-value">{{ ef_indice_exito }}%</div>
+                <div class="kpi-sub" style="font-size:.72rem;color:var(--muted,#9ca3af);">{{ ef_respondidas }} de {{ ef_total }} respondidas sin error</div>
+            </div>
+        </div>
         <div class="kpi-card" style="--kpi-accent:#0ea5e9;">
             <div class="kpi-icon" style="background:rgba(14,165,233,.12);color:#0ea5e9;"><i class="fas fa-bullseye" aria-hidden="true"></i></div>
             <div class="kpi-body">
                 <div class="kpi-label">Efectividad</div>
                 <div class="kpi-value">{{ ef_efectividad }}%</div>
-                <div class="kpi-sub" style="font-size:.72rem;color:var(--muted,#9ca3af);">{{ ef_aciertos }} de {{ ef_total }} respuestas</div>
+                <div class="kpi-sub" style="font-size:.72rem;color:var(--muted,#9ca3af);">{{ ef_aciertos }} de {{ ef_total }} buenas</div>
             </div>
         </div>
         <div class="kpi-card" style="--kpi-accent:#ea580c;">
@@ -333,7 +378,11 @@
                         {% endif %}
                     </td>
                     <td class="hp-td-link">
-                        <a href="{{ href_chat|e }}">Abrir</a>
+                        {% if r.respuesta_id %}
+                        <button type="button" class="hp-ver-btn" data-aid="{{ r.respuesta_id }}">Ver</button>
+                        {% else %}
+                        <span style="color:var(--muted,#9ca3af);">—</span>
+                        {% endif %}
                         {% if titulo %}
                         <br><small style="color:var(--muted,#9ca3af);" title="{{ titulo|e }}">{{ preview(titulo, 28)|e }}</small>
                         {% endif %}
@@ -347,31 +396,118 @@
     </div>
     {% endif %}
 </div>
+
+<div class="hp-modal-ov" id="hpModal" role="dialog" aria-modal="true" aria-labelledby="hpModalTitle">
+    <div class="hp-modal">
+        <div class="hp-modal-head">
+            <div>
+                <h3 id="hpModalTitle">Conversación</h3>
+                <div class="hp-modal-meta" id="hpModalMeta"></div>
+            </div>
+            <button type="button" class="hp-modal-close" id="hpModalClose" aria-label="Cerrar">&times;</button>
+        </div>
+        <div class="hp-modal-body">
+            <p class="hp-modal-lbl">Pregunta</p>
+            <p class="hp-modal-pregunta" id="hpModalPregunta"></p>
+            <p class="hp-modal-lbl">Respuesta del chatbot</p>
+            <div class="hp-modal-respuesta" id="hpModalRespuesta"></div>
+        </div>
+        <div class="hp-modal-foot">
+            <span>¿La respuesta es correcta?</span>
+            <button type="button" class="hp-vote up" id="hpModalUp" data-val="1" title="Marcar como buena respuesta">👍</button>
+            <button type="button" class="hp-vote down" id="hpModalDown" data-val="-1" title="Marcar como mala respuesta">👎</button>
+        </div>
+    </div>
+</div>
+
 <script>
 (function () {
-    // Voto 👍/👎 directo desde el historial (endpoint /api/chat/feedback).
-    document.querySelectorAll('.hp-vote').forEach(function (btn) {
+    // ── Voto 👍/👎 reutilizable (tabla + modal) ──────────────────────────────
+    function enviarVoto(mid, send, botones, activo) {
+        botones.forEach(function (b) { b.disabled = true; });
+        return fetch('/api/chat/feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message_id: mid, value: send })
+        }).then(function (r) { return r.json(); }).then(function (d) {
+            botones.forEach(function (b) { b.disabled = false; });
+            if (!d.ok) { alert('No se pudo guardar el voto: ' + (d.error || '')); return false; }
+            botones.forEach(function (b) { b.classList.remove('active'); });
+            if (send !== 0 && activo) { activo.classList.add('active'); }
+            return true;
+        }).catch(function () {
+            botones.forEach(function (b) { b.disabled = false; });
+            alert('Error de red al guardar el voto.');
+            return false;
+        });
+    }
+
+    // Voto desde las filas de la tabla.
+    document.querySelectorAll('td.hp-td-eval .hp-vote').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var mid = parseInt(btn.getAttribute('data-mid'), 10);
             var val = parseInt(btn.getAttribute('data-val'), 10);
-            var cell = btn.closest('td');
-            var wasActive = btn.classList.contains('active');
-            var send = wasActive ? 0 : val;   // volver a hacer clic quita el voto
-            var botones = cell.querySelectorAll('.hp-vote');
-            botones.forEach(function (b) { b.disabled = true; });
-            fetch('/api/chat/feedback', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message_id: mid, value: send })
-            }).then(function (r) { return r.json(); }).then(function (d) {
-                botones.forEach(function (b) { b.disabled = false; });
-                if (!d.ok) { alert('No se pudo guardar el voto: ' + (d.error || '')); return; }
-                botones.forEach(function (b) { b.classList.remove('active'); });
-                if (send !== 0) { btn.classList.add('active'); }
-            }).catch(function () {
-                botones.forEach(function (b) { b.disabled = false; });
-                alert('Error de red al guardar el voto.');
+            var botones = btn.closest('td').querySelectorAll('.hp-vote');
+            var send = btn.classList.contains('active') ? 0 : val;
+            enviarVoto(mid, send, botones, btn);
+        });
+    });
+
+    // ── Modal: ver la conversación completa ──────────────────────────────────
+    var modal = document.getElementById('hpModal');
+    var elMeta = document.getElementById('hpModalMeta');
+    var elPreg = document.getElementById('hpModalPregunta');
+    var elResp = document.getElementById('hpModalRespuesta');
+    var btnUp = document.getElementById('hpModalUp');
+    var btnDown = document.getElementById('hpModalDown');
+    var modalAid = null;
+
+    function cerrarModal() { modal.removeAttribute('data-open'); modalAid = null; }
+    document.getElementById('hpModalClose').addEventListener('click', cerrarModal);
+    modal.addEventListener('click', function (e) { if (e.target === modal) cerrarModal(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') cerrarModal(); });
+
+    function pintarVoto(fb) {
+        btnUp.classList.toggle('active', String(fb) === '1');
+        btnDown.classList.toggle('active', String(fb) === '-1');
+    }
+
+    [btnUp, btnDown].forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            if (!modalAid) return;
+            var val = parseInt(btn.getAttribute('data-val'), 10);
+            var send = btn.classList.contains('active') ? 0 : val;
+            enviarVoto(modalAid, send, [btnUp, btnDown], btn).then(function (ok) {
+                if (ok) {
+                    // Reflejar también en la fila de la tabla.
+                    document.querySelectorAll('td.hp-td-eval .hp-vote[data-mid="' + modalAid + '"]').forEach(function (b) {
+                        b.classList.remove('active');
+                        if (send !== 0 && parseInt(b.getAttribute('data-val'), 10) === val) b.classList.add('active');
+                    });
+                }
             });
+        });
+    });
+
+    document.querySelectorAll('.hp-ver-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var aid = btn.getAttribute('data-aid');
+            modalAid = parseInt(aid, 10);
+            elMeta.textContent = 'Cargando…';
+            elPreg.textContent = '';
+            elResp.textContent = '';
+            pintarVoto(null);
+            modal.setAttribute('data-open', '1');
+            fetch('/api/historial/conversacion?aid=' + encodeURIComponent(aid), { credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (!d.ok) { elMeta.textContent = ''; elResp.textContent = 'No se pudo cargar: ' + (d.error || ''); return; }
+                    elMeta.textContent = 'Usuario: ' + (d.usuario || '—') + '  ·  ' + (d.fecha || '');
+                    elPreg.textContent = d.pregunta || '(sin pregunta)';
+                    elResp.textContent = d.respuesta || '(sin respuesta)';
+                    pintarVoto(d.feedback);
+                })
+                .catch(function () { elMeta.textContent = ''; elResp.textContent = 'Error de red al cargar la conversación.'; });
         });
     });
 })();
