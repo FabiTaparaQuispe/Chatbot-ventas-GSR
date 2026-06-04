@@ -763,6 +763,89 @@ def ventas_proyeccion(request: Request):
     return _tmpl(request, 'pages/reporte_proyeccion.html', ctx)
 
 
+@router.get('/modules/reports/proyeccion-mensual')
+def ventas_proyeccion_mensual(request: Request):
+    if err := _require_login(request):
+        return err
+    from services.tool_executor import ToolExecutor
+
+    d1 = _parse_date_string(_q(request, 'fecha_desde') or _q(request, 'desde'))
+    d2 = _parse_date_string(_q(request, 'fecha_hasta') or _q(request, 'hasta'))
+    if not d1 or not d2 or d1 > d2:
+        return _bad('Parámetros requeridos: fecha_desde y fecha_hasta.')
+    try:
+        meses = max(1, min(12, int(_q(request, 'meses_a_proyectar') or '3')))
+    except ValueError:
+        meses = 3
+    linea = _q(request, 'linea_comercial')
+    provincia = _q(request, 'provincia')
+    nombre_cliente = _q(request, 'nombre_cliente')
+    cod_item = _q(request, 'cod_item')
+
+    conn = get_connection()
+    extra = ''
+    p: dict = {'d1': d1, 'd2': d2}
+    if linea:
+        lw, lb = linea_where_fragment(conn, linea, style='pyformat')
+        extra += lw
+        p.update(lb)
+    if provincia:
+        extra += " AND Provincia LIKE %(prov)s"
+        p['prov'] = f'%{provincia}%'
+    if nombre_cliente:
+        extra += " AND NombreCliente LIKE %(ncli)s"
+        p['ncli'] = f'%{nombre_cliente}%'
+    if cod_item:
+        extra += " AND CodigoItem = %(coditem)s"
+        p['coditem'] = cod_item
+
+    sql = ("SELECT DATE_FORMAT(FechaContable, '%%Y-%%m') AS mes,"
+           " COALESCE(SUM(Valor),0) AS suma_valor,"
+           " COALESCE(SUM(Cantidad),0) AS suma_cantidad,"
+           " COALESCE(SUM(Peso),0) AS suma_peso"
+           " FROM ventasgeneral2 WHERE FechaContable BETWEEN %(d1)s AND %(d2)s"
+           " AND CodigoDocumento IN ('01','03')" + extra +
+           " GROUP BY DATE_FORMAT(FechaContable, '%%Y-%%m') ORDER BY mes")
+    with conn.cursor() as cur:
+        cur.execute(sql, p)
+        filas = cur.fetchall() or []
+    if len(filas) < 2:
+        return _bad('Se necesitan al menos 2 meses de historial para proyectar.')
+
+    proyecciones, _meta = ToolExecutor._proyectar_media_movil_estacional(filas, meses)
+
+    hist = filas[-12:]
+    labels = [str(f['mes']) for f in hist] + [str(p2['mes']) for p2 in proyecciones]
+    valor = ([round(float(f['suma_valor'] or 0), 2) for f in hist]
+             + [round(float(p2['valor_proyectado']), 2) for p2 in proyecciones])
+    cant = ([round(float(f['suma_cantidad'] or 0)) for f in hist]
+            + [round(float(p2['cantidad_proyectada'])) for p2 in proyecciones])
+    peso = ([round(float(f['suma_peso'] or 0)) for f in hist]
+            + [round(float(p2['peso_total_proyectado'])) for p2 in proyecciones])
+    proj_start = len(hist)
+
+    detalle = [{'mes': str(p2['mes']),
+                'v': f"{float(p2['valor_proyectado']):,.2f}",
+                'c': f"{float(p2['cantidad_proyectada']):,.0f}",
+                'pp': f"{float(p2['peso_prom_proyectado']):,.2f}",
+                'p': f"{float(p2['peso_total_proyectado']):,.0f}"} for p2 in proyecciones]
+
+    titulo = 'Proyección mensual de ventas'
+    if linea:
+        titulo += f' · {linea}'
+    if nombre_cliente:
+        titulo += f' · {nombre_cliente}'
+    ctx = _report_ctx(request, titulo)
+    ctx.update({
+        'meses': meses, 'd1': d1, 'd2': d2,
+        'linea': linea, 'provincia': provincia, 'cliente': nombre_cliente, 'producto': cod_item,
+        'detalle': detalle,
+        'pdf_filename': f'proyeccion_mensual_{d1}_{d2}.pdf',
+        'chart': {'labels': labels, 'valor': valor, 'cantidad': cant, 'peso': peso, 'proj_start': proj_start},
+    })
+    return _tmpl(request, 'pages/reporte_proyeccion_mensual.html', ctx)
+
+
 @router.get('/modules/reports/ventas-mix-tdoc')
 def ventas_mix_tdoc(request: Request):
     if err := _require_login(request):

@@ -1,0 +1,113 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+    <h1>Proyección mensual de ventas</h1>
+    <p class="page-lead">
+        Próximos <strong>{{ meses }}</strong> meses · histórico del <strong>{{ d1 }}</strong> al <strong>{{ d2 }}</strong>
+        {% if linea %} · Línea: <strong>{{ linea }}</strong>{% endif %}
+        {% if provincia %} · Provincia: <strong>{{ provincia }}</strong>{% endif %}
+        {% if cliente %} · Cliente: <strong>{{ cliente }}</strong>{% endif %}
+        {% if producto %} · Producto (ítem): <strong>{{ producto }}</strong>{% endif %}
+    </p>
+</div>
+
+<div class="reporte-page">
+    <div class="card-filtros-demo reporte-informe-panel">
+        <div class="reporte-informe-toolbar">
+            <button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button>
+        </div>
+        <div id="reporte-pdf-root">
+            <h2 class="reporte-informe-title">Meses proyectados</h2>
+            <div class="table-wrapper overflow-x-auto productos-dt-skin">
+                <table class="data-table config-table display stripe rct-auto">
+                    <thead>
+                        <tr>
+                            <th>Mes</th>
+                            <th style="text-align:right;">Valor (S/)</th>
+                            <th style="text-align:right;">Unidades</th>
+                            <th style="text-align:right;">Peso prom (kg/u)</th>
+                            <th style="text-align:right;">Peso total (kg)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in detalle %}
+                        <tr>
+                            <td style="font-weight:600;">{{ f.mes }}</td>
+                            <td style="text-align:right;">{{ f.v }}</td>
+                            <td style="text-align:right;">{{ f.c }}</td>
+                            <td style="text-align:right;">{{ f.pp }}</td>
+                            <td style="text-align:right;">{{ f.p }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p style="font-size:.8rem;color:var(--muted,#6b7280);margin-top:.5rem;">Nota: Proyección basada en datos actuales.</p>
+        </div>
+    </div>
+
+    <section class="reporte-chart-section" aria-label="Histórico y proyección de importe">
+        <h3 class="reporte-chart-heading">Importe: histórico y proyección (S/)</h3>
+        <div class="chart-inner"><canvas id="chartMesValor"></canvas></div>
+    </section>
+
+    <section class="reporte-chart-section" aria-label="Histórico y proyección de unidades">
+        <h3 class="reporte-chart-heading">Unidades: histórico y proyección</h3>
+        <div class="chart-inner"><canvas id="chartMesCant"></canvas></div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/chart_reporte_datalabels.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/reporte_pdf.js"></script>
+<script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
+<script>
+(function () {
+    var d = {{ chart | tojson }};
+    var legCol = typeof reporteChartLegendColor === 'function' ? reporteChartLegendColor() : '#1e293b';
+    var anim = window.reporteChartAnimate || {};
+    var pe = function (v, dec) { return (v != null ? v.toLocaleString('es-PE', {minimumFractionDigits: dec||0, maximumFractionDigits: dec||0}) : ''); };
+    var ps = d.proj_start;
+
+    function lineChart(canvasId, serie, label, unidad, color) {
+        var ctx = document.getElementById(canvasId);
+        if (!ctx || !d.labels) return;
+        // color por punto: azul histórico, naranja proyección
+        var ptColors = serie.map(function (_, i) { return i >= ps ? 'rgba(217,119,6,1)' : color; });
+        new Chart(ctx, {
+            type: 'line',
+            data: { labels: d.labels, datasets: [{
+                label: label, data: serie,
+                borderColor: color, backgroundColor: 'rgba(37,99,235,0.10)',
+                borderWidth: 2, tension: 0.25, fill: true,
+                pointRadius: 4, pointBackgroundColor: ptColors, pointBorderColor: ptColors,
+                segment: { borderDash: function (c) { return c.p0DataIndex >= ps - 1 ? [6, 4] : undefined; },
+                           borderColor: function (c) { return c.p0DataIndex >= ps - 1 ? 'rgba(217,119,6,1)' : color; } },
+            }] },
+            options: Object.assign({}, anim, {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: legCol, boxWidth: 14 } },
+                    tooltip: { callbacks: { label: function (x) { var t = x.dataIndex >= ps ? 'Proyección: ' : 'Real: '; return t + pe(x.parsed.y, unidad === 'S/' ? 2 : 0) + (unidad === 'S/' ? '' : ' u'); } } },
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                    y: { ticks: { color: '#94a3b8', callback: function (v) { return (unidad === 'S/' ? 'S/ ' : '') + pe(v); } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                },
+            }),
+        });
+    }
+
+    function build() {
+        if (!window.Chart) return;
+        lineChart('chartMesValor', d.valor, 'Importe S/', 'S/', 'rgba(37,99,235,1)');
+        lineChart('chartMesCant', d.cantidad, 'Unidades', 'u', 'rgba(5,150,105,1)');
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
+    else build();
+})();
+</script>
+{% endblock %}

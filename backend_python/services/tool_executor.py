@@ -1767,9 +1767,22 @@ class ToolExecutor:
             filtros['nombre_cliente'] = nombre_cliente
         if cod_item:
             filtros['cod_item'] = cod_item
+
+        _rep_qp = {'fecha_desde': str(d1), 'fecha_hasta': str(d2), 'meses_a_proyectar': meses}
+        if linea:
+            _rep_qp['linea_comercial'] = linea
+        if provincia:
+            _rep_qp['provincia'] = provincia
+        if nombre_cliente:
+            _rep_qp['nombre_cliente'] = nombre_cliente
+        if cod_item:
+            _rep_qp['cod_item'] = cod_item
+        reporte_url = '/modules/reports/proyeccion-mensual?' + urlencode(_rep_qp)
+
         return {
             'tabla': 'ventasgeneral2',
             'tipo': 'proyeccion_ventas',
+            'reporte_url': reporte_url,
             'metodo_proyeccion': metodo,
             'periodo_historico': {'desde': d1, 'hasta': d2},
             'meses_historicos': n,

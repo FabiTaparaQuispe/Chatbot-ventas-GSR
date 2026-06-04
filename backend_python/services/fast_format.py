@@ -492,8 +492,30 @@ def _fmt_proyeccion_ventas(result):
     return '\n'.join(lines)
 
 
+def _fmt_proyeccion_ventas(result):
+    proy = result.get('proyecciones')
+    if not isinstance(proy, list) or not proy:
+        return None
+    lineas = ["Proyección:", "",
+              "| Mes | Valor (S/) | Unidades | Peso prom (kg/u) | Peso total (kg) |",
+              "| --- | ---: | ---: | ---: | ---: |"]
+    for p in proy:
+        valor = format(float(p.get('valor_proyectado', 0) or 0), ',.2f')
+        pprom = format(float(p.get('peso_prom_proyectado', 0) or 0), ',.2f')
+        lineas.append(
+            f"| {p.get('mes', '')} | {valor} | {_n(p.get('cantidad_proyectada', 0))} "
+            f"| {pprom} | {_n(p.get('peso_total_proyectado', 0))} |"
+        )
+    url = _url(result)
+    if url:
+        lineas.append(f"\n{url}")
+    lineas += ["", "Nota: Proyección basada en datos actuales."]
+    return "\n".join(lineas)
+
+
 _FORMATTERS = {
     'ventasgeneral_proyeccion_dia':           _fmt_proyeccion_dia,
+    'ventasgeneral_proyeccion_ventas':        _fmt_proyeccion_ventas,
     'ventasgeneral_proyeccion_ventas':        _fmt_proyeccion_ventas,
     'ventasgeneral_top_clientes_globales':    _fmt_top_clientes_global,
     'ventasgeneral_top_clientes_zona_precio': _fmt_top_clientes_zona,
