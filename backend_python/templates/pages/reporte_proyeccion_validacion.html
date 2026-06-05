@@ -1,0 +1,131 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+    <h1>Validación de la proyección — proyectado vs. real</h1>
+    <p class="page-lead">
+        Aplicamos el método a meses pasados y lo comparamos con lo que realmente se vendió.
+        {% if linea %} · Línea: <strong>{{ linea }}</strong>{% endif %}
+        {% if provincia %} · Provincia: <strong>{{ provincia }}</strong>{% endif %}
+        {% if cliente %} · Cliente: <strong>{{ cliente }}</strong>{% endif %}
+        {% if producto %} · Producto (ítem): <strong>{{ producto }}</strong>{% endif %}
+    </p>
+</div>
+
+<div class="reporte-page">
+    {% if n == 0 %}
+    <div class="card-filtros-demo reporte-informe-panel">
+        <p style="color:var(--muted);padding:1rem;">No hay suficiente historial para validar. Se necesitan al menos <strong>2 años</strong> de datos del mismo mes para comparar proyección vs. real.</p>
+    </div>
+    {% else %}
+    <div class="card-filtros-demo reporte-informe-panel">
+        <div class="reporte-informe-toolbar">
+            <button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button>
+        </div>
+        <div id="reporte-pdf-root">
+            <h2 class="reporte-informe-title">Precisión del método ({{ n }} meses evaluados)</h2>
+
+            <div style="display:flex;flex-wrap:wrap;gap:1rem;margin:1rem 0 1.25rem;">
+                <div style="flex:1;min-width:220px;border:1px solid var(--border,#e2e8f0);border-radius:.75rem;padding:1rem 1.25rem;">
+                    <div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#6b7280);font-weight:700;">Acierto en UNIDADES</div>
+                    <div style="font-size:1.7rem;font-weight:800;color:#059669;">{{ acc_u }}%</div>
+                </div>
+                <div style="flex:1;min-width:220px;border:1px solid var(--border,#e2e8f0);border-radius:.75rem;padding:1rem 1.25rem;">
+                    <div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#6b7280);font-weight:700;">Acierto en KILOS</div>
+                    <div style="font-size:1.7rem;font-weight:800;color:#d97706;">{{ acc_kg }}%</div>
+                </div>
+            </div>
+
+            <div class="table-wrapper overflow-x-auto productos-dt-skin">
+                <table class="data-table config-table display stripe rct-auto">
+                    <thead>
+                        <tr>
+                            <th>Mes</th>
+                            <th style="text-align:right;">Unid. reales</th>
+                            <th style="text-align:right;">Unid. proyectadas</th>
+                            <th style="text-align:right;">Error</th>
+                            <th style="text-align:right;">KG reales</th>
+                            <th style="text-align:right;">KG proyectados</th>
+                            <th style="text-align:right;">Error</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in filas %}
+                        <tr>
+                            <td style="font-weight:600;">{{ f.mes }}</td>
+                            <td style="text-align:right;">{{ f.u_real }}</td>
+                            <td style="text-align:right;">{{ f.u_proy }}</td>
+                            <td style="text-align:right;color:{% if f.err_u|float <= 8 %}#059669{% else %}#dc2626{% endif %};">{{ f.err_u }}%</td>
+                            <td style="text-align:right;">{{ f.kg_real }}</td>
+                            <td style="text-align:right;">{{ f.kg_proy }}</td>
+                            <td style="text-align:right;color:{% if f.err_kg|float <= 10 %}#059669{% else %}#dc2626{% endif %};">{{ f.err_kg }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p style="font-size:.8rem;color:var(--muted,#6b7280);margin-top:.5rem;">"Proyectado" = lo que el método habría estimado para ese mes usando solo años anteriores. El volumen (unidades/kilos) es lo confiable; los soles dependen del precio de mercado.</p>
+        </div>
+    </div>
+
+    <section class="reporte-chart-section" aria-label="Unidades proyectadas vs reales">
+        <h3 class="reporte-chart-heading">Unidades: proyectado vs. real</h3>
+        <div class="chart-inner"><canvas id="chartValU"></canvas></div>
+    </section>
+
+    <section class="reporte-chart-section" aria-label="Kilos proyectados vs reales">
+        <h3 class="reporte-chart-heading">Kilos: proyectado vs. real</h3>
+        <div class="chart-inner"><canvas id="chartValKg"></canvas></div>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+{% if n > 0 %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/chart_reporte_datalabels.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/reporte_pdf.js"></script>
+<script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
+<script>
+(function () {
+    var d = {{ chart | tojson }};
+    var legCol = typeof reporteChartLegendColor === 'function' ? reporteChartLegendColor() : '#1e293b';
+    var anim = window.reporteChartAnimate || {};
+    var pe = function (v) { return (v != null ? v.toLocaleString('es-PE') : ''); };
+
+    function pareja(canvasId, real, proy, unidad) {
+        var ctx = document.getElementById(canvasId);
+        if (!ctx || !d.labels) return;
+        new Chart(ctx, {
+            type: 'line',
+            data: { labels: d.labels, datasets: [
+                { label: 'Real', data: real, borderColor: 'rgba(37,99,235,1)', backgroundColor: 'rgba(37,99,235,0.10)', borderWidth: 2, tension: 0.25, pointRadius: 3, fill: false },
+                { label: 'Proyectado', data: proy, borderColor: 'rgba(217,119,6,1)', borderDash: [6,4], borderWidth: 2, tension: 0.25, pointRadius: 3, fill: false },
+            ] },
+            options: Object.assign({}, anim, {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { labels: { color: legCol, boxWidth: 14 } },
+                    tooltip: { callbacks: { label: function (x) { return x.dataset.label + ': ' + pe(x.parsed.y) + ' ' + unidad; } } },
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                    y: { ticks: { color: '#94a3b8', callback: function (v) { return pe(v); } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                },
+            }),
+        });
+    }
+
+    function build() {
+        if (!window.Chart) return;
+        pareja('chartValU', d.real_u, d.proy_u, 'u');
+        pareja('chartValKg', d.real_kg, d.proy_kg, 'kg');
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
+    else build();
+})();
+</script>
+{% endif %}
+{% endblock %}

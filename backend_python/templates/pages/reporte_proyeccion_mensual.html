@@ -15,6 +15,8 @@
     <div class="card-filtros-demo reporte-informe-panel">
         <div class="reporte-informe-toolbar">
             <button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button>
+            <a class="btn" style="background:#0ea5e9;color:#fff;margin-left:.5rem;text-decoration:none;"
+               href="/modules/reports/proyeccion-validacion?linea_comercial={{ linea|urlencode }}&provincia={{ provincia|urlencode }}&nombre_cliente={{ (cliente or '')|urlencode }}&cod_item={{ (producto or '')|urlencode }}">📊 Validar método (proyectado vs real)</a>
         </div>
         <div id="reporte-pdf-root">
             <h2 class="reporte-informe-title">Meses proyectados</h2>

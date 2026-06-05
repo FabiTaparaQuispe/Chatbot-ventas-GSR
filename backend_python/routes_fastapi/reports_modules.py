@@ -863,6 +863,91 @@ def ventas_proyeccion_mensual(request: Request):
     return _tmpl(request, 'pages/reporte_proyeccion_mensual.html', ctx)
 
 
+@router.get('/modules/reports/proyeccion-validacion')
+def ventas_proyeccion_validacion(request: Request):
+    """Backtest: aplica el método de proyección (promedio del mismo mes en años
+    previos) a meses pasados y lo compara contra lo real. Muestra el % de acierto
+    en kilos y unidades — para validar que la proyección de volumen es confiable."""
+    if err := _require_login(request):
+        return err
+    linea = _q(request, 'linea_comercial')
+    provincia = _q(request, 'provincia')
+    nombre_cliente = _q(request, 'nombre_cliente')
+    cod_item = _q(request, 'cod_item')
+    try:
+        nmeses = max(3, min(24, int(_q(request, 'meses') or '12')))
+    except ValueError:
+        nmeses = 12
+
+    conn = get_connection()
+    extra = ''
+    p: dict = {}
+    if linea:
+        lw, lb = linea_where_fragment(conn, linea, style='pyformat')
+        extra += lw
+        p.update(lb)
+    if provincia:
+        extra += " AND Provincia LIKE %(prov)s"
+        p['prov'] = f'%{provincia}%'
+    if nombre_cliente:
+        extra += " AND NombreCliente LIKE %(ncli)s"
+        p['ncli'] = f'%{nombre_cliente}%'
+    if cod_item:
+        extra += " AND CodigoItem = %(coditem)s"
+        p['coditem'] = cod_item
+
+    sql = ("SELECT DATE_FORMAT(FechaContable, '%%Y-%%m') AS mes,"
+           " COALESCE(SUM(Cantidad),0) AS u, COALESCE(SUM(Peso),0) AS kg,"
+           " COALESCE(SUM(Valor),0) AS v"
+           " FROM ventasgeneral2 WHERE CodigoDocumento IN ('01','03')" + extra +
+           " GROUP BY DATE_FORMAT(FechaContable, '%%Y-%%m') ORDER BY mes")
+    with conn.cursor() as cur:
+        cur.execute(sql, p)
+        rows = cur.fetchall() or []
+    H = {str(r['mes']): (float(r['u'] or 0), float(r['kg'] or 0), float(r['v'] or 0)) for r in rows}
+
+    def pred(ym, idx):
+        mm, yy = ym[5:7], int(ym[:4])
+        prev = [H[k][idx] for k in H if k[5:7] == mm and int(k[:4]) < yy]
+        return sum(prev) / len(prev) if prev else None
+
+    filas, errk, erru = [], [], []
+    labels, real_kg, proy_kg, real_u, proy_u = [], [], [], [], []
+    for ym in sorted(H):
+        pk, pu = pred(ym, 1), pred(ym, 0)
+        u, kg, v = H[ym]
+        if pk is None or kg <= 0 or u <= 0:
+            continue
+        ek = abs(kg - pk) / kg * 100
+        eu = abs(u - pu) / u * 100
+        filas.append({'mes': ym, 'kg_real': f'{kg:,.0f}', 'kg_proy': f'{pk:,.0f}', 'err_kg': f'{ek:.1f}',
+                      'u_real': f'{u:,.0f}', 'u_proy': f'{pu:,.0f}', 'err_u': f'{eu:.1f}'})
+        errk.append(ek); erru.append(eu)
+        labels.append(ym); real_kg.append(round(kg)); proy_kg.append(round(pk))
+        real_u.append(round(u)); proy_u.append(round(pu))
+
+    filas, errk, erru = filas[-nmeses:], errk[-nmeses:], erru[-nmeses:]
+    labels, real_kg, proy_kg = labels[-nmeses:], real_kg[-nmeses:], proy_kg[-nmeses:]
+    real_u, proy_u = real_u[-nmeses:], proy_u[-nmeses:]
+    acc_kg = round(100 - sum(errk) / len(errk), 1) if errk else 0.0
+    acc_u = round(100 - sum(erru) / len(erru), 1) if erru else 0.0
+
+    titulo = 'Validación de la proyección — proyectado vs. real'
+    if linea:
+        titulo += f' · {linea}'
+    if nombre_cliente:
+        titulo += f' · {nombre_cliente}'
+    ctx = _report_ctx(request, titulo)
+    ctx.update({
+        'linea': linea, 'provincia': provincia, 'cliente': nombre_cliente, 'producto': cod_item,
+        'filas': filas, 'acc_kg': acc_kg, 'acc_u': acc_u, 'n': len(filas),
+        'pdf_filename': 'validacion_proyeccion.pdf',
+        'chart': {'labels': labels, 'real_kg': real_kg, 'proy_kg': proy_kg,
+                  'real_u': real_u, 'proy_u': proy_u},
+    })
+    return _tmpl(request, 'pages/reporte_proyeccion_validacion.html', ctx)
+
+
 @router.get('/modules/reports/ventas-mix-tdoc')
 def ventas_mix_tdoc(request: Request):
     if err := _require_login(request):
