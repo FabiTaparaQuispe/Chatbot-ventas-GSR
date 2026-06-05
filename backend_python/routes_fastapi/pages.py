@@ -20,6 +20,7 @@ from services.historial_data import (
     estado_respuesta,
     fetch_efectividad_stats,
     fetch_efectividad_por_mes,
+    fetch_historial_anios,
     fetch_historial_rows,
     fetch_historial_usernames,
     historial_preview,
@@ -165,23 +166,40 @@ async def _render_index(request: Request, page: str) -> HTMLResponse:
     }
 
     if page == 'historial_preguntas':
+        import datetime as _dt
         f_desde = request.query_params.get('fecha_desde', '').strip()
         f_hasta = request.query_params.get('fecha_hasta', '').strip()
         f_user = request.query_params.get('usuario', '').strip()
         f_feedback = request.query_params.get('feedback', '').strip().lower()
         if f_feedback not in ('buenos', 'malos', 'sin_voto', 'fallos'):
             f_feedback = ''
-        filtros_activos = bool(f_desde or f_hasta or f_user or f_feedback)
+        # Filtro por año — por defecto el año actual. 'todos' = sin filtro de año.
+        f_anio = request.query_params.get('anio', '').strip()
+        if not f_anio:
+            f_anio = str(_dt.date.today().year)
+        # Rango efectivo: las fechas explícitas mandan; si no, el año seleccionado.
+        if f_desde or f_hasta:
+            ef_desde, ef_hasta = f_desde or None, f_hasta or None
+        elif f_anio != 'todos':
+            ef_desde, ef_hasta = f'{f_anio}-01-01', f'{f_anio}-12-31'
+        else:
+            ef_desde, ef_hasta = None, None
+        filtros_activos = bool(f_desde or f_hasta or f_user or f_feedback or f_anio != 'todos')
 
         def _fetch_historial():
             conn = get_connection()
             usernames, _ = fetch_historial_usernames(conn)
-            rows, db_err = fetch_historial_rows(conn, fecha_desde=f_desde or None,
-                                                fecha_hasta=f_hasta or None, username=f_user or None,
+            anios = fetch_historial_anios(conn)
+            rows, db_err = fetch_historial_rows(conn, fecha_desde=ef_desde,
+                                                fecha_hasta=ef_hasta, username=f_user or None,
                                                 feedback=f_feedback or None)
-            return usernames, rows, db_err
+            return usernames, anios, rows, db_err
 
-        usernames, rows, db_err = await asyncio.to_thread(_fetch_historial)
+        usernames, historial_anios, rows, db_err = await asyncio.to_thread(_fetch_historial)
+        # asegurar que el año actual esté disponible para seleccionar
+        _ya = str(_dt.date.today().year)
+        if _ya not in historial_anios:
+            historial_anios = [_ya] + historial_anios
         historial_filter_msg = ''
         if db_err and is_historial_filter_validation_error(db_err):
             historial_filter_msg = db_err
@@ -192,8 +210,8 @@ async def _render_index(request: Request, page: str) -> HTMLResponse:
         def _fetch_ef():
             conn = get_connection()
             return (
-                fetch_efectividad_stats(conn, fecha_desde=f_desde or None, fecha_hasta=f_hasta or None),
-                fetch_efectividad_por_mes(conn, fecha_desde=f_desde or None, fecha_hasta=f_hasta or None),
+                fetch_efectividad_stats(conn, fecha_desde=ef_desde, fecha_hasta=ef_hasta),
+                fetch_efectividad_por_mes(conn, fecha_desde=ef_desde, fecha_hasta=ef_hasta),
             )
 
         ef, ef_por_mes = await asyncio.to_thread(_fetch_ef)
@@ -216,6 +234,7 @@ async def _render_index(request: Request, page: str) -> HTMLResponse:
             'historial_usernames': usernames, 'filtro_fecha_desde': f_desde,
             'filtro_fecha_hasta': f_hasta, 'filtro_usuario': f_user,
             'filtro_feedback': f_feedback,
+            'filtro_anio': f_anio, 'historial_anios': historial_anios,
             'filtros_activos': filtros_activos, 'historial_filter_msg': historial_filter_msg,
         })
     elif page == 'usuarios':

@@ -203,6 +203,19 @@ def fetch_historial_usernames(conn) -> tuple[list[str], str]:
         return [], ""
 
 
+def fetch_historial_anios(conn) -> list[str]:
+    """Años (YYYY) con preguntas registradas, de más reciente a más antiguo."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT DISTINCT YEAR(created_at) AS y FROM app_chat_messages "
+                "WHERE role = 'assistant' AND created_at IS NOT NULL ORDER BY y DESC"
+            )
+            return [str(r["y"]) for r in (cur.fetchall() or []) if r.get("y")]
+    except Exception:
+        return []
+
+
 def build_stats(rows: list[dict[str, Any]]) -> dict[str, int]:
     conteos: dict[str, int] = {nombre: 0 for nombre, _ in _CATEGORIAS}
     conteos["Otras"] = 0

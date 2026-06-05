@@ -313,6 +313,15 @@
             <div class="hp-filters-title">Filtros</div>
             <div class="hp-filters-fields">
                 <div class="hp-filters-field">
+                    <label for="hp-f-anio">Año</label>
+                    <select id="hp-f-anio" name="anio">
+                        {% for y in historial_anios %}
+                        <option value="{{ y }}" {% if filtro_anio == y %}selected{% endif %}>{{ y }}</option>
+                        {% endfor %}
+                        <option value="todos" {% if filtro_anio == 'todos' %}selected{% endif %}>Todos los años</option>
+                    </select>
+                </div>
+                <div class="hp-filters-field">
                     <label for="hp-f-desde">Fecha desde</label>
                     <input type="date" id="hp-f-desde" name="fecha_desde" value="{{ filtro_fecha_desde|e }}" autocomplete="off">
                 </div>
