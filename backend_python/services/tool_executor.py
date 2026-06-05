@@ -1707,6 +1707,12 @@ class ToolExecutor:
         pref_z = str(args.get('prefijo_descri_zona_precio') or '').strip().upper()
         nombre_cliente = str(args.get('nombre_cliente') or '').strip()
         cod_item = str(args.get('cod_item') or '').strip()
+        try:
+            precio_kg = float(str(args.get('precio_kg') or '').replace(',', '.'))
+        except (TypeError, ValueError):
+            precio_kg = 0.0
+        if precio_kg < 0:
+            precio_kg = 0.0
 
         sql = ("SELECT DATE_FORMAT(FechaContable, '%%Y-%%m') AS mes,"
                " COALESCE(SUM(Valor),0) AS suma_valor,"
@@ -1746,6 +1752,10 @@ class ToolExecutor:
             )
 
         proyecciones, meta = self._proyectar_media_movil_estacional(filas, meses)
+        if precio_kg > 0:
+            # Soles a precio fijado por el usuario: valor = peso_total × precio_kg.
+            for _pm in proyecciones:
+                _pm['valor_proyectado'] = round(max(0.0, _pm.get('peso_total_proyectado', 0.0)) * precio_kg, 2)
         n = len(filas)
         anos = meta.get('anos_historicos') or []
         metodo = meta.get('metodo') or 'media_movil_estacional'
@@ -1777,12 +1787,15 @@ class ToolExecutor:
             _rep_qp['nombre_cliente'] = nombre_cliente
         if cod_item:
             _rep_qp['cod_item'] = cod_item
+        if precio_kg > 0:
+            _rep_qp['precio_kg'] = precio_kg
         reporte_url = '/modules/reports/proyeccion-mensual?' + urlencode(_rep_qp)
 
         return {
             'tabla': 'ventasgeneral2',
             'tipo': 'proyeccion_ventas',
             'reporte_url': reporte_url,
+            'precio_kg_usado': precio_kg if precio_kg > 0 else None,
             'metodo_proyeccion': metodo,
             'periodo_historico': {'desde': d1, 'hasta': d2},
             'meses_historicos': n,
@@ -1829,6 +1842,12 @@ class ToolExecutor:
         pref_z = str(args.get('prefijo_descri_zona_precio') or '').strip().upper()
         nombre_cliente = str(args.get('nombre_cliente') or '').strip()
         cod_item = str(args.get('cod_item') or '').strip()
+        try:
+            precio_kg = float(str(args.get('precio_kg') or '').replace(',', '.'))
+        except (TypeError, ValueError):
+            precio_kg = 0.0
+        if precio_kg < 0:
+            precio_kg = 0.0
 
         # Totales diarios históricos para promediar por día de semana.
         dias_hist = semanas * 7 + 7
@@ -1899,6 +1918,8 @@ class ToolExecutor:
         while d <= fin:
             dow = (d.weekday() + 1) % 7 + 1
             v, c, p = prom_dow.get(dow, fb)
+            if precio_kg > 0:
+                v = p * precio_kg   # soles a precio fijado por el usuario
             tot_v += v
             tot_c += c
             tot_p += p
@@ -1929,12 +1950,15 @@ class ToolExecutor:
             _rep_qp['nombre_cliente'] = nombre_cliente
         if cod_item:
             _rep_qp['cod_item'] = cod_item
+        if precio_kg > 0:
+            _rep_qp['precio_kg'] = precio_kg
         reporte_url = '/modules/reports/proyeccion?' + urlencode(_rep_qp)
 
         return {
             'tabla': 'ventasgeneral2',
             'tipo': 'proyeccion_dia',
             'reporte_url': reporte_url,
+            'precio_kg_usado': precio_kg if precio_kg > 0 else None,
             'escala': escala,
             'fecha_inicio': inicio.isoformat(),
             'fecha_fin': fin.isoformat(),

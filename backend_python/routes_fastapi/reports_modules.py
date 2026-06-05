@@ -667,6 +667,12 @@ def ventas_proyeccion(request: Request):
     provincia = _q(request, 'provincia')
     nombre_cliente = _q(request, 'nombre_cliente')
     cod_item = _q(request, 'cod_item')
+    try:
+        precio_kg = float((_q(request, 'precio_kg') or '0').replace(',', '.'))
+    except ValueError:
+        precio_kg = 0.0
+    if precio_kg < 0:
+        precio_kg = 0.0
 
     conn = get_connection()
     extra = ''
@@ -720,6 +726,8 @@ def ventas_proyeccion(request: Request):
     while d <= fin:
         dow = (d.weekday() + 1) % 7 + 1
         v, c, p = prom.get(dow, fb)
+        if precio_kg > 0:
+            v = p * precio_kg
         tv += v; tc += c; tp += p
         detalle.append({'fecha': d.isoformat(), 'dia': nombres[dow],
                         'v': f'{v:,.2f}', 'c': f'{c:,.0f}', 'p': f'{p:,.0f}'})
@@ -781,6 +789,12 @@ def ventas_proyeccion_mensual(request: Request):
     provincia = _q(request, 'provincia')
     nombre_cliente = _q(request, 'nombre_cliente')
     cod_item = _q(request, 'cod_item')
+    try:
+        precio_kg = float((_q(request, 'precio_kg') or '0').replace(',', '.'))
+    except ValueError:
+        precio_kg = 0.0
+    if precio_kg < 0:
+        precio_kg = 0.0
 
     conn = get_connection()
     extra = ''
@@ -813,6 +827,9 @@ def ventas_proyeccion_mensual(request: Request):
         return _bad('Se necesitan al menos 2 meses de historial para proyectar.')
 
     proyecciones, _meta = ToolExecutor._proyectar_media_movil_estacional(filas, meses)
+    if precio_kg > 0:
+        for _pm in proyecciones:
+            _pm['valor_proyectado'] = round(max(0.0, _pm.get('peso_total_proyectado', 0.0)) * precio_kg, 2)
 
     hist = filas[-12:]
     labels = [str(f['mes']) for f in hist] + [str(p2['mes']) for p2 in proyecciones]

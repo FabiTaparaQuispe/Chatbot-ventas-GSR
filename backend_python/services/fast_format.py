@@ -463,6 +463,9 @@ def _fmt_proyeccion_dia(result):
         lineas.append(f"- Cantidad: {_n(cantidad)} unidades")
     if peso is not None:
         lineas.append(f"- Peso: {_n(peso)} kg")
+    precio = result.get('precio_kg_usado')
+    if precio:
+        lineas.append(f"  (importe calculado a S/ {float(precio):,.2f} por kg sobre el peso proyectado)")
     url = _url(result)
     if url:
         lineas.append(f"\n{url}")
@@ -506,6 +509,9 @@ def _fmt_proyeccion_ventas(result):
             f"| {p.get('mes', '')} | {valor} | {_n(p.get('cantidad_proyectada', 0))} "
             f"| {pprom} | {_n(p.get('peso_total_proyectado', 0))} |"
         )
+    precio = result.get('precio_kg_usado')
+    if precio:
+        lineas.append(f"\n(importe calculado a S/ {float(precio):,.2f} por kg sobre el peso proyectado)")
     url = _url(result)
     if url:
         lineas.append(f"\n{url}")

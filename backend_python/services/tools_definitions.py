@@ -235,6 +235,7 @@ def ventas_tool_definitions():
                 'prefijo_descri_zona_precio': pref,
                 'nombre_cliente': {'type': 'string', 'description': 'Filtrar por un cliente (NombreCliente LIKE), ej. "QUISPE VARGAS VICTOR"'},
                 'cod_item': {'type': 'string', 'description': 'Filtrar por un producto/ítem (CodigoItem), ej. "100"'},
+                'precio_kg': {'type': 'number', 'description': 'PRECIO por kg (S/) fijado por el usuario. Si se indica ("a S/ X el kg", "calcula los soles a X"), los soles = peso proyectado × este precio (en vez del valor histórico). Útil para precios variables.'},
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},
         {'type': 'function', 'function': {
@@ -263,6 +264,7 @@ def ventas_tool_definitions():
                 'prefijo_descri_zona_precio': pref,
                 'nombre_cliente': {'type': 'string', 'description': 'Filtrar por un cliente (NombreCliente LIKE), ej. "QUISPE VARGAS VICTOR"'},
                 'cod_item': {'type': 'string', 'description': 'Filtrar por un producto/ítem (CodigoItem), ej. "100"'},
+                'precio_kg': {'type': 'number', 'description': 'PRECIO por kg (S/) fijado por el usuario. Si se indica ("a S/ X el kg"), los soles = peso proyectado × este precio (en vez del valor histórico). Útil para precios variables.'},
                 'semanas': {'type': 'integer', 'default': 8, 'description': 'Semanas de historial a promediar (2-26)'},
             }},
         }},
