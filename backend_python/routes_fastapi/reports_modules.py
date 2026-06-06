@@ -911,9 +911,16 @@ def ventas_proyeccion_validacion(request: Request):
         prev = [H[k][idx] for k in H if k[5:7] == mm and int(k[:4]) < yy]
         return sum(prev) / len(prev) if prev else None
 
+    # Excluir el mes en curso: está incompleto y compararlo contra un mes
+    # completo proyectado daría un "error" falso enorme.
+    import datetime as _dt
+    _cur_ym = _dt.date.today().strftime('%Y-%m')
+
     filas, errk, erru = [], [], []
     labels, real_kg, proy_kg, real_u, proy_u = [], [], [], [], []
     for ym in sorted(H):
+        if ym >= _cur_ym:
+            continue
         pk, pu = pred(ym, 1), pred(ym, 0)
         u, kg, v = H[ym]
         if pk is None or kg <= 0 or u <= 0:
