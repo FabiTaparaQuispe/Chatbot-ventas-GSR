@@ -91,7 +91,7 @@ def _report_ctx(request: Request, page_title: str) -> dict[str, Any]:
         'page': 'reporte', 'page_title': page_title,
         'app_name': APP_NAME, 'app_company': APP_COMPANY,
         'load_ventas_assets': False, 'load_listado_skin': True,
-        'skip_floating_chat': False, 'body_class': '',
+        'skip_floating_chat': False, 'body_class': 'app-page-reporte-wide',
         'role': role, 'usuario': usuario,
         'display_name': str(request.session.get('display_name') or ''),
         'nom_corto': '', 'roles_ventas_general': ROLES_VENTAS_GENERAL,

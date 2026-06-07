@@ -148,7 +148,8 @@ async def _render_index(request: Request, page: str) -> HTMLResponse:
         'load_listado_skin': page in ('usuarios', 'gestion_usuarios'),
         'skip_floating_chat': page == 'chatbot',
         'body_class': ('app-page-chatbot' if page == 'chatbot'
-                       else ('app-page-historial-chat' if page == 'historial_preguntas' else '')),
+                       else ('app-page-historial-chat' if page == 'historial_preguntas'
+                       else ('app-page-ventas' if page in ('ventas', 'ventasgeneral2') else ''))),
         'role': role,
         'usuario': usuario,
         'display_name': request.session.get('display_name', ''),

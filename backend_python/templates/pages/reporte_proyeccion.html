@@ -19,21 +19,35 @@
             <a class="btn" style="background:#0ea5e9;color:#fff;margin-left:.5rem;text-decoration:none;"
                href="/modules/reports/proyeccion-validacion?linea_comercial={{ linea|urlencode }}&provincia={{ provincia|urlencode }}&nombre_cliente={{ (cliente or '')|urlencode }}&cod_item={{ (producto or '')|urlencode }}">📊 Validar método (proyectado vs real)</a>
         </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:1rem;align-items:flex-end;margin:.5rem 0 1rem;padding:.85rem 1rem;background:var(--surface-2,#f8fafc);border:1px solid var(--border,#e2e8f0);border-radius:.6rem;">
+            <div>
+                <label for="ctrlPrecio" style="display:block;font-size:.72rem;font-weight:600;color:var(--muted,#64748b);margin-bottom:.3rem;">Precio S/ por kg (simular)</label>
+                <input type="number" id="ctrlPrecio" step="0.01" min="0" placeholder="auto" style="width:9rem;padding:.45rem .6rem;border:1px solid var(--border,#cbd5e1);border-radius:.5rem;background:var(--input-bg,#fff);color:inherit;">
+            </div>
+            <div>
+                <label for="ctrlVol" style="display:block;font-size:.72rem;font-weight:600;color:var(--muted,#64748b);margin-bottom:.3rem;">Ajuste de volumen %</label>
+                <input type="number" id="ctrlVol" step="1" value="0" style="width:9rem;padding:.45rem .6rem;border:1px solid var(--border,#cbd5e1);border-radius:.5rem;background:var(--input-bg,#fff);color:inherit;">
+            </div>
+            <button type="button" id="ctrlReset" class="btn" style="background:#6b7280;color:#fff;">Restablecer</button>
+            <div style="font-size:.78rem;color:var(--muted,#6b7280);max-width:24rem;">Pon un <strong>precio</strong> (soles = peso × precio) o ajusta el <strong>volumen ±%</strong> para simular escenarios. Tarjetas, tabla y gráficas se actualizan al instante.</div>
+        </div>
+
         <div id="reporte-pdf-root">
             <h2 class="reporte-informe-title">Resumen proyectado del período</h2>
 
             <div style="display:flex;flex-wrap:wrap;gap:1rem;margin:1rem 0 1.25rem;">
                 <div style="flex:1;min-width:200px;border:1px solid var(--border,#e2e8f0);border-radius:.75rem;padding:1rem 1.25rem;">
                     <div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#6b7280);font-weight:700;">Importe proyectado</div>
-                    <div style="font-size:1.5rem;font-weight:800;color:#2563eb;">S/ {{ tot_v }}</div>
+                    <div style="font-size:1.5rem;font-weight:800;color:#2563eb;" id="kpiImporte">S/ {{ tot_v }}</div>
                 </div>
                 <div style="flex:1;min-width:200px;border:1px solid var(--border,#e2e8f0);border-radius:.75rem;padding:1rem 1.25rem;">
                     <div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#6b7280);font-weight:700;">Cantidad proyectada</div>
-                    <div style="font-size:1.5rem;font-weight:800;color:#059669;">{{ tot_c }} <span style="font-size:.9rem;font-weight:600;">unidades</span></div>
+                    <div style="font-size:1.5rem;font-weight:800;color:#059669;"><span id="kpiCant">{{ tot_c }}</span> <span style="font-size:.9rem;font-weight:600;">unidades</span></div>
                 </div>
                 <div style="flex:1;min-width:200px;border:1px solid var(--border,#e2e8f0);border-radius:.75rem;padding:1rem 1.25rem;">
                     <div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#6b7280);font-weight:700;">Peso proyectado</div>
-                    <div style="font-size:1.5rem;font-weight:800;color:#d97706;">{{ tot_p }} <span style="font-size:.9rem;font-weight:600;">kg</span></div>
+                    <div style="font-size:1.5rem;font-weight:800;color:#d97706;"><span id="kpiPeso">{{ tot_p }}</span> <span style="font-size:.9rem;font-weight:600;">kg</span></div>
                 </div>
             </div>
 
@@ -53,9 +67,9 @@
                         <tr>
                             <td>{{ f.fecha }}</td>
                             <td>{{ f.dia }}</td>
-                            <td style="text-align:right;">{{ f.v }}</td>
-                            <td style="text-align:right;">{{ f.c }}</td>
-                            <td style="text-align:right;">{{ f.p }}</td>
+                            <td style="text-align:right;" class="js-v">{{ f.v }}</td>
+                            <td style="text-align:right;" class="js-c">{{ f.c }}</td>
+                            <td style="text-align:right;" class="js-p">{{ f.p }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -104,12 +118,53 @@
     var anim = window.reporteChartAnimate || {};
     var pe = function (v, dec) { return (v != null ? v.toLocaleString('es-PE', {minimumFractionDigits: dec||0, maximumFractionDigits: dec||0}) : ''); };
 
+    // Datos base inmutables (para recalcular escenarios sin perder el original).
+    var B = { valor: dDia.valor.slice(), cantidad: dDia.cantidad.slice(), peso: dDia.peso.slice() };
+    var histBase = dHist.valor.slice();
+    var ch1, ch2, ch3;
+
+    function recalcular() {
+        var precio = parseFloat((document.getElementById('ctrlPrecio') || {}).value);
+        var vol = parseFloat((document.getElementById('ctrlVol') || {}).value);
+        if (isNaN(vol)) vol = 0;
+        var f = 1 + vol / 100;
+        var usaPrecio = !isNaN(precio) && precio > 0;
+
+        var av = [], ac = [], ap = [], tv = 0, tc = 0, tp = 0;
+        for (var i = 0; i < B.peso.length; i++) {
+            var p = B.peso[i] * f;
+            var c = B.cantidad[i] * f;
+            var v = usaPrecio ? p * precio : B.valor[i] * f;
+            av.push(Math.round(v * 100) / 100); ac.push(Math.round(c)); ap.push(Math.round(p));
+            tv += v; tc += c; tp += p;
+        }
+        // KPIs
+        var k;
+        if ((k = document.getElementById('kpiImporte'))) k.textContent = 'S/ ' + pe(tv, 2);
+        if ((k = document.getElementById('kpiCant'))) k.textContent = pe(Math.round(tc));
+        if ((k = document.getElementById('kpiPeso'))) k.textContent = pe(Math.round(tp));
+        // Tabla
+        var cv = document.querySelectorAll('.js-v'), cc = document.querySelectorAll('.js-c'), cp = document.querySelectorAll('.js-p');
+        for (var j = 0; j < av.length; j++) {
+            if (cv[j]) cv[j].textContent = pe(av[j], 2);
+            if (cc[j]) cc[j].textContent = pe(ac[j]);
+            if (cp[j]) cp[j].textContent = pe(ap[j]);
+        }
+        // Gráficas
+        if (ch1) { ch1.data.datasets[0].data = av; ch1.update(); }
+        if (ch2) { ch2.data.datasets[0].data = ac; ch2.data.datasets[1].data = ap; ch2.update(); }
+        if (ch3) {
+            var hv = histBase.slice();
+            hv[dHist.proj_idx] = Math.round(tv * 100) / 100;  // la barra de proyección
+            ch3.data.datasets[0].data = hv; ch3.update();
+        }
+    }
+
     function build() {
         if (!window.Chart) return;
-
         var c1 = document.getElementById('chartImporteDia');
         if (c1 && dDia.labels) {
-            new Chart(c1, {
+            ch1 = new Chart(c1, {
                 type: 'bar',
                 data: { labels: dDia.labels, datasets: [
                     { label: 'Importe S/', data: dDia.valor, backgroundColor: 'rgba(37,99,235,0.55)', borderColor: 'rgba(37,99,235,1)', borderWidth: 1 },
@@ -130,7 +185,7 @@
 
         var c2 = document.getElementById('chartCantPeso');
         if (c2 && dDia.labels) {
-            new Chart(c2, {
+            ch2 = new Chart(c2, {
                 data: { labels: dDia.labels, datasets: [
                     { type: 'bar', label: 'Cantidad (u)', data: dDia.cantidad, backgroundColor: 'rgba(5,150,105,0.5)', borderColor: 'rgba(5,150,105,1)', borderWidth: 1, yAxisID: 'y' },
                     { type: 'line', label: 'Peso (kg)', data: dDia.peso, borderColor: 'rgba(217,119,6,1)', backgroundColor: 'rgba(217,119,6,0.15)', borderWidth: 2, tension: 0.25, pointRadius: 4, yAxisID: 'y2' },
@@ -154,7 +209,7 @@
         var c3 = document.getElementById('chartHist');
         if (c3 && dHist.labels) {
             var colors = dHist.valor.map(function (_, i) { return i === dHist.proj_idx ? 'rgba(220,38,38,0.7)' : 'rgba(37,99,235,0.5)'; });
-            new Chart(c3, {
+            ch3 = new Chart(c3, {
                 type: 'bar',
                 data: { labels: dHist.labels, datasets: [
                     { label: 'Importe semanal S/', data: dHist.valor, backgroundColor: colors, borderColor: 'rgba(37,99,235,0.9)', borderWidth: 1 },
@@ -172,6 +227,12 @@
                 }),
             });
         }
+
+        // Controles interactivos
+        var ip = document.getElementById('ctrlPrecio'), iv = document.getElementById('ctrlVol'), rb = document.getElementById('ctrlReset');
+        if (ip) ip.addEventListener('input', recalcular);
+        if (iv) iv.addEventListener('input', recalcular);
+        if (rb) rb.addEventListener('click', function () { if (ip) ip.value = ''; if (iv) iv.value = '0'; recalcular(); });
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
     else build();

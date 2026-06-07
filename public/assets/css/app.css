@@ -1234,6 +1234,11 @@ body.app-page-reporte-wide .app-content {
     max-width: none;
 }
 
+/* Ventas general: aprovechar todo el ancho de la pantalla (sin centrar) */
+body.app-page-ventas .app-content {
+    max-width: none;
+}
+
 .app-sidebar-backdrop {
     display: none;
     position: fixed;
