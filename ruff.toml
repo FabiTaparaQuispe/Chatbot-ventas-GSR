@@ -1,0 +1,13 @@
+# Configuración mínima de ruff (lint) para el pre-commit.
+# Solo reglas de ERRORES REALES (bugs), NO de estilo, para no bloquear commits
+# por el código ya existente. Cuando el equipo quiera más limpieza, se puede
+# ampliar `select` poco a poco.
+line-length = 200
+extend-exclude = ["backend_python/venv", "**/__pycache__", "**/migrations"]
+
+[lint]
+# E9  = errores de sintaxis
+# F63 = comparaciones inválidas (ej. usar 'is' con literales)
+# F7  = errores de flujo (ej. 'break' fuera de un bucle)
+# F82 = uso de variables/nombres no definidos  ← atrapa typos peligrosos
+select = ["E9", "F63", "F7", "F82"]

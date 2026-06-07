@@ -1,0 +1,26 @@
+# Capa 1 de la escalera de calidad: atrapa errores ANTES del commit (local, instantáneo).
+#
+# Instalar UNA sola vez por máquina que commitea:
+#     pip install pre-commit
+#     pre-commit install
+#
+# Desde ahí, cada `git commit` revisa solo los archivos que cambiaste.
+# Para revisar todo el repo a mano:  pre-commit run --all-files
+
+# No revisar librerías del entorno virtual ni cachés.
+exclude: '^(backend_python/venv/|.*/__pycache__/)'
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-ast                 # verifica que los .py compilen (sintaxis) — lo que más nos falló
+      - id: check-merge-conflict      # evita subir marcadores <<<<<< de un merge a medias
+      - id: check-yaml                # valida los .yml (docker-compose, este archivo, CI)
+      - id: check-added-large-files   # bloquea archivos enormes subidos por error
+        args: ['--maxkb=8000']
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff                      # lint: SOLO errores reales (config en ruff.toml)
