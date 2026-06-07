@@ -955,6 +955,106 @@ def ventas_proyeccion_validacion(request: Request):
     return _tmpl(request, 'pages/reporte_proyeccion_validacion.html', ctx)
 
 
+@router.get('/modules/reports/proyeccion-provincia')
+def ventas_proyeccion_provincia(request: Request):
+    """Desglose de la proyección POR PROVINCIA, enfocado en unidades (lo estable).
+    Cada provincia trae su precio actual (autollenado) y editable para calcular soles."""
+    if err := _require_login(request):
+        return err
+    import datetime
+    from collections import defaultdict
+
+    escala_raw = _q(request, 'escala').lower()
+    if escala_raw in ('semana', 'semanal'):
+        escala, n_dias, etiqueta = 'semana', 7, 'Próxima semana'
+    elif escala_raw in ('quincena', 'quincenal'):
+        escala, n_dias, etiqueta = 'quincena', 15, 'Próxima quincena'
+    elif escala_raw in ('mes', 'mensual', 'mes_diario'):
+        escala, n_dias, etiqueta = 'mes', 30, 'Próximos 30 días'
+    else:
+        escala, n_dias, etiqueta = 'dia', 1, 'Mañana'
+
+    fstr = _q(request, 'fecha')
+    try:
+        inicio = (datetime.date.fromisoformat(fstr[:10]) if fstr
+                  else datetime.date.today() + datetime.timedelta(days=1))
+    except ValueError:
+        return _bad('Fecha inválida (use YYYY-MM-DD).')
+    fin = inicio + datetime.timedelta(days=n_dias - 1)
+    try:
+        semanas = max(2, min(26, int(_q(request, 'semanas') or '8')))
+    except ValueError:
+        semanas = 8
+    linea = _q(request, 'linea_comercial')
+
+    conn = get_connection()
+    extra = ''
+    params: dict = {'inicio': inicio.isoformat(), 'dh': semanas * 7 + 7}
+    if linea:
+        lw, lb = linea_where_fragment(conn, linea, style='pyformat')
+        extra += lw
+        params.update(lb)
+    sql = ("SELECT FechaContable AS f,"
+           " COALESCE(NULLIF(TRIM(Provincia),''),'(sin provincia)') AS prov,"
+           " DAYOFWEEK(FechaContable) AS dow,"
+           " COALESCE(SUM(Cantidad),0) AS c, COALESCE(SUM(Peso),0) AS p, COALESCE(SUM(Valor),0) AS v"
+           " FROM ventasgeneral2 WHERE CodigoDocumento IN ('01','03')"
+           " AND FechaContable < %(inicio)s AND FechaContable >= DATE_SUB(%(inicio)s, INTERVAL %(dh)s DAY)"
+           + extra + " GROUP BY FechaContable, prov")
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        filas = cur.fetchall() or []
+
+    by: dict = defaultdict(lambda: defaultdict(list))
+    recent: dict = defaultdict(lambda: [0.0, 0.0])  # prov -> [sum_valor, sum_peso] (precio actual)
+    for r in filas:
+        by[r['prov']][int(r['dow'])].append(r)
+        recent[r['prov']][0] += float(r['v'] or 0)
+        recent[r['prov']][1] += float(r['p'] or 0)
+
+    rows = []
+    for prov, dowmap in by.items():
+        prom = {}
+        allc, allp = [], []
+        for dow, rs in dowmap.items():
+            rs = sorted(rs, key=lambda x: str(x['f']), reverse=True)[:semanas]
+            m = len(rs)
+            prom[dow] = (sum(float(x['c'] or 0) for x in rs) / m,
+                         sum(float(x['p'] or 0) for x in rs) / m)
+            allc += [float(x['c'] or 0) for x in rs]
+            allp += [float(x['p'] or 0) for x in rs]
+        fb = (sum(allc) / len(allc) if allc else 0.0, sum(allp) / len(allp) if allp else 0.0)
+        tu = tp = 0.0
+        d = inicio
+        while d <= fin:
+            dow = (d.weekday() + 1) % 7 + 1
+            cc, pp = prom.get(dow, fb)
+            tu += cc
+            tp += pp
+            d += datetime.timedelta(days=1)
+        precio = (recent[prov][0] / recent[prov][1]) if recent[prov][1] > 0 else 0.0
+        rows.append({'prov': prov, 'u': tu, 'kg': tp, 'precio': round(precio, 2)})
+
+    rows.sort(key=lambda x: -x['u'])
+    detalle = [{'prov': r['prov'], 'u': f"{r['u']:,.0f}", 'kg': f"{r['kg']:,.0f}",
+                'kg_raw': round(r['kg'], 2), 'precio_raw': r['precio']} for r in rows]
+    tot_u = sum(r['u'] for r in rows)
+    tot_kg = sum(r['kg'] for r in rows)
+    chart = {'labels': [r['prov'] for r in rows[:15]], 'unidades': [round(r['u']) for r in rows[:15]]}
+
+    titulo = f'Proyección por provincia — {etiqueta.lower()}'
+    if linea:
+        titulo += f' · {linea}'
+    ctx = _report_ctx(request, titulo)
+    ctx.update({
+        'escala': escala, 'etiqueta': etiqueta, 'inicio': inicio.isoformat(), 'fin': fin.isoformat(),
+        'linea': linea, 'detalle': detalle,
+        'tot_u': f"{tot_u:,.0f}", 'tot_kg': f"{tot_kg:,.0f}",
+        'pdf_filename': f'proyeccion_provincia_{inicio.isoformat()}.pdf', 'chart': chart,
+    })
+    return _tmpl(request, 'pages/reporte_proyeccion_provincia.html', ctx)
+
+
 @router.get('/modules/reports/ventas-mix-tdoc')
 def ventas_mix_tdoc(request: Request):
     if err := _require_login(request):

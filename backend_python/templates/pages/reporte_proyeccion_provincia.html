@@ -1,0 +1,172 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+    <h1>Proyección por provincia — {{ etiqueta }}</h1>
+    <p class="page-lead">
+        Período del <strong>{{ inicio }}</strong> al <strong>{{ fin }}</strong>
+        {% if linea %} · Línea: <strong>{{ linea }}</strong>{% endif %}
+        · enfocado en <strong>unidades</strong> (lo estable). El precio por provincia viene del precio actual y es editable.
+    </p>
+</div>
+
+<div class="reporte-page">
+    <div class="card-filtros-demo reporte-informe-panel">
+        <div class="reporte-informe-toolbar">
+            <button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:1rem;align-items:flex-end;margin:.5rem 0 1rem;padding:.85rem 1rem;background:var(--surface-2,#f8fafc);border:1px solid var(--border,#e2e8f0);border-radius:.6rem;">
+            <div>
+                <label for="ctrlDelta" style="display:block;font-size:.72rem;font-weight:600;color:var(--muted,#64748b);margin-bottom:.3rem;">Sumar a TODOS los precios (S/)</label>
+                <input type="number" id="ctrlDelta" step="0.05" value="0" style="width:9rem;padding:.45rem .6rem;border:1px solid var(--border,#cbd5e1);border-radius:.5rem;background:var(--input-bg,#fff);color:inherit;">
+            </div>
+            <button type="button" id="ctrlAplicar" class="btn" style="background:#2563eb;color:#fff;">Aplicar a todos</button>
+            <button type="button" id="ctrlReset" class="btn" style="background:#6b7280;color:#fff;">Restablecer precios</button>
+            <div style="font-size:.78rem;color:var(--muted,#6b7280);max-width:24rem;">Cada provincia trae su <strong>precio actual</strong>. Edítalo (o suma un ajuste a todos) y el <strong>valor</strong> se recalcula al instante. Las <strong>unidades</strong> no cambian — son lo confiable.</div>
+        </div>
+
+        <div id="reporte-pdf-root">
+            <div style="display:flex;flex-wrap:wrap;gap:1rem;margin:.5rem 0 1.25rem;">
+                <div style="flex:1;min-width:220px;border:1px solid var(--border,#e2e8f0);border-radius:.75rem;padding:1rem 1.25rem;">
+                    <div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#6b7280);font-weight:700;">Unidades proyectadas (total)</div>
+                    <div style="font-size:1.7rem;font-weight:800;color:#059669;">{{ tot_u }}</div>
+                </div>
+                <div style="flex:1;min-width:220px;border:1px solid var(--border,#e2e8f0);border-radius:.75rem;padding:1rem 1.25rem;">
+                    <div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#6b7280);font-weight:700;">Peso proyectado (total)</div>
+                    <div style="font-size:1.7rem;font-weight:800;color:#d97706;">{{ tot_kg }} <span style="font-size:.9rem;">kg</span></div>
+                </div>
+                <div style="flex:1;min-width:220px;border:1px solid var(--border,#e2e8f0);border-radius:.75rem;padding:1rem 1.25rem;">
+                    <div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#6b7280);font-weight:700;">Valor estimado (total)</div>
+                    <div style="font-size:1.7rem;font-weight:800;color:#2563eb;">S/ <span id="totValor">0</span></div>
+                </div>
+            </div>
+
+            <div class="table-wrapper overflow-x-auto productos-dt-skin">
+                <table class="data-table config-table display stripe rct-auto">
+                    <thead>
+                        <tr>
+                            <th>Provincia</th>
+                            <th style="text-align:right;">Unidades</th>
+                            <th style="text-align:right;">Kg</th>
+                            <th style="text-align:right;">Precio S/kg</th>
+                            <th style="text-align:right;">Valor S/</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in detalle %}
+                        <tr data-kg="{{ f.kg_raw }}">
+                            <td style="font-weight:600;">{{ f.prov }}</td>
+                            <td style="text-align:right;">{{ f.u }}</td>
+                            <td style="text-align:right;">{{ f.kg }}</td>
+                            <td style="text-align:right;">
+                                <input type="number" step="0.01" min="0" class="js-precio" value="{{ f.precio_raw }}" data-precio0="{{ f.precio_raw }}"
+                                       style="width:6.5rem;text-align:right;padding:.3rem .4rem;border:1px solid var(--border,#cbd5e1);border-radius:.4rem;background:var(--input-bg,#fff);color:inherit;">
+                            </td>
+                            <td style="text-align:right;" class="js-valor">0</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <th style="text-align:right;">Total</th>
+                            <th style="text-align:right;">{{ tot_u }}</th>
+                            <th style="text-align:right;">{{ tot_kg }}</th>
+                            <th></th>
+                            <th style="text-align:right;">S/ <span id="totValorFoot">0</span></th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <p style="font-size:.8rem;color:var(--muted,#6b7280);margin-top:.5rem;">Nota: Proyección basada en datos actuales. Las unidades y kilos son la proyección; el valor depende del precio que definas por provincia.</p>
+        </div>
+    </div>
+
+    <section class="reporte-chart-section" aria-label="Unidades proyectadas por provincia">
+        <h3 class="reporte-chart-heading">Unidades proyectadas por provincia</h3>
+        <div class="chart-inner"><canvas id="chartProvU"></canvas></div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/chart_reporte_datalabels.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/reporte_pdf.js"></script>
+<script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
+<script>
+(function () {
+    var d = {{ chart | tojson }};
+    var legCol = typeof reporteChartLegendColor === 'function' ? reporteChartLegendColor() : '#1e293b';
+    var anim = window.reporteChartAnimate || {};
+    var pe = function (v, dec) { return (v != null ? v.toLocaleString('es-PE', {minimumFractionDigits: dec||0, maximumFractionDigits: dec||0}) : ''); };
+
+    function recompute() {
+        var rows = document.querySelectorAll('tbody tr[data-kg]');
+        var total = 0;
+        rows.forEach(function (tr) {
+            var kg = parseFloat(tr.getAttribute('data-kg')) || 0;
+            var inp = tr.querySelector('.js-precio');
+            var precio = parseFloat(inp.value) || 0;
+            var valor = kg * precio;
+            total += valor;
+            var cell = tr.querySelector('.js-valor');
+            if (cell) cell.textContent = pe(valor, 2);
+        });
+        var t1 = document.getElementById('totValor'); if (t1) t1.textContent = pe(total, 2);
+        var t2 = document.getElementById('totValorFoot'); if (t2) t2.textContent = pe(total, 2);
+    }
+
+    function build() {
+        // recálculo de valores
+        document.querySelectorAll('.js-precio').forEach(function (inp) {
+            inp.addEventListener('input', recompute);
+        });
+        var ap = document.getElementById('ctrlAplicar');
+        if (ap) ap.addEventListener('click', function () {
+            var delta = parseFloat((document.getElementById('ctrlDelta') || {}).value) || 0;
+            document.querySelectorAll('.js-precio').forEach(function (inp) {
+                var base = parseFloat(inp.getAttribute('data-precio0')) || 0;
+                inp.value = (base + delta).toFixed(2);
+            });
+            recompute();
+        });
+        var rs = document.getElementById('ctrlReset');
+        if (rs) rs.addEventListener('click', function () {
+            document.querySelectorAll('.js-precio').forEach(function (inp) {
+                inp.value = inp.getAttribute('data-precio0');
+            });
+            var dd = document.getElementById('ctrlDelta'); if (dd) dd.value = '0';
+            recompute();
+        });
+        recompute();
+
+        // gráfica de unidades por provincia
+        if (window.Chart) {
+            var ctx = document.getElementById('chartProvU');
+            if (ctx && d.labels) {
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: { labels: d.labels, datasets: [
+                        { label: 'Unidades', data: d.unidades, backgroundColor: 'rgba(5,150,105,0.6)', borderColor: 'rgba(5,150,105,1)', borderWidth: 1 },
+                    ] },
+                    options: Object.assign({}, anim, {
+                        responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: { callbacks: { label: function (x) { return 'Unidades: ' + pe(x.parsed.x); } } },
+                        },
+                        scales: {
+                            x: { ticks: { color: '#94a3b8', callback: function (v) { return pe(v); } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                            y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { display: false } },
+                        },
+                    }),
+                });
+            }
+        }
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
+    else build();
+})();
+</script>
+{% endblock %}

@@ -18,6 +18,8 @@
             <button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button>
             <a class="btn" style="background:#0ea5e9;color:#fff;margin-left:.5rem;text-decoration:none;"
                href="/modules/reports/proyeccion-validacion?linea_comercial={{ linea|urlencode }}&provincia={{ provincia|urlencode }}&nombre_cliente={{ (cliente or '')|urlencode }}&cod_item={{ (producto or '')|urlencode }}">📊 Validar método (proyectado vs real)</a>
+            <a class="btn" style="background:#059669;color:#fff;margin-left:.5rem;text-decoration:none;"
+               href="/modules/reports/proyeccion-provincia?escala={{ escala }}&fecha={{ inicio }}&linea_comercial={{ linea|urlencode }}">📍 Ver por provincia (precio editable)</a>
         </div>
 
         <div style="display:flex;flex-wrap:wrap;gap:1rem;align-items:flex-end;margin:.5rem 0 1rem;padding:.85rem 1rem;background:var(--surface-2,#f8fafc);border:1px solid var(--border,#e2e8f0);border-radius:.6rem;">
