@@ -1227,6 +1227,45 @@ html[data-theme="dark"] .ventas-chat-menu-panel--page {
     max-width: min(100%, 120rem);
     margin: 0 auto;
     width: 100%;
+    zoom: var(--app-zoom, 1);   /* tamaño de texto/tablas (botones A- / A+) */
+}
+
+/* Control flotante A- / A+ para agrandar/achicar el contenido */
+.app-textscale {
+    position: fixed;
+    top: 0.6rem;
+    right: 1rem;
+    z-index: 100002;
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+    background: var(--surface, #ffffff);
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: 10px;
+    padding: 0.2rem;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12);
+}
+.app-textscale button {
+    border: none;
+    background: transparent;
+    color: var(--muted, #64748b);
+    font-weight: 800;
+    font-size: 0.9rem;
+    cursor: pointer;
+    padding: 0.2rem 0.5rem;
+    border-radius: 7px;
+    line-height: 1;
+}
+.app-textscale button:hover {
+    background: var(--hover-bg, rgba(0, 0, 0, 0.06));
+    color: var(--accent, #2563eb);
+}
+.app-textscale span {
+    font-size: 0.7rem;
+    color: var(--muted, #64748b);
+    min-width: 2.4rem;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
 }
 
 /* Reportes: usar mejor el ancho disponible */

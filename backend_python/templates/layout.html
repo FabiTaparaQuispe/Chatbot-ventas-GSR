@@ -51,6 +51,18 @@
         d.style.colorScheme = mode === 'dark' ? 'dark' : 'light';
     })();
     </script>
+    <script>
+    /* Tamaño de texto del contenido (botones A- / A+): aplica el valor guardado de una. */
+    (function () {
+        try {
+            var s = parseFloat(localStorage.getItem('ix2-text-scale'));
+            if (!isNaN(s)) {
+                s = Math.max(0.7, Math.min(1.6, s));
+                document.documentElement.style.setProperty('--app-zoom', s);
+            }
+        } catch (e) {}
+    })();
+    </script>
 </head>
 <body class="{{ ('app-shell ' + body_class)|trim }}" data-app-company="{{ app_company|e }}" data-pdf-logo="/assets/img/empresa-logo.png">
 
@@ -72,6 +84,34 @@
         </main>
     </div>
 </div>
+
+<div class="app-textscale" role="group" aria-label="Tamaño de texto del contenido" title="Tamaño de texto (tablas y contenido)">
+    <button type="button" id="btnTextMinusGlobal" aria-label="Reducir tamaño de texto">A−</button>
+    <span id="textScaleVal" aria-live="polite">100%</span>
+    <button type="button" id="btnTextPlusGlobal" aria-label="Agrandar tamaño de texto">A+</button>
+</div>
+<script>
+(function () {
+    var KEY = 'ix2-text-scale';
+    function clamp(v) { return Math.max(0.7, Math.min(1.6, v)); }
+    function get() { var v = parseFloat(localStorage.getItem(KEY)); return isNaN(v) ? 1 : clamp(v); }
+    function save(v) { try { localStorage.setItem(KEY, String(v)); } catch (e) {} }
+    function apply(s) {
+        document.documentElement.style.setProperty('--app-zoom', s);
+        var lbl = document.getElementById('textScaleVal');
+        if (lbl) lbl.textContent = Math.round(s * 100) + '%';
+    }
+    function change(delta) { var s = clamp(get() + delta); save(s); apply(s); }
+    function init() {
+        apply(get());
+        var m = document.getElementById('btnTextMinusGlobal'), p = document.getElementById('btnTextPlusGlobal');
+        if (m) m.addEventListener('click', function () { change(-0.1); });
+        if (p) p.addEventListener('click', function () { change(0.1); });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
+})();
+</script>
 
 {% if not skip_floating_chat %}
 {% include 'partials/chat_floating.html' %}
