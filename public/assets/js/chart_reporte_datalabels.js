@@ -86,6 +86,38 @@
         }
     } catch (e) {}
 
+    /* Paleta automática: colorea cada barra de un color distinto, SOLO en gráficos
+       de barras de UNA sola serie que no tengan ya colores por barra (esos respetan
+       su color con significado). Aplica a top clientes, top productos, ventas por
+       zona/ruta/corporativo, etc., sin tocar cada plantilla. Opt-out: _vgNoPalette. */
+    var VG_PALETA = ['54,162,235', '75,192,192', '153,102,255', '255,99,132',
+                     '255,159,64', '255,205,86', '46,204,113', '99,102,241',
+                     '236,72,153', '14,165,233', '244,114,182', '34,197,94'];
+    function vgPal(i, a) { return 'rgba(' + VG_PALETA[i % VG_PALETA.length] + ',' + a + ')'; }
+    try {
+        Chart.register({
+            id: 'vgAutoPalette',
+            beforeUpdate: function (chart) {
+                try {
+                    var ds = chart.data && chart.data.datasets;
+                    if (!ds || ds.length !== 1) return;            // solo una serie
+                    var d = ds[0];
+                    if ((d.type || chart.config.type) !== 'bar') return;  // solo barras
+                    if (chart.options && chart.options._vgNoPalette) return;
+                    if (d._vgNoPalette) return;
+                    var n = (d.data || []).length;
+                    if (n < 2) return;
+                    // si ya tiene colores por barra a propósito (y no los nuestros), respetar
+                    if (Array.isArray(d.backgroundColor) && !d._vgPaletteApplied) return;
+                    d.backgroundColor = d.data.map(function (_, i) { return vgPal(i, 0.85); });
+                    d.borderColor = d.data.map(function (_, i) { return vgPal(i, 1); });
+                    if (d.borderWidth == null) d.borderWidth = 1;
+                    d._vgPaletteApplied = true;
+                } catch (e) {}
+            }
+        });
+    } catch (e) {}
+
     var CDL = global.ChartDataLabels;
     if (CDL) {
         try {
