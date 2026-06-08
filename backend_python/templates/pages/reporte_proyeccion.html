@@ -120,6 +120,12 @@
     var anim = window.reporteChartAnimate || {};
     var pe = function (v, dec) { return (v != null ? v.toLocaleString('es-PE', {minimumFractionDigits: dec||0, maximumFractionDigits: dec||0}) : ''); };
 
+    // Paleta llamativa + animación en cascada (estilo laboratorio).
+    var PAL = ['54,162,235', '75,192,192', '153,102,255', '255,99,132', '255,159,64', '255,205,86', '46,204,113', '99,102,241'];
+    var pcol = function (arr, a) { return arr.map(function (_, i) { return 'rgba(' + PAL[i % PAL.length] + ',' + a + ')'; }); };
+    var barDelay = function (c) { return (c.type === 'data' && c.mode === 'default') ? (c.dataIndex || 0) * 100 : 0; };
+    var barAnim = { duration: 1400, easing: 'easeOutCubic', delay: barDelay };
+
     // Datos base inmutables (para recalcular escenarios sin perder el original).
     var B = { valor: dDia.valor.slice(), cantidad: dDia.cantidad.slice(), peso: dDia.peso.slice() };
     var histBase = dHist.valor.slice();
@@ -152,13 +158,13 @@
             if (cc[j]) cc[j].textContent = pe(ac[j]);
             if (cp[j]) cp[j].textContent = pe(ap[j]);
         }
-        // Gráficas
-        if (ch1) { ch1.data.datasets[0].data = av; ch1.update(); }
-        if (ch2) { ch2.data.datasets[0].data = ac; ch2.data.datasets[1].data = ap; ch2.update(); }
+        // Gráficas (update 'none' = instantáneo, sin repetir la animación al editar)
+        if (ch1) { ch1.data.datasets[0].data = av; ch1.update('none'); }
+        if (ch2) { ch2.data.datasets[0].data = ac; ch2.data.datasets[1].data = ap; ch2.update('none'); }
         if (ch3) {
             var hv = histBase.slice();
             hv[dHist.proj_idx] = Math.round(tv * 100) / 100;  // la barra de proyección
-            ch3.data.datasets[0].data = hv; ch3.update();
+            ch3.data.datasets[0].data = hv; ch3.update('none');
         }
     }
 
@@ -169,19 +175,19 @@
             ch1 = new Chart(c1, {
                 type: 'bar',
                 data: { labels: dDia.labels, datasets: [
-                    { label: 'Importe S/', data: dDia.valor, backgroundColor: 'rgba(37,99,235,0.55)', borderColor: 'rgba(37,99,235,1)', borderWidth: 1 },
+                    { label: 'Importe S/', data: dDia.valor, backgroundColor: pcol(dDia.valor, 0.85), borderColor: pcol(dDia.valor, 1), borderWidth: 1, borderRadius: 7, borderSkipped: false },
                 ] },
-                options: Object.assign({}, anim, {
-                    responsive: true, maintainAspectRatio: false,
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: barAnim,
                     plugins: {
-                        legend: { labels: { color: legCol, boxWidth: 14 } },
-                        tooltip: { callbacks: { label: function(x){ return 'Importe: S/ ' + pe(x.parsed.y, 2); } } },
+                        legend: { display: false },
+                        tooltip: { backgroundColor: 'rgba(15,23,42,0.92)', padding: 12, cornerRadius: 8, callbacks: { label: function(x){ return 'Importe: S/ ' + pe(x.parsed.y, 2); } } },
                     },
                     scales: {
                         x: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.15)' } },
                         y: { ticks: { color: '#94a3b8', callback: function(v){ return 'S/ ' + pe(v); } }, grid: { color: 'rgba(148,163,184,0.15)' } },
                     },
-                }),
+                },
             });
         }
 
@@ -189,7 +195,7 @@
         if (c2 && dDia.labels) {
             ch2 = new Chart(c2, {
                 data: { labels: dDia.labels, datasets: [
-                    { type: 'bar', label: 'Cantidad (u)', data: dDia.cantidad, backgroundColor: 'rgba(5,150,105,0.5)', borderColor: 'rgba(5,150,105,1)', borderWidth: 1, yAxisID: 'y' },
+                    { type: 'bar', label: 'Cantidad (u)', data: dDia.cantidad, backgroundColor: 'rgba(5,150,105,0.6)', borderColor: 'rgba(5,150,105,1)', borderWidth: 1, borderRadius: 6, borderSkipped: false, yAxisID: 'y' },
                     { type: 'line', label: 'Peso (kg)', data: dDia.peso, borderColor: 'rgba(217,119,6,1)', backgroundColor: 'rgba(217,119,6,0.15)', borderWidth: 2, tension: 0.25, pointRadius: 4, yAxisID: 'y2' },
                 ] },
                 options: Object.assign({}, anim, {
@@ -214,10 +220,10 @@
             ch3 = new Chart(c3, {
                 type: 'bar',
                 data: { labels: dHist.labels, datasets: [
-                    { label: 'Importe semanal S/', data: dHist.valor, backgroundColor: colors, borderColor: 'rgba(37,99,235,0.9)', borderWidth: 1 },
+                    { label: 'Importe semanal S/', data: dHist.valor, backgroundColor: colors, borderColor: 'rgba(37,99,235,0.9)', borderWidth: 1, borderRadius: 6, borderSkipped: false },
                 ] },
                 options: Object.assign({}, anim, {
-                    responsive: true, maintainAspectRatio: false,
+                    responsive: true, maintainAspectRatio: false, animation: barAnim,
                     plugins: {
                         legend: { display: false },
                         tooltip: { callbacks: { label: function(x){ var t = x.dataIndex === dHist.proj_idx ? 'Proyección: S/ ' : 'Real: S/ '; return t + pe(x.parsed.y, 2); } } },

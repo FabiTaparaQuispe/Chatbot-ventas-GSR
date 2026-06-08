@@ -31,11 +31,15 @@
         };
     }
 
-    /** Animación al crear / refrescar datos (las actualizaciones con update('none') no animan) */
+    /** Animación al crear / refrescar datos (las actualizaciones con update('none') no animan).
+     *  Cascada: cada barra/punto entra un poco después que el anterior (estilo laboratorio). */
     global.reporteChartAnimate = {
         animation: {
-            duration: 1000,
-            easing: 'easeOutQuart',
+            duration: 1200,
+            easing: 'easeOutCubic',
+            delay: function (ctx) {
+                return (ctx && ctx.type === 'data' && ctx.mode === 'default') ? (ctx.dataIndex || 0) * 80 : 0;
+            },
         },
     };
 
@@ -71,6 +75,16 @@
     }
 
     if (typeof Chart === 'undefined') return;
+
+    /* Estilo global de TODOS los gráficos: barras con esquinas redondeadas.
+       (El color por barra NO se globaliza: muchos gráficos usan colores con
+       significado —real vs proyectado, etc.—; eso se define por gráfico.) */
+    try {
+        if (Chart.defaults && Chart.defaults.elements && Chart.defaults.elements.bar) {
+            Chart.defaults.elements.bar.borderRadius = 6;
+            Chart.defaults.elements.bar.borderSkipped = false;
+        }
+    } catch (e) {}
 
     var CDL = global.ChartDataLabels;
     if (CDL) {
