@@ -64,6 +64,22 @@
         if (!window.Chart) return;
         var ctx = document.getElementById('chartDiario');
         if (!ctx || !d.fechas) return;
+
+        // Escala de color por importe: menor -> rojo, mayor -> verde (semáforo).
+        // Una sola escala (no colores categóricos) para que se lea como "más o
+        // menos del mismo dato", no como días distintos. Opt-out de la paleta auto.
+        var _vals = (d.diario || []).filter(function (x) { return x != null && !isNaN(x); });
+        var _vmin = _vals.length ? Math.min.apply(null, _vals) : 0;
+        var _vmax = _vals.length ? Math.max.apply(null, _vals) : 0;
+        function escalaColor(v, a) {
+            if (v == null || isNaN(v) || _vmax <= _vmin) return 'hsla(120,68%,48%,' + a + ')';
+            var t = (v - _vmin) / (_vmax - _vmin);   // 0 = menor, 1 = mayor
+            var hue = t * 120;                        // 0 rojo · 60 amarillo · 120 verde
+            return 'hsla(' + hue.toFixed(0) + ',70%,48%,' + a + ')';
+        }
+        var bgDiario = (d.diario || []).map(function (v) { return escalaColor(v, 0.80); });
+        var bdDiario = (d.diario || []).map(function (v) { return escalaColor(v, 1); });
+
         new Chart(ctx, {
             type: 'bar',
             data: {
@@ -71,9 +87,10 @@
                 datasets: [{
                     label: 'Importe S/',
                     data: d.diario,
-                    backgroundColor: 'rgba(59,130,246,0.60)',
-                    borderColor: 'rgba(59,130,246,1)',
+                    backgroundColor: bgDiario,
+                    borderColor: bdDiario,
                     borderWidth: 1,
+                    _vgNoPalette: true,
                 }],
             },
             options: Object.assign({}, anim, {
