@@ -172,7 +172,10 @@ class GeminiClient:
             except Exception as e:
                 last_exc = e
                 if self._is_retryable(e) and attempt < _max_retries:
-                    wait = 30
+                    # Backoff corto (2s, 4s, 8s) en vez de 30s fijo: para un chat
+                    # en vivo, 30s se siente colgado. Con sobrecarga 503/429 transitoria
+                    # esto recupera mucho más rápido (peor caso ~14s en vez de ~90s).
+                    wait = min(8, 2 ** (attempt + 1))
                     logger.info("Gemini retryable error → reintentando en %ss (intento %d/%d)",
                                 wait, attempt + 1, _max_retries)
                     await asyncio.sleep(wait)
