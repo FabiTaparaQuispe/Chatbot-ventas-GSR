@@ -109,7 +109,7 @@
                     if (n < 2) return;
                     // si ya tiene colores por barra a propósito (y no los nuestros), respetar
                     if (Array.isArray(d.backgroundColor) && !d._vgPaletteApplied) return;
-                    d.backgroundColor = d.data.map(function (_, i) { return vgPal(i, 0.85); });
+                    d.backgroundColor = d.data.map(function (_, i) { return vgPal(i, 0.80); });
                     d.borderColor = d.data.map(function (_, i) { return vgPal(i, 1); });
                     if (d.borderWidth == null) d.borderWidth = 1;
                     d._vgPaletteApplied = true;
