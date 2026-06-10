@@ -172,7 +172,9 @@
         if (!window.Chart) return;
         var c1 = document.getElementById('chartImporteDia');
         if (c1 && dDia.labels) {
-            var escDia = window.reporteEscalaColorValor(dDia.valor, 0.70);
+            var escDia = (typeof window.reporteEscalaColorValor === 'function')
+                ? window.reporteEscalaColorValor(dDia.valor, 0.70)
+                : { bg: pcol(dDia.valor, 0.70), border: pcol(dDia.valor, 1) };
             ch1 = new Chart(c1, {
                 type: 'bar',
                 data: { labels: dDia.labels, datasets: [
