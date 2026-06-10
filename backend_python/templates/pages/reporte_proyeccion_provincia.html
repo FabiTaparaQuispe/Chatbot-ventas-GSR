@@ -145,9 +145,9 @@
         if (window.Chart) {
             var ctx = document.getElementById('chartProvU');
             if (ctx && d.labels) {
-                var PAL = ['54,162,235', '75,192,192', '153,102,255', '255,99,132', '255,159,64', '255,205,86', '46,204,113', '99,102,241'];
-                var bg = d.labels.map(function (_, i) { return 'rgba(' + PAL[i % PAL.length] + ',0.85)'; });
-                var bd = d.labels.map(function (_, i) { return 'rgba(' + PAL[i % PAL.length] + ',1)'; });
+                var escProv = window.reporteEscalaColorValor(d.unidades, 0.70);
+                var bg = escProv.bg;
+                var bd = escProv.border;
                 var delay = function (c) { return (c.type === 'data' && c.mode === 'default') ? (c.dataIndex || 0) * 120 : 0; };
                 new Chart(ctx, {
                     type: 'bar',

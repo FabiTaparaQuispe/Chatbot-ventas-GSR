@@ -172,10 +172,11 @@
         if (!window.Chart) return;
         var c1 = document.getElementById('chartImporteDia');
         if (c1 && dDia.labels) {
+            var escDia = window.reporteEscalaColorValor(dDia.valor, 0.70);
             ch1 = new Chart(c1, {
                 type: 'bar',
                 data: { labels: dDia.labels, datasets: [
-                    { label: 'Importe S/', data: dDia.valor, backgroundColor: pcol(dDia.valor, 0.85), borderColor: pcol(dDia.valor, 1), borderWidth: 1, borderRadius: 7, borderSkipped: false },
+                    { label: 'Importe S/', data: dDia.valor, backgroundColor: escDia.bg, borderColor: escDia.border, borderWidth: 1, borderRadius: 7, borderSkipped: false },
                 ] },
                 options: {
                     responsive: true, maintainAspectRatio: false, animation: barAnim,

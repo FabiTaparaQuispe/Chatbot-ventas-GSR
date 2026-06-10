@@ -43,6 +43,27 @@
         },
     };
 
+    /** Escala de color por valor para barras de UNA sola serie del mismo dato:
+     *  menor -> rojo, mayor -> verde (semáforo). Devuelve {bg:[], border:[]}.
+     *  Útil para "importe por día" o "unidades por provincia": una sola escala
+     *  se lee como "más o menos del mismo dato", no como categorías distintas. */
+    global.reporteEscalaColorValor = function (data, alpha) {
+        data = data || [];
+        var a = (alpha == null) ? 0.70 : alpha;
+        var vals = data.filter(function (x) { return x != null && !isNaN(x); });
+        var vmin = vals.length ? Math.min.apply(null, vals) : 0;
+        var vmax = vals.length ? Math.max.apply(null, vals) : 0;
+        function col(v, al) {
+            if (v == null || isNaN(v) || vmax <= vmin) return 'hsla(120,68%,48%,' + al + ')';
+            var t = (v - vmin) / (vmax - vmin);   // 0 = menor, 1 = mayor
+            return 'hsla(' + (t * 120).toFixed(0) + ',70%,48%,' + al + ')';
+        }
+        return {
+            bg: data.map(function (v) { return col(v, a); }),
+            border: data.map(function (v) { return col(v, 1); }),
+        };
+    };
+
     /**
      * Actualiza el color de la leyenda de todos los Chart.js del documento
      * (p. ej. al cambiar tema con appSetTheme / app-theme-change).
