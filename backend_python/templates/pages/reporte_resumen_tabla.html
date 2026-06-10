@@ -77,7 +77,7 @@
             var hue = t * 120;                        // 0 rojo · 60 amarillo · 120 verde
             return 'hsla(' + hue.toFixed(0) + ',70%,48%,' + a + ')';
         }
-        var bgDiario = (d.diario || []).map(function (v) { return escalaColor(v, 0.80); });
+        var bgDiario = (d.diario || []).map(function (v) { return escalaColor(v, 0.70); });
         var bdDiario = (d.diario || []).map(function (v) { return escalaColor(v, 1); });
 
         new Chart(ctx, {
