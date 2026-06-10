@@ -59,7 +59,8 @@ def estado_respuesta(feedback: Any, extracto: str | None) -> str:
 SQL_HISTORIAL_SELECT = """
 SELECT
     m.id         AS msg_id,
-    m.created_at AS preguntado_en,
+    -- created_at se guarda en UTC; se muestra/filtra en hora de Perú (UTC-5 fijo, sin horario de verano).
+    (m.created_at - INTERVAL 5 HOUR) AS preguntado_en,
     m.content    AS pregunta,
     t.username   AS usuario,
     t.client_thread_id AS thread_id,
@@ -139,10 +140,10 @@ def fetch_historial_rows(
     where = ["m.role = 'user'"]
     params: dict[str, Any] = {}
     if d1:
-        where.append("m.created_at >= %(d1)s")
+        where.append("(m.created_at - INTERVAL 5 HOUR) >= %(d1)s")
         params["d1"] = d1
     if d2:
-        where.append("m.created_at < DATE_ADD(%(d2)s, INTERVAL 1 DAY)")
+        where.append("(m.created_at - INTERVAL 5 HOUR) < DATE_ADD(%(d2)s, INTERVAL 1 DAY)")
         params["d2"] = d2
     if user_f:
         where.append("t.username = %(u)s")
@@ -208,7 +209,7 @@ def fetch_historial_anios(conn) -> list[str]:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT DISTINCT YEAR(created_at) AS y FROM app_chat_messages "
+                "SELECT DISTINCT YEAR(created_at - INTERVAL 5 HOUR) AS y FROM app_chat_messages "
                 "WHERE role = 'assistant' AND created_at IS NOT NULL ORDER BY y DESC"
             )
             return [str(r["y"]) for r in (cur.fetchall() or []) if r.get("y")]
@@ -248,10 +249,10 @@ def _ef_where(fecha_desde: str | None, fecha_hasta: str | None) -> tuple[str, di
     d1, _ = _parse_hist_date(fecha_desde)
     d2, _ = _parse_hist_date(fecha_hasta)
     if d1:
-        where.append("created_at >= %(d1)s")
+        where.append("(created_at - INTERVAL 5 HOUR) >= %(d1)s")
         params["d1"] = d1
     if d2:
-        where.append("created_at < DATE_ADD(%(d2)s, INTERVAL 1 DAY)")
+        where.append("(created_at - INTERVAL 5 HOUR) < DATE_ADD(%(d2)s, INTERVAL 1 DAY)")
         params["d2"] = d2
     return " AND ".join(where), params
 
@@ -295,13 +296,13 @@ def fetch_efectividad_por_mes(conn, *, fecha_desde: str | None = None,
     fallo = _fallo_sql("content")
     wh, params = _ef_where(fecha_desde, fecha_hasta)
     sql = (
-        "SELECT DATE_FORMAT(created_at, '%%Y-%%m') AS mes,"
+        "SELECT DATE_FORMAT(created_at - INTERVAL 5 HOUR, '%%Y-%%m') AS mes,"
         " COUNT(*) AS total,"
         " COALESCE(SUM(feedback = 1), 0)  AS buenos,"
         " COALESCE(SUM(feedback = -1), 0) AS malos,"
         f" COALESCE(SUM(feedback IS NULL AND {fallo}), 0) AS fallo_auto"
         f" FROM app_chat_messages WHERE {wh}"
-        " GROUP BY DATE_FORMAT(created_at, '%%Y-%%m') ORDER BY mes"
+        " GROUP BY DATE_FORMAT(created_at - INTERVAL 5 HOUR, '%%Y-%%m') ORDER BY mes"
     )
     try:
         with conn.cursor() as cur:
