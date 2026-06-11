@@ -1055,6 +1055,100 @@ def ventas_proyeccion_provincia(request: Request):
     return _tmpl(request, 'pages/reporte_proyeccion_provincia.html', ctx)
 
 
+@router.get('/modules/reports/cumplimiento')
+def reporte_cumplimiento(request: Request):
+    """Cumplimiento de pedidos: cruce pedidosgeneral2 vs ventasgeneral2 por
+    cliente + producto (CodigoItem) en el rango. % = vendido / pedido (unidades)."""
+    if err := _require_login(request):
+        return err
+    import datetime
+
+    d1 = _q(request, 'desde')
+    d2 = _q(request, 'hasta')
+    try:
+        datetime.date.fromisoformat(d1[:10])
+        datetime.date.fromisoformat(d2[:10])
+    except (ValueError, TypeError):
+        return _bad('Fechas inválidas (use YYYY-MM-DD).')
+    nc = _q(request, 'nombre_cliente')
+    item = _q(request, 'cod_item')
+    try:
+        top = max(1, min(500, int(_q(request, 'top') or '50')))
+    except ValueError:
+        top = 50
+
+    ped_f = ''
+    ven_f = ''
+    params: dict = {'d1': d1, 'd2': d2}
+    if nc:
+        ped_f += ' AND NombreCliente LIKE %(nc)s'
+        ven_f += ' AND NombreCliente LIKE %(nc)s'
+        params['nc'] = f'%{nc}%'
+    if item:
+        ped_f += ' AND CodigoItem = %(item)s'
+        ven_f += ' AND CodigoItem = %(item)s'
+        params['item'] = item
+
+    sql = (
+        'SELECT p.nombre AS nombre, p.producto AS producto,'
+        ' p.pedido_u AS pedido_u, COALESCE(v.vendido_u, 0) AS vendido_u'
+        ' FROM ('
+        '   SELECT CodigoCliente AS cliente, MAX(NombreCliente) AS nombre,'
+        '   CodigoItem AS item, MAX(DescripcionItem) AS producto,'
+        '   COALESCE(SUM(Cantidad),0) AS pedido_u'
+        '   FROM pedidosgeneral2'
+        '   WHERE FechaPedido BETWEEN %(d1)s AND %(d2)s' + ped_f +
+        '   GROUP BY CodigoCliente, CodigoItem'
+        '   HAVING COALESCE(SUM(Cantidad),0) > 0'
+        ' ) p'
+        ' LEFT JOIN ('
+        '   SELECT CodigoCliente AS cliente, CodigoItem AS item,'
+        '   COALESCE(SUM(Cantidad),0) AS vendido_u'
+        '   FROM ventasgeneral2'
+        '   WHERE FechaContable BETWEEN %(d1)s AND %(d2)s' + ven_f +
+        '   GROUP BY CodigoCliente, CodigoItem'
+        ' ) v ON v.cliente = p.cliente AND v.item = p.item'
+        ' ORDER BY p.pedido_u DESC LIMIT ' + str(top)
+    )
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        raw = cur.fetchall() or []
+
+    detalle = []
+    tot_p = 0.0
+    tot_v = 0.0
+    for r in raw:
+        pu = float(r['pedido_u'] or 0)
+        vu = float(r['vendido_u'] or 0)
+        tot_p += pu
+        tot_v += vu
+        detalle.append({
+            'cliente': str(r['nombre'] or ''),
+            'producto': str(r['producto'] or ''),
+            'pedido': f"{pu:,.0f}",
+            'vendido': f"{vu:,.0f}",
+            'cumplimiento': round(vu / pu * 100, 1) if pu else 0.0,
+        })
+    cumpl_total = round(tot_v / tot_p * 100, 1) if tot_p else 0.0
+    top15 = detalle[:15]
+    chart = {
+        'labels': [d['cliente'][:24] for d in top15],
+        'pedido': [int(round(float(d['pedido'].replace(',', '')))) for d in top15],
+        'vendido': [int(round(float(d['vendido'].replace(',', '')))) for d in top15],
+    }
+
+    titulo = 'Cumplimiento de pedidos — pedido vs vendido'
+    ctx = _report_ctx(request, titulo)
+    ctx.update({
+        'desde': d1, 'hasta': d2, 'nombre_cliente': nc, 'cod_item': item,
+        'detalle': detalle, 'tot_pedido': f"{tot_p:,.0f}", 'tot_vendido': f"{tot_v:,.0f}",
+        'cumpl_total': cumpl_total,
+        'pdf_filename': f'cumplimiento_{d1}_{d2}.pdf', 'chart': chart,
+    })
+    return _tmpl(request, 'pages/reporte_cumplimiento.html', ctx)
+
+
 @router.get('/modules/reports/ventas-mix-tdoc')
 def ventas_mix_tdoc(request: Request):
     if err := _require_login(request):

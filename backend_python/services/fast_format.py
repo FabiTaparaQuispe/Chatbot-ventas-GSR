@@ -543,6 +543,9 @@ def _fmt_cumplimiento(result):
         tpct = float(result.get('cumplimiento_total_pct') or 0)
         lineas.append("")
         lineas.append(f"Total: pedido {_n(tp)} u · vendido {_n(tv)} u · cumplimiento {tpct:,.1f}%")
+    url = _url(result)
+    if url:
+        lineas.append(f"\n{url}")
     lineas += ["", "Nota: cumplimiento = vendido / pedido. Los datos de pedidos existen desde diciembre 2025."]
     return "\n".join(lineas)
 

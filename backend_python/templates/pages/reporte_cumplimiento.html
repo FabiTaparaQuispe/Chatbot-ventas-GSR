@@ -1,0 +1,116 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-head">
+    <h1>Cumplimiento de pedidos — pedido vs vendido</h1>
+    <p class="page-lead">
+        Período del <strong>{{ desde }}</strong> al <strong>{{ hasta }}</strong>
+        {% if nombre_cliente %} · Cliente: <strong>{{ nombre_cliente }}</strong>{% endif %}
+        {% if cod_item %} · Producto: <strong>{{ cod_item }}</strong>{% endif %}
+        · cumplimiento = vendido / pedido (unidades). Pedidos desde diciembre 2025.
+    </p>
+</div>
+
+<div class="reporte-page">
+    <div class="card-filtros-demo reporte-informe-panel">
+        <div class="reporte-informe-toolbar">
+            <button type="button" class="btn btn-primary" id="btn-pdf">Descargar PDF</button>
+        </div>
+
+        <div id="reporte-pdf-root">
+            <div style="display:flex;flex-wrap:wrap;gap:1rem;margin:.5rem 0 1.25rem;">
+                <div style="flex:1;min-width:220px;border:1px solid var(--border,#e2e8f0);border-radius:.75rem;padding:1rem 1.25rem;">
+                    <div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#6b7280);font-weight:700;">Cumplimiento total</div>
+                    <div style="font-size:1.7rem;font-weight:800;color:{% if cumpl_total >= 95 %}#059669{% else %}#d97706{% endif %};">{{ cumpl_total }}%</div>
+                </div>
+                <div style="flex:1;min-width:220px;border:1px solid var(--border,#e2e8f0);border-radius:.75rem;padding:1rem 1.25rem;">
+                    <div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#6b7280);font-weight:700;">Pedido total (u)</div>
+                    <div style="font-size:1.7rem;font-weight:800;color:#2563eb;">{{ tot_pedido }}</div>
+                </div>
+                <div style="flex:1;min-width:220px;border:1px solid var(--border,#e2e8f0);border-radius:.75rem;padding:1rem 1.25rem;">
+                    <div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#6b7280);font-weight:700;">Vendido total (u)</div>
+                    <div style="font-size:1.7rem;font-weight:800;color:#059669;">{{ tot_vendido }}</div>
+                </div>
+            </div>
+
+            <div class="table-wrapper overflow-x-auto productos-dt-skin">
+                <table class="data-table config-table display stripe rct-auto">
+                    <thead>
+                        <tr>
+                            <th>Cliente</th>
+                            <th>Producto</th>
+                            <th style="text-align:right;">Pedido (u)</th>
+                            <th style="text-align:right;">Vendido (u)</th>
+                            <th style="text-align:right;">Cumplimiento</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in detalle %}
+                        <tr>
+                            <td style="font-weight:600;">{{ f.cliente }}</td>
+                            <td>{{ f.producto }}</td>
+                            <td style="text-align:right;">{{ f.pedido }}</td>
+                            <td style="text-align:right;">{{ f.vendido }}</td>
+                            <td style="text-align:right;font-weight:700;color:{% if f.cumplimiento >= 95 %}#059669{% else %}#dc2626{% endif %};">{{ f.cumplimiento }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p style="font-size:.8rem;color:var(--muted,#6b7280);margin-top:.5rem;">Nota: cumplimiento = vendido / pedido. Un valor cercano a 100% indica que al cliente se le entregó casi exactamente lo que pidió. Los datos de pedidos existen desde diciembre 2025.</p>
+        </div>
+    </div>
+
+    <section class="reporte-chart-section" aria-label="Pedido vs vendido por cliente">
+        <h3 class="reporte-chart-heading">Pedido vs vendido por cliente (top 15)</h3>
+        <div class="chart-inner"><canvas id="chartCumpl"></canvas></div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/chart_reporte_datalabels.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+<script src="/assets/js/reporte_pdf.js"></script>
+<script>ventasBindPdfDownload('btn-pdf', 'reporte-pdf-root', {{ pdf_filename|tojson }});</script>
+<script>
+(function () {
+    var d = {{ chart | tojson }};
+    var legCol = typeof reporteChartLegendColor === 'function' ? reporteChartLegendColor() : '#1e293b';
+    var anim = window.reporteChartAnimate || {};
+    var pe = function (v) { return (v != null ? v.toLocaleString('es-PE') : ''); };
+
+    function build() {
+        if (!window.Chart) return;
+        var ctx = document.getElementById('chartCumpl');
+        if (!ctx || !d.labels) return;
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: d.labels,
+                datasets: [
+                    { label: 'Pedido (u)', data: d.pedido, backgroundColor: 'rgba(54,162,235,0.80)', borderColor: 'rgba(54,162,235,1)', borderWidth: 1, borderRadius: 6, borderSkipped: false, _vgNoPalette: true },
+                    { label: 'Vendido (u)', data: d.vendido, backgroundColor: 'rgba(46,204,113,0.80)', borderColor: 'rgba(46,204,113,1)', borderWidth: 1, borderRadius: 6, borderSkipped: false, _vgNoPalette: true },
+                ],
+            },
+            options: Object.assign({}, anim, {
+                responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { labels: { color: legCol, boxWidth: 14 } },
+                    tooltip: { backgroundColor: 'rgba(15,23,42,0.92)', padding: 12, cornerRadius: 8,
+                        callbacks: { label: function (x) { return x.dataset.label + ': ' + pe(x.parsed.x) + ' u'; } } },
+                    datalabels: { display: false },
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8', callback: function (v) { return pe(v); } }, grid: { color: 'rgba(148,163,184,0.15)' } },
+                    y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { display: false } },
+                },
+            }),
+        });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
+    else build();
+})();
+</script>
+{% endblock %}

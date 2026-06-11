@@ -2112,11 +2112,18 @@ class ToolExecutor:
                 'cumplimiento_pct': round(vu / pu * 100, 1) if pu else 0.0,
             })
 
+        _rep = {'desde': d1, 'hasta': d2}
+        if nc:
+            _rep['nombre_cliente'] = nc
+        if item:
+            _rep['cod_item'] = item
+
         return {
             'tabla': 'pedidosgeneral2 + ventasgeneral2',
             'tipo': 'cumplimiento_pedidos',
             'fecha_desde': d1,
             'fecha_hasta': d2,
+            'reporte_url': '/modules/reports/cumplimiento?' + urlencode(_rep),
             'nombre_cliente': nc or None,
             'cod_item': item or None,
             'total_pedido': tot_p,
