@@ -546,7 +546,7 @@ def _fmt_cumplimiento(result):
     url = _url(result)
     if url:
         lineas.append(f"\n{url}")
-    lineas += ["", "Nota: cumplimiento = vendido / pedido. Los datos de pedidos existen desde diciembre 2025."]
+    lineas += ["", "Un cumplimiento cercano al 100% significa que al cliente se le entregó casi todo lo que pidió. Los pedidos están disponibles desde diciembre 2025."]
     return "\n".join(lineas)
 
 

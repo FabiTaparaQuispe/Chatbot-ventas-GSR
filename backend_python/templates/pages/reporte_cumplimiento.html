@@ -6,7 +6,7 @@
         Período del <strong>{{ desde }}</strong> al <strong>{{ hasta }}</strong>
         {% if nombre_cliente %} · Cliente: <strong>{{ nombre_cliente }}</strong>{% endif %}
         {% if cod_item %} · Producto: <strong>{{ cod_item }}</strong>{% endif %}
-        · cumplimiento = vendido / pedido (unidades). Pedidos desde diciembre 2025.
+        · qué tanto de lo pedido se llegó a entregar, por cliente y producto. Pedidos disponibles desde diciembre 2025.
     </p>
 </div>
 
@@ -56,7 +56,7 @@
                     </tbody>
                 </table>
             </div>
-            <p style="font-size:.8rem;color:var(--muted,#6b7280);margin-top:.5rem;">Nota: cumplimiento = vendido / pedido. Un valor cercano a 100% indica que al cliente se le entregó casi exactamente lo que pidió. Los datos de pedidos existen desde diciembre 2025.</p>
+            <p style="font-size:.8rem;color:var(--muted,#6b7280);margin-top:.5rem;">Nota: un cumplimiento cercano al 100% significa que al cliente se le entregó casi exactamente lo que pidió. Los datos de pedidos están disponibles desde diciembre 2025.</p>
         </div>
     </div>
 
