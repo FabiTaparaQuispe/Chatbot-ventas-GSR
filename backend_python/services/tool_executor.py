@@ -2044,6 +2044,89 @@ class ToolExecutor:
             '_sql_traces': [{'sql': sql, 'params': params}],
         }
 
+    @tool('cumplimiento_pedidos')
+    def _cumplimiento_pedidos(self, args):
+        """Cruce pedidos vs ventas (cumplimiento) por cliente + producto.
+
+        Une pedidosgeneral2 (lo pedido) con ventasgeneral2 (lo vendido) por
+        CodigoCliente + CodigoItem en el rango de fechas, y calcula el % de
+        cumplimiento (vendido/pedido). Se compara por UNIDADES (en Pollo Vivo el
+        pedido no trae valor en soles). Los pedidos existen desde dic 2025.
+        """
+        d1, d2 = _parse_date_range(args)
+        nc = str(args.get('nombre_cliente') or '').strip()
+        item = str(args.get('cod_item') or '').strip()
+        lim = _int_arg(args.get('top_n'), 50, 1, 500)
+
+        ped_f = ''
+        ven_f = ''
+        params: dict = {'d1': d1, 'd2': d2}
+        if nc:
+            ped_f += ' AND NombreCliente LIKE %(nc)s'
+            ven_f += ' AND NombreCliente LIKE %(nc)s'
+            params['nc'] = f'%{nc}%'
+        if item:
+            ped_f += ' AND CodigoItem = %(item)s'
+            ven_f += ' AND CodigoItem = %(item)s'
+            params['item'] = item
+
+        sql = (
+            'SELECT p.cliente AS cliente, p.nombre AS nombre, p.item AS item,'
+            ' p.producto AS producto, p.pedido_u AS pedido_u,'
+            ' COALESCE(v.vendido_u, 0) AS vendido_u'
+            ' FROM ('
+            '   SELECT CodigoCliente AS cliente, MAX(NombreCliente) AS nombre,'
+            '   CodigoItem AS item, MAX(DescripcionItem) AS producto,'
+            '   COALESCE(SUM(Cantidad),0) AS pedido_u'
+            '   FROM pedidosgeneral2'
+            '   WHERE FechaPedido BETWEEN %(d1)s AND %(d2)s' + ped_f +
+            '   GROUP BY CodigoCliente, CodigoItem'
+            '   HAVING COALESCE(SUM(Cantidad),0) > 0'
+            ' ) p'
+            ' LEFT JOIN ('
+            '   SELECT CodigoCliente AS cliente, CodigoItem AS item,'
+            '   COALESCE(SUM(Cantidad),0) AS vendido_u'
+            '   FROM ventasgeneral2'
+            '   WHERE FechaContable BETWEEN %(d1)s AND %(d2)s' + ven_f +
+            '   GROUP BY CodigoCliente, CodigoItem'
+            ' ) v ON v.cliente = p.cliente AND v.item = p.item'
+            ' ORDER BY p.pedido_u DESC'
+            ' LIMIT ' + str(lim)
+        )
+        rows = _q(self._conn, sql, params)
+        filas = []
+        tot_p = 0.0
+        tot_v = 0.0
+        for r in rows:
+            pu = float(r.get('pedido_u') or 0)
+            vu = float(r.get('vendido_u') or 0)
+            tot_p += pu
+            tot_v += vu
+            filas.append({
+                'cliente': str(r.get('cliente') or ''),
+                'nombre': str(r.get('nombre') or ''),
+                'item': str(r.get('item') or ''),
+                'producto': str(r.get('producto') or ''),
+                'pedido_u': pu,
+                'vendido_u': vu,
+                'cumplimiento_pct': round(vu / pu * 100, 1) if pu else 0.0,
+            })
+
+        return {
+            'tabla': 'pedidosgeneral2 + ventasgeneral2',
+            'tipo': 'cumplimiento_pedidos',
+            'fecha_desde': d1,
+            'fecha_hasta': d2,
+            'nombre_cliente': nc or None,
+            'cod_item': item or None,
+            'total_pedido': tot_p,
+            'total_vendido': tot_v,
+            'cumplimiento_total_pct': round(tot_v / tot_p * 100, 1) if tot_p else 0.0,
+            'total_filas': len(filas),
+            'filas': filas,
+            '_sql_traces': [{'sql': sql, 'params': params}],
+        }
+
     @tool('consulta_libre')
     def _consulta_libre(self, args):
         raw_sql = str(args.get('sql') or '').strip()

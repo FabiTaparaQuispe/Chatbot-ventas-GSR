@@ -402,6 +402,26 @@ def ventas_tool_definitions():
             }, 'required': ['nombre_corporativo']},
         }},
         {'type': 'function', 'function': {
+            'name': 'cumplimiento_pedidos',
+            'description': (
+                'Cruce de PEDIDOS vs VENTAS (cumplimiento): compara cuánto se PIDIÓ (tabla pedidosgeneral2) '
+                'vs cuánto se VENDIÓ (ventasgeneral2) por cliente y producto, y calcula el % de cumplimiento '
+                '(vendido / pedido). Usar para: "cuánto se pidió vs se vendió", "nivel/porcentaje de cumplimiento", '
+                '"cumplimiento del cliente X", "¿a qué clientes no se les cumplió el pedido?", '
+                '"pedido vs vendido de Pollo Vivo". Se compara por UNIDADES (en Pollo Vivo el pedido no trae '
+                'soles). IMPORTANTE: los pedidos existen solo desde DICIEMBRE 2025 — para meses anteriores no hay '
+                'datos de pedido. Filtros opcionales: nombre_cliente (un cliente), cod_item '
+                '(producto: 100=POLLO CARNE EN PIE, 103=POLLO BRASA EN PIE). '
+                'Al responder: muestra la tabla cliente/producto con pedido, vendido y % de cumplimiento.'
+            ),
+            'parameters': {'type': 'object', 'properties': {
+                'fecha_desde': d_opt, 'fecha_hasta': d_opt,
+                'nombre_cliente': {'type': 'string', 'description': 'Filtrar por un cliente (NombreCliente LIKE), ej. "HUAYPUNA MAMANI"'},
+                'cod_item': {'type': 'string', 'description': 'Filtrar por producto (CodigoItem): 100=POLLO CARNE EN PIE, 103=POLLO BRASA EN PIE'},
+                'top_n': dn,
+            }, 'required': ['fecha_desde', 'fecha_hasta']},
+        }},
+        {'type': 'function', 'function': {
             'name': 'consulta_libre',
             'description': (
                 'Ejecuta una consulta SQL personalizada sobre ventasgeneral2 cuando NINGUNA otra '

@@ -519,7 +519,36 @@ def _fmt_proyeccion_ventas(result):
     return "\n".join(lineas)
 
 
+def _fmt_cumplimiento(result):
+    if result.get('tipo') != 'cumplimiento_pedidos':
+        return None
+    filas = result.get('filas') or []
+    if not filas:
+        return None
+    lineas = [
+        "Cumplimiento de pedidos (pedido vs vendido):", "",
+        "| Cliente | Producto | Pedido (u) | Vendido (u) | Cumplimiento |",
+        "| --- | --- | ---: | ---: | ---: |",
+    ]
+    for f in filas:
+        nombre = str(f.get('nombre') or f.get('cliente') or '')
+        prod = str(f.get('producto') or f.get('item') or '')
+        ped = _n(f.get('pedido_u', 0))
+        ven = _n(f.get('vendido_u', 0))
+        pct = f"{float(f.get('cumplimiento_pct') or 0):,.1f}%"
+        lineas.append(f"| {nombre} | {prod} | {ped} | {ven} | {pct} |")
+    tp = result.get('total_pedido')
+    if tp is not None:
+        tv = result.get('total_vendido')
+        tpct = float(result.get('cumplimiento_total_pct') or 0)
+        lineas.append("")
+        lineas.append(f"Total: pedido {_n(tp)} u · vendido {_n(tv)} u · cumplimiento {tpct:,.1f}%")
+    lineas += ["", "Nota: cumplimiento = vendido / pedido. Los datos de pedidos existen desde diciembre 2025."]
+    return "\n".join(lineas)
+
+
 _FORMATTERS = {
+    'cumplimiento_pedidos':                   _fmt_cumplimiento,
     'ventasgeneral_proyeccion_dia':           _fmt_proyeccion_dia,
     'ventasgeneral_proyeccion_ventas':        _fmt_proyeccion_ventas,
     'ventasgeneral_proyeccion_ventas':        _fmt_proyeccion_ventas,
