@@ -84,20 +84,6 @@ Como los datos del chatbot son de **una sola empresa** (no por usuario), la cach
 **compartida**: lo que calcula un usuario sirve para todos. Esto la hace más simple y más
 eficiente que en aplicaciones multiempresa.
 
-### Comparación antes / después
-
-```
-SIN caché (hoy):
-  Pregunta 1            -> Gemini + Base de datos -> respuesta   (2-5 seg, costo, riesgo 503)
-  Pregunta 2 (idéntica) -> Gemini + Base de datos -> respuesta   (se repite TODO el trabajo)
-  Pregunta 3 (idéntica) -> Gemini + Base de datos -> respuesta   (se repite TODO el trabajo)
-
-CON caché:
-  Pregunta 1            -> Gemini + Base de datos -> respuesta + se GUARDA   (2-5 seg)
-  Pregunta 2 (idéntica) -> Caché (RAM)            -> respuesta   (instantáneo, sin Gemini)
-  Pregunta 3 (idéntica) -> Caché (RAM)            -> respuesta   (instantáneo, sin Gemini)
-```
-
 ---
 
 ## 5. Beneficios
@@ -109,28 +95,6 @@ CON caché:
 | **Menos saturación (503)** | Al hacer menos llamadas a Google, baja la probabilidad de error. |
 | **Menos carga a la base de datos** | No se recalcula lo ya calculado. |
 | **Escalabilidad** | Soporta más usuarios sin multiplicar el procesamiento. |
-
-### 5.1 Estimación de ahorro
-
-El ahorro depende de **qué porcentaje de las preguntas se repiten** (mismos parámetros). A
-mayor repetición, mayor ahorro. Escenarios ilustrativos, tomando como base el consumo
-actual de la API de Gemini (~S/ 21 al mes):
-
-| Escenario | Preguntas repetidas | Llamadas a Gemini ahorradas | Ahorro aprox. mensual |
-|---|---|---|---|
-| Conservador | 20% | ~20% | ~S/ 4 |
-| Moderado | 40% | ~40% | ~S/ 8 |
-| Optimista | 60% | ~60% | ~S/ 13 |
-
-Consideraciones honestas:
-
-- El ahorro **en soles hoy es modesto** porque el consumo es bajo, pero **crece de forma
-  proporcional** a medida que aumenta el uso del chatbot.
-- El valor más importante **no es el ahorro en soles**, sino la **velocidad** (respuestas
-  instantáneas en consultas repetidas) y la **reducción de errores 503** (al hacer menos
-  llamadas a Google).
-- En las **proyecciones**, donde varios usuarios de la empresa consultan lo mismo, la tasa
-  de repetición suele ser **alta**, por lo que el beneficio ahí es mayor.
 
 ---
 
@@ -160,6 +124,22 @@ Reglas posibles (a definir):
 - **Por evento:** la caché se limpia cuando se carga data nueva a la base.
 
 Se recomienda empezar con expiración por tiempo, que es lo más simple y seguro.
+
+### Enfoque recomendado (consulta técnica)
+
+Tras consultar con un especialista, el enfoque sugerido para nuestro caso es:
+
+- **Expiración por tiempo (TTL por sesión):** desde la primera pregunta del usuario se van
+  guardando sus consultas en Redis; pasada aproximadamente **1 hora**, esa instancia se
+  **limpia automáticamente**. Esto mantiene buen rendimiento y evita acumular datos viejos.
+- **Separación de bases (reciente / histórica):** las ventas nuevas se siguen almacenando en
+  la base de datos **más reciente**, y **periódicamente** se trasladan a la base que mantiene
+  **todo el historial**. Así las consultas a datos recientes son más livianas, y el histórico
+  completo queda en su propia base.
+
+En conjunto: la caché da respuestas instantáneas a consultas repetidas dentro de la sesión
+(con limpieza automática por tiempo), y la separación de bases mantiene el rendimiento a
+medida que crece el volumen de datos.
 
 ---
 
