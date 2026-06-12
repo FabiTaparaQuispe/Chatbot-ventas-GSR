@@ -2106,7 +2106,7 @@ class ToolExecutor:
             pu = float(r.get('pedido_u') or 0)
             bruto = float(r.get('vendido_bruto') or 0)
             nc_cant = float(r.get('nc') or 0)   # NC viene en negativo
-            recorte = -nc_cant                  # cantidad recortada por NC (positivo)
+            recorte = abs(nc_cant)              # cantidad recortada por NC (positivo, evita "-0")
             vu = (bruto + nc_cant) if incluir_nc else bruto
             tot_p += pu
             tot_v += vu

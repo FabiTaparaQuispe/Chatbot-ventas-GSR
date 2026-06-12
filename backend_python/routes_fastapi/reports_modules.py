@@ -1125,7 +1125,7 @@ def reporte_cumplimiento(request: Request):
         pu = float(r['pedido_u'] or 0)
         bruto = float(r['vendido_bruto'] or 0)
         nc_cant = float(r['nc'] or 0)   # NC en negativo
-        recorte = -nc_cant
+        recorte = abs(nc_cant)          # positivo, evita "-0"
         vu = (bruto + nc_cant) if incluir_nc else bruto
         tot_p += pu
         tot_v += vu
