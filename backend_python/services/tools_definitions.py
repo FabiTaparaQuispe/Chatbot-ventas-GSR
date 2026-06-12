@@ -412,12 +412,15 @@ def ventas_tool_definitions():
                 'soles). IMPORTANTE: los pedidos existen solo desde DICIEMBRE 2025 — para meses anteriores no hay '
                 'datos de pedido. Filtros opcionales: nombre_cliente (un cliente), cod_item '
                 '(producto: 100=POLLO CARNE EN PIE, 103=POLLO BRASA EN PIE). '
+                'Por defecto la venta es ANTES de notas de credito (boletas+facturas); con incluir_nc=true se '
+                'descuentan las NC (venta neta). '
                 'Al responder: muestra la tabla cliente/producto con pedido, vendido y % de cumplimiento.'
             ),
             'parameters': {'type': 'object', 'properties': {
                 'fecha_desde': d_opt, 'fecha_hasta': d_opt,
                 'nombre_cliente': {'type': 'string', 'description': 'Filtrar por un cliente (NombreCliente LIKE), ej. "HUAYPUNA MAMANI"'},
                 'cod_item': {'type': 'string', 'description': 'Filtrar por producto (CodigoItem): 100=POLLO CARNE EN PIE, 103=POLLO BRASA EN PIE'},
+                'incluir_nc': {'type': 'boolean', 'description': 'Si true, descuenta las notas de credito (venta neta). Por defecto false = venta antes de NC. Usar true si el usuario pide "con notas de credito" o "venta neta".'},
                 'top_n': dn,
             }, 'required': ['fecha_desde', 'fecha_hasta']},
         }},

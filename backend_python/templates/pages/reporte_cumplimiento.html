@@ -6,7 +6,8 @@
         Período del <strong>{{ desde }}</strong> al <strong>{{ hasta }}</strong>
         {% if nombre_cliente %} · Cliente: <strong>{{ nombre_cliente }}</strong>{% endif %}
         {% if cod_item %} · Producto: <strong>{{ cod_item }}</strong>{% endif %}
-        · qué tanto de lo pedido se llegó a entregar, por cliente y producto. Pedidos disponibles desde diciembre 2025.
+        · <strong>{% if incluir_nc %}venta con notas de crédito descontadas{% else %}venta antes de notas de crédito{% endif %}</strong>
+        · qué tanto de lo pedido se llegó a entregar. Pedidos disponibles desde diciembre 2025.
     </p>
 </div>
 
@@ -40,6 +41,7 @@
                             <th>Producto</th>
                             <th style="text-align:right;">Pedido (u)</th>
                             <th style="text-align:right;">Vendido (u)</th>
+                            <th style="text-align:right;">Recorte NC (u)</th>
                             <th style="text-align:right;">Cumplimiento</th>
                         </tr>
                     </thead>
@@ -50,6 +52,7 @@
                             <td>{{ f.producto }}</td>
                             <td style="text-align:right;">{{ f.pedido }}</td>
                             <td style="text-align:right;">{{ f.vendido }}</td>
+                            <td style="text-align:right;">{{ f.recorte }}</td>
                             <td style="text-align:right;font-weight:700;color:{% if f.cumplimiento >= 95 %}#059669{% else %}#dc2626{% endif %};">{{ f.cumplimiento }}%</td>
                         </tr>
                         {% endfor %}

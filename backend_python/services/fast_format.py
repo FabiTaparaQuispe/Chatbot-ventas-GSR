@@ -525,28 +525,31 @@ def _fmt_cumplimiento(result):
     filas = result.get('filas') or []
     if not filas:
         return None
+    modo = "con notas de crédito" if result.get('incluir_nc') else "antes de notas de crédito"
     lineas = [
-        "Cumplimiento de pedidos (pedido vs vendido):", "",
-        "| Cliente | Producto | Pedido (u) | Vendido (u) | Cumplimiento |",
-        "| --- | --- | ---: | ---: | ---: |",
+        f"Cumplimiento de pedidos ({modo}):", "",
+        "| Cliente | Producto | Pedido (u) | Vendido (u) | Recorte NC (u) | Cumplimiento |",
+        "| --- | --- | ---: | ---: | ---: | ---: |",
     ]
     for f in filas:
         nombre = str(f.get('nombre') or f.get('cliente') or '')
         prod = str(f.get('producto') or f.get('item') or '')
         ped = _n(f.get('pedido_u', 0))
         ven = _n(f.get('vendido_u', 0))
+        rec = _n(f.get('recorte', 0))
         pct = f"{float(f.get('cumplimiento_pct') or 0):,.1f}%"
-        lineas.append(f"| {nombre} | {prod} | {ped} | {ven} | {pct} |")
+        lineas.append(f"| {nombre} | {prod} | {ped} | {ven} | {rec} | {pct} |")
     tp = result.get('total_pedido')
     if tp is not None:
         tv = result.get('total_vendido')
+        tr = result.get('total_recorte') or 0
         tpct = float(result.get('cumplimiento_total_pct') or 0)
         lineas.append("")
-        lineas.append(f"Total: pedido {_n(tp)} u · vendido {_n(tv)} u · cumplimiento {tpct:,.1f}%")
+        lineas.append(f"Total: pedido {_n(tp)} u · vendido {_n(tv)} u · recorte NC {_n(tr)} u · cumplimiento {tpct:,.1f}%")
     url = _url(result)
     if url:
         lineas.append(f"\n{url}")
-    lineas += ["", "Un cumplimiento cercano al 100% significa que al cliente se le entregó casi todo lo que pidió. Los pedidos están disponibles desde diciembre 2025."]
+    lineas += ["", "El cumplimiento por defecto es antes de notas de crédito. Un valor cercano al 100% significa que al cliente se le entregó casi todo lo que pidió. Los pedidos están disponibles desde diciembre 2025."]
     return "\n".join(lineas)
 
 

@@ -2057,6 +2057,7 @@ class ToolExecutor:
         nc = str(args.get('nombre_cliente') or '').strip()
         item = str(args.get('cod_item') or '').strip()
         lim = _int_arg(args.get('top_n'), 50, 1, 500)
+        incluir_nc = bool(args.get('incluir_nc'))
 
         ped_f = ''
         ven_f = ''
@@ -2070,10 +2071,12 @@ class ToolExecutor:
             ven_f += ' AND CodigoItem = %(item)s'
             params['item'] = item
 
+        # Venta BRUTA = boletas(03)+facturas(01); NC(07) viene en negativo (resta).
+        # Por defecto el cumplimiento es ANTES de NC (bruto); con incluir_nc se usa el neto.
         sql = (
             'SELECT p.cliente AS cliente, p.nombre AS nombre, p.item AS item,'
             ' p.producto AS producto, p.pedido_u AS pedido_u,'
-            ' COALESCE(v.vendido_u, 0) AS vendido_u'
+            ' COALESCE(v.bruto, 0) AS vendido_bruto, COALESCE(v.nc, 0) AS nc'
             ' FROM ('
             '   SELECT CodigoCliente AS cliente, MAX(NombreCliente) AS nombre,'
             '   CodigoItem AS item, MAX(DescripcionItem) AS producto,'
@@ -2085,7 +2088,8 @@ class ToolExecutor:
             ' ) p'
             ' LEFT JOIN ('
             '   SELECT CodigoCliente AS cliente, CodigoItem AS item,'
-            '   COALESCE(SUM(Cantidad),0) AS vendido_u'
+            "   COALESCE(SUM(CASE WHEN CodigoDocumento IN ('01','03') THEN Cantidad ELSE 0 END),0) AS bruto,"
+            "   COALESCE(SUM(CASE WHEN CodigoDocumento = '07' THEN Cantidad ELSE 0 END),0) AS nc"
             '   FROM ventasgeneral2'
             '   WHERE COALESCE(fechaProceso, FechaContable) BETWEEN %(d1)s AND %(d2)s' + ven_f +
             '   GROUP BY CodigoCliente, CodigoItem'
@@ -2097,11 +2101,16 @@ class ToolExecutor:
         filas = []
         tot_p = 0.0
         tot_v = 0.0
+        tot_r = 0.0
         for r in rows:
             pu = float(r.get('pedido_u') or 0)
-            vu = float(r.get('vendido_u') or 0)
+            bruto = float(r.get('vendido_bruto') or 0)
+            nc_cant = float(r.get('nc') or 0)   # NC viene en negativo
+            recorte = -nc_cant                  # cantidad recortada por NC (positivo)
+            vu = (bruto + nc_cant) if incluir_nc else bruto
             tot_p += pu
             tot_v += vu
+            tot_r += recorte
             filas.append({
                 'cliente': str(r.get('cliente') or ''),
                 'nombre': str(r.get('nombre') or ''),
@@ -2109,6 +2118,7 @@ class ToolExecutor:
                 'producto': str(r.get('producto') or ''),
                 'pedido_u': pu,
                 'vendido_u': vu,
+                'recorte': recorte,
                 'cumplimiento_pct': round(vu / pu * 100, 1) if pu else 0.0,
             })
 
@@ -2117,17 +2127,21 @@ class ToolExecutor:
             _rep['nombre_cliente'] = nc
         if item:
             _rep['cod_item'] = item
+        if incluir_nc:
+            _rep['incluir_nc'] = '1'
 
         return {
             'tabla': 'pedidosgeneral2 + ventasgeneral2',
             'tipo': 'cumplimiento_pedidos',
             'fecha_desde': d1,
             'fecha_hasta': d2,
+            'incluir_nc': incluir_nc,
             'reporte_url': '/modules/reports/cumplimiento?' + urlencode(_rep),
             'nombre_cliente': nc or None,
             'cod_item': item or None,
             'total_pedido': tot_p,
             'total_vendido': tot_v,
+            'total_recorte': tot_r,
             'cumplimiento_total_pct': round(tot_v / tot_p * 100, 1) if tot_p else 0.0,
             'total_filas': len(filas),
             'filas': filas,

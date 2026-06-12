@@ -1072,6 +1072,7 @@ def reporte_cumplimiento(request: Request):
         return _bad('Fechas inválidas (use YYYY-MM-DD).')
     nc = _q(request, 'nombre_cliente')
     item = _q(request, 'cod_item')
+    incluir_nc = bool(_q(request, 'incluir_nc'))
     try:
         top = max(1, min(500, int(_q(request, 'top') or '50')))
     except ValueError:
@@ -1091,7 +1092,7 @@ def reporte_cumplimiento(request: Request):
 
     sql = (
         'SELECT p.nombre AS nombre, p.producto AS producto,'
-        ' p.pedido_u AS pedido_u, COALESCE(v.vendido_u, 0) AS vendido_u'
+        ' p.pedido_u AS pedido_u, COALESCE(v.bruto, 0) AS vendido_bruto, COALESCE(v.nc, 0) AS nc'
         ' FROM ('
         '   SELECT CodigoCliente AS cliente, MAX(NombreCliente) AS nombre,'
         '   CodigoItem AS item, MAX(DescripcionItem) AS producto,'
@@ -1103,7 +1104,8 @@ def reporte_cumplimiento(request: Request):
         ' ) p'
         ' LEFT JOIN ('
         '   SELECT CodigoCliente AS cliente, CodigoItem AS item,'
-        '   COALESCE(SUM(Cantidad),0) AS vendido_u'
+        "   COALESCE(SUM(CASE WHEN CodigoDocumento IN ('01','03') THEN Cantidad ELSE 0 END),0) AS bruto,"
+        "   COALESCE(SUM(CASE WHEN CodigoDocumento = '07' THEN Cantidad ELSE 0 END),0) AS nc"
         '   FROM ventasgeneral2'
         '   WHERE COALESCE(fechaProceso, FechaContable) BETWEEN %(d1)s AND %(d2)s' + ven_f +
         '   GROUP BY CodigoCliente, CodigoItem'
@@ -1118,16 +1120,22 @@ def reporte_cumplimiento(request: Request):
     detalle = []
     tot_p = 0.0
     tot_v = 0.0
+    tot_r = 0.0
     for r in raw:
         pu = float(r['pedido_u'] or 0)
-        vu = float(r['vendido_u'] or 0)
+        bruto = float(r['vendido_bruto'] or 0)
+        nc_cant = float(r['nc'] or 0)   # NC en negativo
+        recorte = -nc_cant
+        vu = (bruto + nc_cant) if incluir_nc else bruto
         tot_p += pu
         tot_v += vu
+        tot_r += recorte
         detalle.append({
             'cliente': str(r['nombre'] or ''),
             'producto': str(r['producto'] or ''),
             'pedido': f"{pu:,.0f}",
             'vendido': f"{vu:,.0f}",
+            'recorte': f"{recorte:,.0f}",
             'cumplimiento': round(vu / pu * 100, 1) if pu else 0.0,
         })
     cumpl_total = round(tot_v / tot_p * 100, 1) if tot_p else 0.0
@@ -1142,8 +1150,9 @@ def reporte_cumplimiento(request: Request):
     ctx = _report_ctx(request, titulo)
     ctx.update({
         'desde': d1, 'hasta': d2, 'nombre_cliente': nc, 'cod_item': item,
+        'incluir_nc': incluir_nc,
         'detalle': detalle, 'tot_pedido': f"{tot_p:,.0f}", 'tot_vendido': f"{tot_v:,.0f}",
-        'cumpl_total': cumpl_total,
+        'tot_recorte': f"{tot_r:,.0f}", 'cumpl_total': cumpl_total,
         'pdf_filename': f'cumplimiento_{d1}_{d2}.pdf', 'chart': chart,
     })
     return _tmpl(request, 'pages/reporte_cumplimiento.html', ctx)
