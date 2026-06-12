@@ -176,12 +176,33 @@ class GeminiClient:
                     # en vivo, 30s se siente colgado. Con sobrecarga 503/429 transitoria
                     # esto recupera mucho más rápido (peor caso ~14s en vez de ~90s).
                     wait = min(8, 2 ** (attempt + 1))
-                    logger.info("Gemini retryable error → reintentando en %ss (intento %d/%d)",
-                                wait, attempt + 1, _max_retries)
+                    logger.warning(
+                        "Gemini error retryable [%s] -> reintento %d/%d en %ss | model=%s | detalle: %s",
+                        self._error_kind(e), attempt + 1, _max_retries, wait, self._model,
+                        str(e)[:180].replace('\n', ' '),
+                    )
                     await asyncio.sleep(wait)
                     continue
                 break
+        logger.error(
+            "Gemini agotó reintentos [%s] | model=%s | detalle: %s",
+            self._error_kind(last_exc), self._model, str(last_exc)[:220].replace('\n', ' '),
+        )
         self._raise_friendly(last_exc)
+
+    @staticmethod
+    def _error_kind(e: Exception) -> str:
+        """Etiqueta corta del tipo de error de Gemini, para logs de depuración."""
+        msg = str(e)
+        if '429' in msg or 'RESOURCE_EXHAUSTED' in msg:
+            return '429 cuota/limite'
+        if '503' in msg or 'UNAVAILABLE' in msg:
+            return '503 sobrecarga'
+        if '403' in msg or '401' in msg or 'PERMISSION_DENIED' in msg:
+            return 'auth/api-key'
+        if '400' in msg:
+            return '400 bad-request'
+        return type(e).__name__
 
     @staticmethod
     def _is_retryable(e: Exception) -> bool:
