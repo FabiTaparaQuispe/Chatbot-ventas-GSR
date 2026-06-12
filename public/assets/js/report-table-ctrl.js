@@ -214,6 +214,7 @@
         /* --- Fila de totales en tfoot --- */
         var sumColIndices = [];
         var precioKgColIdx = -1, pesoColIdx = -1, valorColIdx = -1;
+        var cumplColIdx = -1, pedidoColIdx = -1, vendidoColIdx = -1;
 
         ths.forEach(function (th, idx) {
             if (/text-align\s*:\s*right/i.test(th.getAttribute('style') || '')) {
@@ -223,11 +224,19 @@
             if (/precio.*kg|precio_kg/i.test(name)) precioKgColIdx = idx;
             else if (/\bpeso\b/i.test(name)) pesoColIdx = idx;
             else if (/\bvalor\b/i.test(name)) valorColIdx = idx;
+            if (/cumplimiento/i.test(name)) cumplColIdx = idx;
+            else if (/pedido/i.test(name)) pedidoColIdx = idx;
+            else if (/vendido/i.test(name)) vendidoColIdx = idx;
         });
         /* precio/kg se calcula como promedio ponderado, no se suma directamente */
         if (precioKgColIdx >= 0) {
             var pkPos = sumColIndices.indexOf(precioKgColIdx);
             if (pkPos >= 0) sumColIndices.splice(pkPos, 1);
+        }
+        /* cumplimiento es un % — se muestra ponderado (vendido/pedido), no se suma */
+        if (cumplColIdx >= 0) {
+            var cPos = sumColIndices.indexOf(cumplColIdx);
+            if (cPos >= 0) sumColIndices.splice(cPos, 1);
         }
 
         var tfootCells = null;
@@ -283,6 +292,9 @@
                 } else if (idx === precioKgColIdx) {
                     var p = sums[pesoColIdx] || 0, v = sums[valorColIdx] || 0;
                     td.textContent = p > 0 ? fmtSum(v / p, 4) : '—';
+                } else if (idx === cumplColIdx) {
+                    var tp = sums[pedidoColIdx] || 0, tv = sums[vendidoColIdx] || 0;
+                    td.textContent = tp > 0 ? fmtSum(tv / tp * 100, 1) + '%' : '—';
                 } else if (sumColIndices.indexOf(idx) >= 0) {
                     td.textContent = fmtSum(sums[idx], 2);
                 } else {
