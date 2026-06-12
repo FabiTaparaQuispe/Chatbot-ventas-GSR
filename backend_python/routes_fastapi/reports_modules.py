@@ -1097,7 +1097,7 @@ def reporte_cumplimiento(request: Request):
         '   CodigoItem AS item, MAX(DescripcionItem) AS producto,'
         '   COALESCE(SUM(Cantidad),0) AS pedido_u'
         '   FROM pedidosgeneral2'
-        '   WHERE FechaPedido BETWEEN %(d1)s AND %(d2)s' + ped_f +
+        '   WHERE COALESCE(FechaEntrega, FechaPedido) BETWEEN %(d1)s AND %(d2)s' + ped_f +
         '   GROUP BY CodigoCliente, CodigoItem'
         '   HAVING COALESCE(SUM(Cantidad),0) > 0'
         ' ) p'
@@ -1105,7 +1105,7 @@ def reporte_cumplimiento(request: Request):
         '   SELECT CodigoCliente AS cliente, CodigoItem AS item,'
         '   COALESCE(SUM(Cantidad),0) AS vendido_u'
         '   FROM ventasgeneral2'
-        '   WHERE FechaContable BETWEEN %(d1)s AND %(d2)s' + ven_f +
+        '   WHERE COALESCE(fechaProceso, FechaContable) BETWEEN %(d1)s AND %(d2)s' + ven_f +
         '   GROUP BY CodigoCliente, CodigoItem'
         ' ) v ON v.cliente = p.cliente AND v.item = p.item'
         ' ORDER BY p.pedido_u DESC LIMIT ' + str(top)
