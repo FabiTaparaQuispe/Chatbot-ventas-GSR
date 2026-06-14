@@ -182,7 +182,8 @@ async def chat(request: Request):
     provider = resolve_llm_provider()
     try:
         conn = await asyncio.to_thread(get_connection)
-        executor = ToolExecutor(conn, prev_result=prev_result_parsed)
+        _role = str(request.session.get('role') or 'lector').lower().strip()
+        executor = ToolExecutor(conn, prev_result=prev_result_parsed, role=_role)
         _all_tools = ventas_tool_definitions() + chat_history_tool_definitions()
         _last_user = next((m['content'] for m in reversed(messages) if m.get('role') == 'user'), '')
         tools = _filter_tools(_last_user, _all_tools)
@@ -261,7 +262,8 @@ async def chat_stream(request: Request):
         async def run_llm() -> None:
             try:
                 conn = await asyncio.to_thread(get_connection)
-                executor = ToolExecutor(conn, prev_result=prev_result_parsed)
+                _role = str(request.session.get('role') or 'lector').lower().strip()
+                executor = ToolExecutor(conn, prev_result=prev_result_parsed, role=_role)
                 _all_tools = ventas_tool_definitions() + chat_history_tool_definitions()
                 _last_user = next(
                     (m['content'] for m in reversed(messages) if m.get('role') == 'user'), ''
