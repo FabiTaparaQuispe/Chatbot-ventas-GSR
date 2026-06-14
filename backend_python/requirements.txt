@@ -6,7 +6,11 @@ werkzeug==3.1.8
 passlib[bcrypt]>=1.7.4
 bcrypt>=4.0.0,<5
 sqlparse>=0.5.0
-google-genai>=1.0.0
+# google-genai>=1.0.0          # reemplazado por LangChain (ver abajo)
+# --- Motor de IA: LangChain + Gemini ---
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-google-genai>=2.0.0
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
 python-multipart>=0.0.9

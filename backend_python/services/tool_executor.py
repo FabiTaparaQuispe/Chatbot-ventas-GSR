@@ -43,23 +43,6 @@ MAX_POR_PAGINA = 100
 
 _TOOL_REGISTRY: dict[str, str] = {}
 
-# ── Middleware de permisos: herramienta -> roles permitidos ─────────────────
-# Las herramientas que NO aparecen aquí están permitidas para TODOS los roles
-# (las consultas de ventas son abiertas). Restringe SOLO lo sensible.
-# El permiso se ENFORZA en código (no en el prompt): si el rol no tiene acceso,
-# la herramienta NO se ejecuta y NO se consulta la base de datos.
-_TOOL_ROLES: dict[str, set[str]] = {
-    # Meta-consultas sobre el uso del chatbot: solo admin / gerencia.
-    'chat_usuario_estadisticas': {'admin', 'administrador', 'gerencia'},
-    'chat_top_usuarios': {'admin', 'administrador', 'gerencia'},
-    'chat_actividad_por_dia': {'admin', 'administrador', 'gerencia'},
-    'chat_listar_preguntas': {'admin', 'administrador', 'gerencia'},
-    'chat_buscar_pregunta': {'admin', 'administrador', 'gerencia'},
-    'chat_resumen_threads': {'admin', 'administrador', 'gerencia'},
-    # Cuando agregues datos sensibles (ej. trabajadores), restríngelos aquí:
-    # 'datos_trabajadores': {'admin', 'gerencia', 'rrhh'},
-}
-
 
 def tool(name: str):
     """Registra un método de ToolExecutor como handler del tool dado."""
@@ -247,12 +230,11 @@ class SqlInterpolator:
 
 
 class ToolExecutor:
-    def __init__(self, conn, prev_result=None, role=None):
+    def __init__(self, conn, prev_result=None):
         self._conn = conn
         self._sql_traces = []
         self._last_tool_json: str | None = None
         self._prev_result = prev_result  # dict or None
-        self._role = str(role or 'lector').lower().strip()  # rol del usuario (permisos)
 
     def pull_sql_traces(self):
         t = self._sql_traces[:]
@@ -270,15 +252,6 @@ class ToolExecutor:
         return await asyncio.to_thread(self.execute, name, args)
 
     def execute(self, name, args):
-        # Middleware de permisos: si la herramienta está restringida y el rol del
-        # usuario no tiene acceso, se DENIEGA aquí — no se ejecuta ni se toca la BD.
-        allowed = _TOOL_ROLES.get(name)
-        if allowed is not None and self._role not in allowed:
-            _log.info("acceso denegado a tool '%s' para rol '%s'", name, self._role)
-            return json.dumps(
-                {'error': 'No tienes acceso a esta funcionalidad.', 'acceso_denegado': True},
-                ensure_ascii=False,
-            )
         try:
             method_name = _TOOL_REGISTRY.get(name)
             if method_name is None:

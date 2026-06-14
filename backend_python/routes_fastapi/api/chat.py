@@ -10,7 +10,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from services.db import get_connection, db_label
 from services.groq_client import GroqClient
-from services.gemini_client import GeminiClient
+from services.gemini_client import GeminiClient  # cliente anterior (referencia)
+from services.langchain_client import LangChainGeminiClient
 from services.llm_provider import resolve_llm_provider
 from services.tool_executor import ToolExecutor
 from services.tools_definitions import ventas_tool_definitions, chat_history_tool_definitions
@@ -43,7 +44,8 @@ def _get_llm_client():
         if not api_key:
             raise RuntimeError('Configure GEMINI_API_KEY en .env')
         model = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash')
-        _llm_client_singleton = (GeminiClient(api_key, model), provider)
+        # Motor de IA migrado a LangChain (antes: GeminiClient(api_key, model)).
+        _llm_client_singleton = (LangChainGeminiClient(api_key, model), provider)
     else:
         api_key = os.getenv('GROQ_API_KEY', '')
         if not api_key:
@@ -182,9 +184,8 @@ async def chat(request: Request):
     provider = resolve_llm_provider()
     try:
         conn = await asyncio.to_thread(get_connection)
-        _role = str(request.session.get('role') or 'lector').lower().strip()
-        executor = ToolExecutor(conn, prev_result=prev_result_parsed, role=_role)
-        _all_tools = ventas_tool_definitions() + chat_history_tool_definitions()
+        executor = ToolExecutor(conn, prev_result=prev_result_parsed)
+        _all_tools = ventas_tool_definitions()  # solo datos del Sistema (sin meta-consultas chat_*)
         _last_user = next((m['content'] for m in reversed(messages) if m.get('role') == 'user'), '')
         tools = _filter_tools(_last_user, _all_tools)
 
@@ -262,9 +263,8 @@ async def chat_stream(request: Request):
         async def run_llm() -> None:
             try:
                 conn = await asyncio.to_thread(get_connection)
-                _role = str(request.session.get('role') or 'lector').lower().strip()
-                executor = ToolExecutor(conn, prev_result=prev_result_parsed, role=_role)
-                _all_tools = ventas_tool_definitions() + chat_history_tool_definitions()
+                executor = ToolExecutor(conn, prev_result=prev_result_parsed)
+                _all_tools = ventas_tool_definitions()  # solo datos del Sistema (sin meta-consultas chat_*)
                 _last_user = next(
                     (m['content'] for m in reversed(messages) if m.get('role') == 'user'), ''
                 )
