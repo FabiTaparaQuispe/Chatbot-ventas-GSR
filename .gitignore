@@ -2,5 +2,11 @@ api/config.php
 .env
 *.log
 backend_python/venv/
-backend_python/__pycache__/
 docker/init/*.sql
+
+# Python cache / artefactos (en cualquier carpeta)
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
