@@ -56,6 +56,10 @@ class LangChainGeminiClient:
             google_api_key=api_key,
             temperature=0,
         )
+        logger.info("========================================================")
+        logger.info("[MOTOR] >>> LangChainGeminiClient INICIALIZADO | model=%s", model)
+        logger.info("[MOTOR] El chatbot esta corriendo sobre LangChain + Gemini")
+        logger.info("========================================================")
 
     async def _run_agent(self, messages, tools, run_tool, try_fast_format=None):
         """Loop de tool-calling. Devuelve (reply, fast_reply_or_none, tool_msgs)."""
@@ -96,6 +100,8 @@ class LangChainGeminiClient:
         return str(ai.content or ''), None, tool_msgs
 
     async def chat_with_tools(self, messages, tools, run_tool, try_fast_format=None):
+        logger.info("[MOTOR=LangChain] chat_with_tools | model=%s | mensajes=%d | tools=%d",
+                    self._model, len(messages), len(tools))
         reply, _fast, tool_msgs = await self._run_agent(
             messages, tools, run_tool, try_fast_format
         )
@@ -103,6 +109,8 @@ class LangChainGeminiClient:
 
     async def chat_with_tools_stream(self, messages, tools, run_tool, on_event,
                                      try_fast_format=None):
+        logger.info("[MOTOR=LangChain] chat_with_tools_stream | model=%s | mensajes=%d | tools=%d",
+                    self._model, len(messages), len(tools))
         # Primera versión: no token-a-token; corre el agente y emite la respuesta final.
         await on_event({'type': 'status', 'text': 'Generando respuesta...'})
         reply, _fast, _msgs = await self._run_agent(
