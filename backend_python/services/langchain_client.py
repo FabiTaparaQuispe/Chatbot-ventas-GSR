@@ -117,12 +117,19 @@ class LangChainGeminiClient:
         ai = await llm.ainvoke(lc_msgs)
         return _extract_text(ai.content), None, tool_msgs
 
+    _FALLBACK = ("No pude generar una respuesta. Por favor intentá de nuevo o "
+                 "reformulá la consulta.")
+
     async def chat_with_tools(self, messages, tools, run_tool, try_fast_format=None):
         logger.info("[MOTOR=LangChain] chat_with_tools | model=%s | mensajes=%d | tools=%d",
                     self._model, len(messages), len(tools))
-        reply, _fast, tool_msgs = await self._run_agent(
-            messages, tools, run_tool, try_fast_format
-        )
+        try:
+            reply, _fast, tool_msgs = await self._run_agent(
+                messages, tools, run_tool, try_fast_format
+            )
+        except Exception as e:
+            logger.error("[MOTOR=LangChain] error en el agente: %s", e)
+            reply, tool_msgs = self._FALLBACK, []
         return {'reply': reply, 'messages': tool_msgs}
 
     async def chat_with_tools_stream(self, messages, tools, run_tool, on_event,
@@ -131,8 +138,12 @@ class LangChainGeminiClient:
                     self._model, len(messages), len(tools))
         # Primera versión: no token-a-token; corre el agente y emite la respuesta final.
         await on_event({'type': 'status', 'text': 'Generando respuesta...'})
-        reply, _fast, _msgs = await self._run_agent(
-            messages, tools, run_tool, try_fast_format
-        )
+        try:
+            reply, _fast, _msgs = await self._run_agent(
+                messages, tools, run_tool, try_fast_format
+            )
+        except Exception as e:
+            logger.error("[MOTOR=LangChain] error en el agente (stream): %s", e)
+            reply = self._FALLBACK
         await on_event({'type': 'reply', 'text': reply})
         return reply, []
