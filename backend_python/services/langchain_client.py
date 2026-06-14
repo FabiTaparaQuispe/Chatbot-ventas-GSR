@@ -31,6 +31,24 @@ logger = logging.getLogger(__name__)
 _MAX_TOOL_ITERS = 5
 
 
+def _extract_text(content) -> str:
+    """Texto plano del content de LangChain: puede ser str o lista de bloques
+    [{'type':'text','text':'...'}] (formato de Gemini vía LangChain)."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict):
+                t = block.get('text')
+                if t:
+                    parts.append(str(t))
+            elif isinstance(block, str):
+                parts.append(block)
+        return ''.join(parts)
+    return str(content or '')
+
+
 def _to_lc_messages(messages: list[dict]) -> list:
     """Convierte mensajes {'role','content'} al formato de LangChain."""
     out: list = []
@@ -71,7 +89,7 @@ class LangChainGeminiClient:
             ai = await llm.ainvoke(lc_msgs)
             tool_calls = getattr(ai, 'tool_calls', None) or []
             if not tool_calls:
-                return str(ai.content or ''), None, tool_msgs
+                return _extract_text(ai.content), None, tool_msgs
 
             lc_msgs.append(ai)
             fast_reply = None
@@ -97,7 +115,7 @@ class LangChainGeminiClient:
 
         # Si se agotan las iteraciones, una última generación.
         ai = await llm.ainvoke(lc_msgs)
-        return str(ai.content or ''), None, tool_msgs
+        return _extract_text(ai.content), None, tool_msgs
 
     async def chat_with_tools(self, messages, tools, run_tool, try_fast_format=None):
         logger.info("[MOTOR=LangChain] chat_with_tools | model=%s | mensajes=%d | tools=%d",
